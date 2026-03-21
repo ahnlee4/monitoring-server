@@ -1,0 +1,92 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: monitoring-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: monitoring-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      BACKEND_HOST: ${BACKEND_HOST}
+      BACKEND_PORT: ${BACKEND_PORT}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
+      COLLECTOR_TOKEN: ${COLLECTOR_TOKEN}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: monitoring-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE: ${VITE_API_BASE}
+      VITE_WS_PATH: ${VITE_WS_PATH}
+    expose:
+      - "${FRONTEND_PORT}"
+
+  collector-mock:
+    build:
+      context: ./collector-mock
+    container_name: monitoring-collector-mock
+    restart: unless-stopped
+    environment:
+      COLLECTOR_INTERVAL_SECONDS: ${COLLECTOR_INTERVAL_SECONDS}
+      COLLECTOR_DEVICE_CODES: ${COLLECTOR_DEVICE_CODES}
+      COLLECTOR_API_URL: ${COLLECTOR_API_URL}
+      COLLECTOR_TOKEN: ${COLLECTOR_TOKEN}
+    depends_on:
+      - backend
+
+  collector-rs485:
+    build:
+      context: ./collector-rs485
+    container_name: monitoring-collector-rs485
+    restart: unless-stopped
+    profiles: ["rs485"]
+    environment:
+      RS485_SERIAL_PORT: ${RS485_SERIAL_PORT}
+      RS485_BAUDRATE: ${RS485_BAUDRATE}
+      COLLECTOR_API_URL: ${COLLECTOR_API_URL}
+      COLLECTOR_TOKEN: ${COLLECTOR_TOKEN}
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: monitoring-nginx
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "${NGINX_PORT}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
+volumes:
+  postgres_data:
