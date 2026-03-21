@@ -49,30 +49,19 @@ services:
     expose:
       - "${FRONTEND_PORT}"
 
-  collector-mock:
+  collector:
     build:
-      context: ./collector-mock
-    container_name: monitoring-collector-mock
+      context: ./collector
+    container_name: monitoring-collector
     restart: unless-stopped
     environment:
+      COLLECTOR_DRIVER: ${COLLECTOR_DRIVER}
       COLLECTOR_INTERVAL_SECONDS: ${COLLECTOR_INTERVAL_SECONDS}
       COLLECTOR_DEVICE_CODES: ${COLLECTOR_DEVICE_CODES}
       COLLECTOR_API_URL: ${COLLECTOR_API_URL}
       COLLECTOR_TOKEN: ${COLLECTOR_TOKEN}
-    depends_on:
-      - backend
-
-  collector-rs485:
-    build:
-      context: ./collector-rs485
-    container_name: monitoring-collector-rs485
-    restart: unless-stopped
-    profiles: ["rs485"]
-    environment:
       RS485_SERIAL_PORT: ${RS485_SERIAL_PORT}
       RS485_BAUDRATE: ${RS485_BAUDRATE}
-      COLLECTOR_API_URL: ${COLLECTOR_API_URL}
-      COLLECTOR_TOKEN: ${COLLECTOR_TOKEN}
     depends_on:
       - backend
 
