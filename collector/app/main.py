@@ -29,19 +29,26 @@ def build_collector() -> tuple[BaseCollector, int]:
 
 def main() -> None:
     api_url = get_env("COLLECTOR_API_URL", "http://backend:8000/api/ingest/telemetry")
+    yujin_api_url = get_env("COLLECTOR_YUJIN_API_URL", "http://backend:8000/api/yujin/ingest-map")
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
     collector, interval = build_collector()
-    client = BackendClient(api_url=api_url, token=token)
+    client = BackendClient(api_url=api_url, token=token, yujin_api_url=yujin_api_url)
 
     while True:
-        frames = collector.poll()
-        for frame in frames:
+        batch = collector.poll()
+        for frame in batch.frames:
             try:
                 client.publish(frame)
                 print(f"sent telemetry for {frame.device_code} via {frame.source}")
             except Exception as exc:
                 print(f"collector publish error for {frame.device_code}: {exc}")
+        if batch.map_values:
+            try:
+                client.publish_map_batch(batch)
+                print(f"sent yujin map batch with {len(batch.map_values)} values")
+            except Exception as exc:
+                print(f"collector yujin map publish error: {exc}")
         time.sleep(interval)
 
 

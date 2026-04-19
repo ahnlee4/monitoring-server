@@ -13,4 +13,4 @@ fi
 docker compose up -d --build
 
 echo "Monitoring server started"
-echo "Open: http://localhost:8080"
+echo "Open: http://localhost"

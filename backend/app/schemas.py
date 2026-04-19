@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 class MetricIn(BaseModel):
     key: str
-    value: float
+    value: float | str
     unit: str = ""
 
 
@@ -28,7 +28,7 @@ class TelemetryIngestRequest(BaseModel):
 
 class CurrentValueOut(BaseModel):
     metric_key: str
-    value: float
+    value: float | str
     unit: str
     updated_at: datetime
 
@@ -56,7 +56,7 @@ class AlarmOut(BaseModel):
 
 class TelemetryRecordOut(BaseModel):
     metric_key: str
-    value: float
+    value: float | str
     unit: str
     recorded_at: datetime
 
@@ -66,3 +66,45 @@ class OverviewOut(BaseModel):
     online_devices: int
     active_alarms: int
     last_updated_at: datetime | None
+
+
+class YujinMapDefinitionOut(BaseModel):
+    key: str
+    data_type: int
+    data_length: int
+    signed: bool
+    default_value: str
+    name: str | None
+    section: str
+    source: str
+
+
+class YujinMapValueOut(BaseModel):
+    key: str
+    data_type: int
+    data_length: int
+    signed: bool
+    default_value: str
+    name: str | None
+    section: str
+    value: str
+    updated_at: datetime | None
+    source: str | None
+
+
+class YujinMapValueHistoryOut(BaseModel):
+    key: str
+    value: str
+    recorded_at: datetime
+    source: str
+
+
+class YujinMapValueUpdateIn(BaseModel):
+    key: str
+    value: str | int | float
+
+
+class YujinMapIngestRequest(BaseModel):
+    source: str = "collector"
+    recorded_at: datetime | None = None
+    values: list[YujinMapValueUpdateIn]

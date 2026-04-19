@@ -1,6 +1,6 @@
 export type CurrentValue = {
   metric_key: string;
-  value: number;
+  value: number | string;
   unit: string;
   updated_at: string;
 };
@@ -35,5 +35,20 @@ export type Overview = {
 
 export type UpdateEvent = {
   type: string;
-  device: Device;
+  device?: Device;
+  keys?: string[];
+  recorded_at?: string;
+};
+
+export type YujinMapValue = {
+  key: string;
+  data_type: number;
+  data_length: number;
+  signed: boolean;
+  default_value: string;
+  name: string | null;
+  section: string;
+  value: string;
+  updated_at: string | null;
+  source: string | null;
 };

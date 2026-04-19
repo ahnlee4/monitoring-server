@@ -1,9 +1,9 @@
 import abc
 
-from app.models import TelemetryFrame
+from app.models import CollectorBatch
 
 
 class BaseCollector(abc.ABC):
     @abc.abstractmethod
-    def poll(self) -> list[TelemetryFrame]:
+    def poll(self) -> CollectorBatch:
         raise NotImplementedError

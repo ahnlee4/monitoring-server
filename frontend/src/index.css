@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: "IBM Plex Sans KR", "Noto Sans KR", "Segoe UI", sans-serif;
 }
 
