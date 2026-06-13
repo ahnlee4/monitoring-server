@@ -48,7 +48,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.30";
+const APP_VERSION = "0.1.31";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -388,9 +388,16 @@ type ControlCommandStatus = {
   error?: string | null;
 };
 
+class ControlStatusUnsupportedError extends Error {
+  constructor() {
+    super("명령 상태 조회 API가 없습니다. backend 이미지를 최신으로 갱신해주세요.");
+  }
+}
+
 async function waitForControlCommand(commandId: number, onStatus: (status: ControlCommandStatus) => void) {
   for (let attempt = 0; attempt < 80; attempt++) {
     const response = await fetch(`${apiBase()}/control/commands/${commandId}`);
+    if (response.status === 404) throw new ControlStatusUnsupportedError();
     if (!response.ok) throw new Error(`status HTTP ${response.status}`);
     const status = (await response.json()) as ControlCommandStatus;
     onStatus(status);
@@ -1045,7 +1052,8 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
         if (status.status === "completed") setCommandStatus(`명령 #${result.id} 전송 완료`);
       });
     } catch (error) {
-      setCommandStatus(`명령 전송 실패: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof ControlStatusUnsupportedError) setCommandStatus(`명령 #${result.id} 등록됨 / backend 갱신 필요`);
+      else setCommandStatus(`명령 전송 실패: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setCommandBusy(false);
     }
@@ -1088,7 +1096,8 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
         if (status.status === "completed") setCommandStatus(`저장 #${result.id} 전송 완료`);
       });
     } catch (error) {
-      setCommandStatus(`저장 실패: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof ControlStatusUnsupportedError) setCommandStatus(`저장 #${result.id} 등록됨 / backend 갱신 필요`);
+      else setCommandStatus(`저장 실패: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setCommandBusy(false);
     }
