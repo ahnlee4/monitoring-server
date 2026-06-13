@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.16";
+const APP_VERSION = "0.1.17";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -675,30 +675,30 @@ function QuickButtons({
         <img src="/menu.png" alt="" className="h-[56px] w-[56px] object-contain" />
       </button>
       {menuOpen ? (
-        <div className="absolute bottom-[68px] right-0 z-20 w-[344px] overflow-hidden rounded-[22px] border border-[#d3e0eb] bg-white p-[14px] shadow-[0_18px_42px_rgba(15,43,72,0.3)]">
-          <div className="mb-[12px] flex items-start justify-between">
+        <div className="absolute bottom-[68px] right-0 z-20 w-[300px] overflow-hidden rounded-[10px] border border-[#cfdde8] bg-white p-[10px] shadow-[0_12px_28px_rgba(15,43,72,0.26)]">
+          <div className="mb-[8px] flex items-center justify-between border-b border-[#e2ebf2] pb-[8px]">
             <div>
-              <div className="text-[22px] font-black leading-none text-[#173f69]">메뉴</div>
-              <div className="mt-[5px] text-[13px] font-bold text-[#6f879d]">필요한 작업을 선택하세요</div>
+              <div className="text-[19px] font-black leading-none text-[#173f69]">메뉴</div>
+              <div className="mt-[4px] text-[12px] font-bold text-[#6f879d]">작업 선택</div>
             </div>
-            <button className="flex h-[32px] w-[32px] items-center justify-center rounded-full bg-[#eef3f7] text-[18px] font-black text-[#45657f]" onClick={() => setMenuOpen(false)} type="button">
+            <button className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] bg-[#eef3f7] text-[17px] font-black text-[#45657f]" onClick={() => setMenuOpen(false)} type="button">
               ×
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-[10px]">
+          <div className="grid gap-[6px]">
           {menuItems.map((item) => (
             <button
               key={item.label}
-              className="group grid h-[106px] content-between rounded-[18px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px] text-left transition-colors hover:border-[#9cc7e8] hover:bg-[#eef7ff]"
+              className="group grid h-[58px] grid-cols-[44px_1fr] items-center gap-[10px] rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-[10px] text-left transition-colors hover:border-[#9cc7e8] hover:bg-[#eef7ff]"
               onClick={() => handleMenuAction(item.action)}
               type="button"
             >
-              <span className="flex h-[42px] w-[42px] items-center justify-center rounded-[14px] bg-white shadow-[0_3px_9px_rgba(38,94,140,0.12)]">
-                <img src={item.icon} alt="" className="h-[30px] w-[30px] object-contain" />
+              <span className="flex h-[36px] w-[36px] items-center justify-center rounded-[7px] bg-white shadow-[0_2px_6px_rgba(38,94,140,0.1)]">
+                <img src={item.icon} alt="" className="h-[27px] w-[27px] object-contain" />
               </span>
               <span className="min-w-0">
                 <span className="block text-[18px] font-black leading-none text-[#163d69]">{item.label}</span>
-                <span className="mt-[6px] block text-[12px] font-bold text-[#6f879d]">{item.description}</span>
+                <span className="mt-[4px] block text-[12px] font-bold text-[#6f879d]">{item.description}</span>
               </span>
             </button>
           ))}
@@ -798,13 +798,13 @@ function HeaderCell({ children }: { children: ReactNode }) {
 function DialogShell({ children, onClose, title, wide = false }: { children: ReactNode; onClose: () => void; title: string; wide?: boolean }) {
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-[24px]">
-      <section className={`${wide ? "w-[1040px]" : "w-[560px]"} overflow-hidden rounded-[22px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_18px_42px_rgba(15,43,72,0.34)]`}>
+      <section className={`${wide ? "w-[1040px]" : "w-[560px]"} overflow-hidden rounded-[12px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_14px_34px_rgba(15,43,72,0.32)]`}>
         <div className="flex h-[74px] items-center justify-between border-b border-[#dbe7f1] bg-white px-[22px]">
           <div>
             <div className="text-[26px] font-black leading-none text-[#173f69]">{title}</div>
             <div className="mt-[7px] text-[13px] font-bold text-[#6f879d]">설정을 확인하고 필요한 항목을 조정하세요</div>
           </div>
-          <button className="h-[42px] rounded-full border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
+          <button className="h-[40px] rounded-[8px] border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
             닫기
           </button>
         </div>
@@ -820,10 +820,10 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-[24px]">
-      <section className="w-[760px] overflow-hidden rounded-[24px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_18px_42px_rgba(15,43,72,0.34)]">
+      <section className="w-[720px] overflow-hidden rounded-[12px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_14px_34px_rgba(15,43,72,0.32)]">
         <div className="flex h-[86px] items-center justify-between border-b border-[#dbe7f1] bg-white px-[22px]">
           <div className="flex items-center gap-[14px]">
-            <span className="flex h-[54px] w-[54px] items-center justify-center rounded-[18px] bg-[#eaf4fc]">
+            <span className="flex h-[52px] w-[52px] items-center justify-center rounded-[10px] bg-[#eaf4fc]">
               <img src="/factory.png" alt="" className="h-[36px] w-[36px] object-contain" />
             </span>
             <span>
@@ -831,23 +831,20 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
               <span className="mt-[7px] block text-[14px] font-bold text-[#6f879d]">운영할 공장을 선택한 뒤 적용하세요</span>
             </span>
           </div>
-          <button className="h-[42px] rounded-full border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
+          <button className="h-[40px] rounded-[8px] border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
             닫기
           </button>
         </div>
-        <div className="grid grid-cols-[230px_1fr] gap-[16px] p-[18px]">
-          <aside className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+        <div className="grid grid-cols-[190px_1fr] gap-[12px] p-[14px]">
+          <aside className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <div className="text-[14px] font-black text-[#6f879d]">현재 선택</div>
-            <div className="mt-[10px] text-[34px] font-black leading-none text-[#173f69]">{factories[selectedFactory]}</div>
-            <div className="mt-[18px] rounded-[16px] bg-[#eef7ff] p-[12px] text-[14px] font-bold leading-relaxed text-[#45657f]">
-              선택한 공장 기준으로 화면 데이터와 설정 항목을 표시합니다.
-            </div>
+            <div className="mt-[10px] text-[32px] font-black leading-none text-[#173f69]">{factories[selectedFactory]}</div>
           </aside>
-          <div className="grid grid-cols-2 gap-[10px]">
+          <div className="grid grid-cols-2 gap-[8px]">
         {factories.map((factory, index) => (
           <button
             key={factory}
-            className={`grid h-[88px] grid-cols-[48px_1fr] items-center rounded-[18px] border p-[12px] text-left transition-colors ${
+            className={`grid h-[76px] grid-cols-[44px_1fr] items-center rounded-[9px] border p-[10px] text-left transition-colors ${
               selectedFactory === index
                 ? "border-[#237bd0] bg-[#eef7ff] shadow-[0_8px_18px_rgba(35,123,208,0.14)]"
                 : "border-[#d9e6f0] bg-white hover:border-[#9cc7e8]"
@@ -855,7 +852,7 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
             onClick={() => setSelectedFactory(index)}
             type="button"
           >
-            <span className={`flex h-[40px] w-[40px] items-center justify-center rounded-[14px] text-[17px] font-black ${selectedFactory === index ? "bg-[#237bd0] text-white" : "bg-[#eef3f7] text-[#5d748c]"}`}>
+            <span className={`flex h-[36px] w-[36px] items-center justify-center rounded-[7px] text-[17px] font-black ${selectedFactory === index ? "bg-[#237bd0] text-white" : "bg-[#eef3f7] text-[#5d748c]"}`}>
               {index + 1}
             </span>
             <span className="flex min-w-0 flex-col justify-center">
@@ -868,8 +865,8 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
         </div>
         <div className="grid h-[72px] grid-cols-[1fr_160px_180px] gap-[10px] border-t border-[#dbe7f1] bg-white px-[18px] py-[12px]">
           <span />
-          <button className="rounded-[15px] border border-[#cfdde8] bg-[#f8fbfd] text-[19px] font-black text-[#45657f]" onClick={onClose} type="button">취소</button>
-          <button className="rounded-[15px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_6px_14px_rgba(35,123,208,0.22)]" onClick={onClose} type="button">적용</button>
+          <button className="rounded-[8px] border border-[#cfdde8] bg-[#f8fbfd] text-[19px] font-black text-[#45657f]" onClick={onClose} type="button">취소</button>
+          <button className="rounded-[8px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)]" onClick={onClose} type="button">적용</button>
         </div>
       </section>
     </div>
@@ -891,10 +888,10 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-[24px]">
-      <section className="w-[1080px] overflow-hidden rounded-[24px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_18px_42px_rgba(15,43,72,0.34)]">
+      <section className="w-[1080px] overflow-hidden rounded-[12px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_14px_34px_rgba(15,43,72,0.32)]">
         <div className="flex h-[86px] items-center justify-between border-b border-[#dbe7f1] bg-white px-[22px]">
           <div className="flex items-center gap-[14px]">
-            <span className="flex h-[54px] w-[54px] items-center justify-center rounded-[18px] bg-[#eaf4fc]">
+            <span className="flex h-[52px] w-[52px] items-center justify-center rounded-[10px] bg-[#eaf4fc]">
               <img src="/control.png" alt="" className="h-[36px] w-[36px] object-contain" />
             </span>
             <span>
@@ -902,17 +899,17 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
               <span className="mt-[7px] block text-[14px] font-bold text-[#6f879d]">운전 조건과 그룹 제어를 한 화면에서 관리합니다</span>
             </span>
           </div>
-          <button className="h-[42px] rounded-full border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
+          <button className="h-[40px] rounded-[8px] border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
             닫기
           </button>
         </div>
         <div className="grid grid-cols-[1fr_280px] gap-[16px] p-[18px]">
           <div className="grid gap-[14px]">
-            <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+            <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
               <PanelHeading eyebrow="CONTROL VALUES">제어 기준값</PanelHeading>
               <div className="mt-[12px] grid grid-cols-3 gap-[10px]">
               {controls.map(([label, value, unit]) => (
-                <div key={label} className="rounded-[16px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px]">
+                <div key={label} className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px]">
                   <div className="text-[14px] font-black text-[#6f879d]">{label}</div>
                   <div className="mt-[8px] flex items-end justify-between">
                     <span className="text-[27px] font-black leading-none text-[#173f69]">{value}</span>
@@ -923,7 +920,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
               </div>
             </div>
             <div className="grid grid-cols-2 gap-[14px]">
-              <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+              <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
                 <PanelHeading eyebrow="SORT / SAVE">운전 조건</PanelHeading>
                 <div className="mt-[12px] grid gap-[10px]">
                   <SegmentedOption
@@ -934,13 +931,13 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
                     selected={sortMode}
                     onSelect={(value) => setSortMode(value as "setting" | "time")}
                   />
-                  <label className="flex h-[54px] items-center justify-between rounded-[16px] border border-[#d9e6f0] bg-[#f8fbfd] px-[16px] text-[17px] font-black text-[#244c75]">
+                  <label className="flex h-[54px] items-center justify-between rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-[16px] text-[17px] font-black text-[#244c75]">
                     <span>절약모드</span>
                     <input readOnly className="h-[24px] w-[24px] accent-[#237bd0]" type="checkbox" />
                   </label>
                 </div>
               </div>
-              <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+              <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
                 <PanelHeading eyebrow="INVERTER">인버터 기준</PanelHeading>
                 <div className="mt-[12px] grid grid-cols-2 gap-[10px]">
                   <InfoTile label="메인 호기" unit="호기" value="0" />
@@ -949,7 +946,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
               </div>
             </div>
           </div>
-          <aside className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+          <aside className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <PanelHeading eyebrow="ACTION">통합운전</PanelHeading>
             <div className="mt-[12px] grid gap-[10px]">
               <SegmentedOption
@@ -968,18 +965,18 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
                 selected={controlMode}
                 onSelect={(value) => setControlMode(value as "single" | "group")}
               />
-              <div className="rounded-[18px] bg-[#eef7ff] p-[14px] text-center">
+              <div className="rounded-[8px] bg-[#eef7ff] p-[14px] text-center">
                 <div className="text-[13px] font-black text-[#6f879d]">현재 모드</div>
                 <div className="mt-[7px] text-[30px] font-black leading-none text-[#173f69]">{operationMode.toUpperCase()}</div>
               </div>
-              <button className="h-[72px] rounded-[18px] bg-[#d92525] text-[30px] font-black text-white shadow-[0_7px_15px_rgba(208,31,38,0.22)]" type="button">운전</button>
-              <button className="h-[72px] rounded-[18px] bg-[#667380] text-[30px] font-black text-white shadow-[0_7px_15px_rgba(70,82,94,0.18)]" type="button">정지</button>
+              <button className="h-[72px] rounded-[9px] bg-[#d92525] text-[30px] font-black text-white shadow-[0_6px_13px_rgba(208,31,38,0.2)]" type="button">운전</button>
+              <button className="h-[72px] rounded-[9px] bg-[#667380] text-[30px] font-black text-white shadow-[0_6px_13px_rgba(70,82,94,0.16)]" type="button">정지</button>
             </div>
           </aside>
         </div>
         <div className="grid h-[72px] grid-cols-[1fr_180px] border-t border-[#dbe7f1] bg-white px-[18px] py-[12px]">
           <span />
-          <button className="rounded-[15px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_6px_14px_rgba(35,123,208,0.22)]" type="button">저장</button>
+          <button className="rounded-[8px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)]" type="button">저장</button>
         </div>
       </section>
     </div>
@@ -988,7 +985,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
 
 function InfoTile({ label, unit, value }: { label: string; unit: string; value: string }) {
   return (
-    <div className="rounded-[16px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px]">
+    <div className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px]">
       <div className="text-[13px] font-black text-[#6f879d]">{label}</div>
       <div className="mt-[8px] flex items-end justify-between">
         <span className="text-[25px] font-black leading-none text-[#173f69]">{value}</span>
@@ -1017,11 +1014,11 @@ function SegmentedOption({
   selected: string;
 }) {
   return (
-    <div className="grid h-[48px] grid-cols-2 rounded-[12px] border border-[#d3e7f8] bg-[#edf6fe] p-[4px]">
+    <div className="grid h-[48px] grid-cols-2 rounded-[8px] border border-[#d3e7f8] bg-[#edf6fe] p-[4px]">
       {items.map(([value, label]) => (
         <button
           key={value}
-          className={`rounded-[9px] text-[18px] font-black transition-colors ${
+          className={`rounded-[6px] text-[18px] font-black transition-colors ${
             selected === value ? "bg-[#237bd0] text-white shadow-[0_4px_10px_rgba(35,123,208,0.28)]" : "text-[#3e6488]"
           }`}
           onClick={() => onSelect(value)}
@@ -1042,7 +1039,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
     <DialogShell onClose={onClose} title="설정" wide>
       <div className="grid max-h-[690px] grid-cols-[300px_1fr] gap-[14px] overflow-y-auto bg-[#f6f9fc] p-[16px]">
         <aside className="grid content-start gap-[12px]">
-          <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+          <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <PanelHeading eyebrow="NETWORK">접속 정보</PanelHeading>
             <div className="mt-[12px] grid gap-[8px]">
               <SettingSummary label="Connect IP" value="121.164.120.200" />
@@ -1051,7 +1048,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
               <SettingSummary label="Setting PW" value="471112" />
             </div>
           </div>
-          <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+          <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <PanelHeading eyebrow="DIO">DIO BIT</PanelHeading>
             <div className="mt-[12px] grid gap-[8px]">
               <SettingSummary label="BIT0" value="운전" />
@@ -1060,14 +1057,14 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
         </aside>
         <div className="grid content-start gap-[14px]">
-          <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+          <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <PanelHeading eyebrow="MODE TABLE">사용모드 / 정렬 설정</PanelHeading>
             <div className="mt-[12px] grid gap-[6px]">
               {modes.map(([no, a, b, c, index]) => (
                 <div key={no} className="grid h-[38px] grid-cols-[54px_1fr_1fr_1fr_92px] gap-[5px]">
-                  <div className="flex items-center justify-center rounded-[10px] bg-[#eef3f7] font-black text-[#45657f]">{no}</div>
+                  <div className="flex items-center justify-center rounded-[6px] bg-[#eef3f7] font-black text-[#45657f]">{no}</div>
                   {[a, b, c, index].map((value, idx) => (
-                    <div key={idx} className="flex items-center justify-center rounded-[10px] border border-[#d9e6f0] bg-[#f8fbfd] text-[16px] font-bold">{value}</div>
+                    <div key={idx} className="flex items-center justify-center rounded-[6px] border border-[#d9e6f0] bg-[#f8fbfd] text-[16px] font-bold">{value}</div>
                   ))}
                 </div>
               ))}
@@ -1075,16 +1072,16 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             <div className="mt-[12px] grid h-[46px] grid-cols-[1fr_58px_78px_58px_120px] gap-[8px]">
               <div className="flex items-center text-[17px] font-black text-[#173f69]">사용모드 개수 설정</div>
               <ChoiceButton>-</ChoiceButton>
-              <div className="flex items-center justify-center rounded-[12px] border border-[#d9e6f0] bg-[#f8fbfd] text-[22px] font-black text-[#173f69]">1</div>
+              <div className="flex items-center justify-center rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] text-[22px] font-black text-[#173f69]">1</div>
               <ChoiceButton>+</ChoiceButton>
-              <button className="rounded-[12px] bg-[#237bd0] text-[18px] font-bold text-white" type="button">저장</button>
+              <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-bold text-white" type="button">저장</button>
             </div>
           </div>
-          <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+          <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <PanelHeading eyebrow="FACTORY">공장 정보</PanelHeading>
             <div className="mt-[12px] grid grid-cols-5 gap-[8px]">
               {factories.map((factory, index) => (
-                <div key={factory} className="rounded-[16px] border border-[#d9e6f0] bg-[#f8fbfd] p-[10px] text-center">
+                <div key={factory} className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[10px] text-center">
                   <div className="text-[16px] font-black text-[#173f69]">{factory}</div>
                   <div className="mt-[7px] text-[13px] font-bold text-[#6f879d]">192.168.0.{10 + index}</div>
                 </div>
@@ -1099,7 +1096,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
 
 function SettingSummary({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[15px] border border-[#d9e6f0] bg-[#f8fbfd] p-[11px]">
+    <div className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[11px]">
       <div className="text-[12px] font-black text-[#6f879d]">{label}</div>
       <div className="mt-[6px] text-[18px] font-black leading-none text-[#173f69]">{value}</div>
     </div>
