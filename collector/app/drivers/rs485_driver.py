@@ -137,6 +137,7 @@ class RS485Collector(BaseCollector):
         comp_qty: int = 8,
         response_timeout: float = 0.8,
         inter_request_delay: float = 0.05,
+        write_request_delay: float = 0.25,
         debug_hex: bool = False,
     ) -> None:
         self.serial_port = serial_port
@@ -144,6 +145,7 @@ class RS485Collector(BaseCollector):
         self.comp_qty = max(1, min(comp_qty, 8))
         self.response_timeout = response_timeout
         self.inter_request_delay = inter_request_delay
+        self.write_request_delay = write_request_delay
         self.debug_hex = debug_hex
         self._serial: serial.Serial | None = None
         self._word_cache: dict[int, list[int]] = {}
@@ -271,7 +273,7 @@ class RS485Collector(BaseCollector):
             port.write(request)
             port.flush()
             self._debug("tx-control", request)
-            time.sleep(self.inter_request_delay)
+            time.sleep(self.write_request_delay)
 
     def _read_frame(self, port: serial.Serial) -> bytes:
         deadline = time.monotonic() + self.response_timeout

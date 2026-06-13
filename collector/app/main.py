@@ -16,6 +16,7 @@ def build_collector() -> tuple[BaseCollector, int]:
         comp_qty = get_int_env("RS485_COMP_QTY", 8)
         response_timeout = float(get_env("RS485_RESPONSE_TIMEOUT_SECONDS", "0.8"))
         inter_request_delay = float(get_env("RS485_INTER_REQUEST_DELAY_SECONDS", "0.05"))
+        write_request_delay = float(get_env("RS485_WRITE_REQUEST_DELAY_SECONDS", "0.25"))
         debug_hex = get_env("RS485_DEBUG_HEX", "true").strip().lower() in ("1", "true", "yes", "on")
         return (
             RS485Collector(
@@ -24,6 +25,7 @@ def build_collector() -> tuple[BaseCollector, int]:
                 comp_qty=comp_qty,
                 response_timeout=response_timeout,
                 inter_request_delay=inter_request_delay,
+                write_request_delay=write_request_delay,
                 debug_hex=debug_hex,
             ),
             interval,
@@ -45,6 +47,8 @@ def main() -> None:
     control_api_url = get_env("COLLECTOR_CONTROL_API_URL", default_control_api_url(yujin_api_url))
     publish_telemetry = get_env("COLLECTOR_PUBLISH_TELEMETRY", "false").strip().lower() in ("1", "true", "yes", "on")
     request_timeout = float(get_env("COLLECTOR_REQUEST_TIMEOUT_SECONDS", "15"))
+    control_command_limit = get_int_env("COLLECTOR_CONTROL_COMMAND_LIMIT", 1)
+    control_command_delay = float(get_env("COLLECTOR_CONTROL_COMMAND_DELAY_SECONDS", "0.5"))
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
     collector, interval = build_collector()
@@ -73,7 +77,7 @@ def main() -> None:
                 print(f"collector yujin map publish error: {exc}")
 
         try:
-            commands = client.fetch_control_commands()
+            commands = client.fetch_control_commands(limit=control_command_limit)
         except Exception as exc:
             print(f"collector control command fetch error: {exc}")
             commands = []
@@ -83,6 +87,7 @@ def main() -> None:
                 collector.execute_control_command(command)
                 client.ack_control_command(command.id, "completed")
                 print(f"collector control command {command.id} completed")
+                time.sleep(control_command_delay)
             except Exception as exc:
                 error = str(exc)
                 try:
