@@ -25,10 +25,18 @@ services:
       context: ./collector
       network: host
     network_mode: host
+    privileged: true
     environment:
+      COLLECTOR_DRIVER: ${HOST_COLLECTOR_DRIVER:-rs485}
       COLLECTOR_API_URL: ${HOST_COLLECTOR_API_URL:-http://127.0.0.1:8000/api/ingest/telemetry}
       COLLECTOR_YUJIN_API_URL: ${HOST_COLLECTOR_YUJIN_API_URL:-http://127.0.0.1:8000/api/yujin/ingest-map}
+      RS485_COMP_QTY: ${RS485_COMP_QTY:-8}
+      RS485_RESPONSE_TIMEOUT_SECONDS: ${RS485_RESPONSE_TIMEOUT_SECONDS:-0.8}
+      RS485_INTER_REQUEST_DELAY_SECONDS: ${RS485_INTER_REQUEST_DELAY_SECONDS:-0.05}
+      RS485_DEBUG_HEX: ${RS485_DEBUG_HEX:-false}
     ports: []
+    volumes:
+      - /dev:/dev
 
   nginx:
     network_mode: host
