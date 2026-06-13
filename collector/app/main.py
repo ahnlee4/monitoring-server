@@ -43,6 +43,8 @@ def main() -> None:
     api_url = get_env("COLLECTOR_API_URL", "http://backend:8000/api/ingest/telemetry")
     yujin_api_url = get_env("COLLECTOR_YUJIN_API_URL", "http://backend:8000/api/yujin/ingest-map")
     control_api_url = get_env("COLLECTOR_CONTROL_API_URL", default_control_api_url(yujin_api_url))
+    publish_telemetry = get_env("COLLECTOR_PUBLISH_TELEMETRY", "false").strip().lower() in ("1", "true", "yes", "on")
+    request_timeout = float(get_env("COLLECTOR_REQUEST_TIMEOUT_SECONDS", "15"))
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
     collector, interval = build_collector()
@@ -51,16 +53,18 @@ def main() -> None:
         token=token,
         yujin_api_url=yujin_api_url,
         control_api_url=control_api_url,
+        request_timeout=request_timeout,
     )
 
     while True:
         batch = collector.poll()
-        for frame in batch.frames:
-            try:
-                client.publish(frame)
-                print(f"sent telemetry for {frame.device_code} via {frame.source}")
-            except Exception as exc:
-                print(f"collector publish error for {frame.device_code}: {exc}")
+        if publish_telemetry:
+            for frame in batch.frames:
+                try:
+                    client.publish(frame)
+                    print(f"sent telemetry for {frame.device_code} via {frame.source}")
+                except Exception as exc:
+                    print(f"collector publish error for {frame.device_code}: {exc}")
         if batch.map_values:
             try:
                 client.publish_map_batch(batch)

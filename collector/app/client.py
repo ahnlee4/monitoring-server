@@ -10,11 +10,13 @@ class BackendClient:
         token: str,
         yujin_api_url: str | None = None,
         control_api_url: str | None = None,
+        request_timeout: float = 15.0,
     ) -> None:
         self.api_url = api_url
         self.yujin_api_url = yujin_api_url
         self.control_api_url = control_api_url
         self.token = token
+        self.request_timeout = request_timeout
         self.session = requests.Session()
 
     def publish(self, frame: TelemetryFrame) -> None:
@@ -22,7 +24,7 @@ class BackendClient:
             self.api_url,
             json=frame.to_payload(),
             headers={"X-Collector-Token": self.token},
-            timeout=5,
+            timeout=self.request_timeout,
         )
         response.raise_for_status()
 
@@ -33,7 +35,7 @@ class BackendClient:
             f"{self.control_api_url}/commands/next",
             params={"limit": limit},
             headers={"X-Collector-Token": self.token},
-            timeout=5,
+            timeout=self.request_timeout,
         )
         response.raise_for_status()
         return [
@@ -52,7 +54,7 @@ class BackendClient:
             f"{self.control_api_url}/commands/{command_id}/ack",
             json={"status": status, "error": error},
             headers={"X-Collector-Token": self.token},
-            timeout=5,
+            timeout=self.request_timeout,
         )
         response.raise_for_status()
 
@@ -63,6 +65,6 @@ class BackendClient:
             self.yujin_api_url,
             json=batch.map_payload(),
             headers={"X-Collector-Token": self.token},
-            timeout=5,
+            timeout=self.request_timeout,
         )
         response.raise_for_status()

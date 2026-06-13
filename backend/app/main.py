@@ -390,15 +390,33 @@ async def ingest_yujin_map_values(
 
     recorded_at = payload.recorded_at or datetime.now(timezone.utc)
     updated_keys: list[str] = []
+    normalized_values = [(item.key.upper(), str(item.value)) for item in payload.values]
+    if not normalized_values:
+        return {"status": "accepted", "updated_count": 0, "keys": []}
 
-    for item in payload.values:
-        key = item.key.upper()
-        definition = db.scalar(select(YujinMapDefinition).where(YujinMapDefinition.key == key))
-        if not definition:
-            raise HTTPException(status_code=404, detail=f"Map key not found: {key}")
+    keys = list(dict.fromkeys(key for key, _ in normalized_values))
+    definitions = {
+        definition.key: definition
+        for definition in db.scalars(
+            select(YujinMapDefinition).where(YujinMapDefinition.key.in_(keys))
+        ).all()
+    }
+    missing_keys = [key for key in keys if key not in definitions]
+    if missing_keys:
+        raise HTTPException(status_code=404, detail=f"Map key not found: {missing_keys[0]}")
 
-        value_text = str(item.value)
-        current = db.scalar(select(YujinMapValue).where(YujinMapValue.definition_id == definition.id))
+    current_values = {
+        current.definition_id: current
+        for current in db.scalars(
+            select(YujinMapValue).where(
+                YujinMapValue.definition_id.in_([definition.id for definition in definitions.values()])
+            )
+        ).all()
+    }
+
+    for key, value_text in normalized_values:
+        definition = definitions[key]
+        current = current_values.get(definition.id)
         changed = True
         if current:
             changed = current.value_text != value_text
@@ -413,6 +431,7 @@ async def ingest_yujin_map_values(
                 source=payload.source,
             )
             db.add(current)
+            current_values[definition.id] = current
 
         if changed:
             db.add(
