@@ -41,6 +41,7 @@ type DashboardState = {
 };
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
+const BUILD_MARKER = "LIVE MAP ONLY / no mock data";
 
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
@@ -161,6 +162,9 @@ export default function App() {
               {dashboard.compressors.map((compressor) => (
                 <CompressorCard key={compressor.id} compressor={compressor} />
               ))}
+            </div>
+            <div className="absolute right-[6px] top-[4px] z-20 rounded bg-white/80 px-[6px] py-[2px] text-[11px] font-bold text-[#0d4da5]">
+              {BUILD_MARKER}
             </div>
             {lowPressureText ? <AlarmStrip tone={dashboard.lowPressureAlarm} text={lowPressureText} /> : null}
           </section>
