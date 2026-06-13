@@ -32,9 +32,13 @@ type DashboardState = {
     noLoadPressure: number;
     loadPressure: number;
     pressureGap: number;
+    lowAlarmPressure: number;
     runUnits: number;
     changeHours: number;
     remainMinutes: number;
+    controlModeWord: number;
+    sortModeWord: number;
+    operationModeWord: number;
   };
   options: Array<{ label: string; checked: boolean; visible?: boolean }>;
   compressors: CompressorState[];
@@ -44,7 +48,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.20";
+const APP_VERSION = "0.1.21";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -73,9 +77,13 @@ const emptyDashboard: DashboardState = {
     noLoadPressure: 0,
     loadPressure: 0,
     pressureGap: 0,
+    lowAlarmPressure: 0,
     runUnits: 0,
     changeHours: 0,
     remainMinutes: 0,
+    controlModeWord: 0,
+    sortModeWord: 0,
+    operationModeWord: 0,
   },
   options: OPTION_LABELS.map((label) => ({ label, checked: false })),
   compressors: Array.from({ length: 8 }, (_, index) => emptyCompressor(index)),
@@ -212,9 +220,13 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
       noLoadPressure: scale10(liveMapNumber(values, "0016", 0)),
       loadPressure: scale10(liveMapNumber(values, "0018", 0)),
       pressureGap: scale10(liveMapNumber(values, "001A", 0)),
+      lowAlarmPressure: scale10(liveMapNumber(values, "0054", 0)),
       runUnits: Math.trunc(liveMapNumber(values, "0026", 0)),
       changeHours: Math.trunc(liveMapNumber(values, "0046", 0)),
       remainMinutes: Math.trunc(liveMapNumber(values, "0048", 0)),
+      controlModeWord: Math.trunc(liveMapNumber(values, "0034", 0)),
+      sortModeWord: Math.trunc(liveMapNumber(values, "0036", 0)),
+      operationModeWord: Math.trunc(liveMapNumber(values, "0080", 0)),
     },
     options: buildOptions(optionDevice),
     compressors: compressors.map((compressor, index) => ({
@@ -355,6 +367,19 @@ function wsUrl() {
   const configuredPath = import.meta.env.VITE_WS_PATH || "/ws/dashboard";
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}${configuredPath}`;
+}
+
+async function enqueueMapWriteBatch(
+  source: string,
+  writes: Array<{ key?: string; address?: number; high_addr?: number; low_addr?: number; length?: number; value?: number; data_hex?: string }>,
+) {
+  const response = await fetch(`${apiBase()}/control/map-write-batch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source, writes }),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
 }
 
 function TopBar({ dashboard, now }: { dashboard: DashboardState; now: Date }) {
@@ -831,7 +856,13 @@ function DialogShell({ children, onClose, title, wide = false }: { children: Rea
 
 function FactoryDialog({ onClose }: { onClose: () => void }) {
   const factories = ["공장 1", "공장 2", "공장 3", "공장 4", "공장 5"];
-  const [selectedFactory, setSelectedFactory] = useState(0);
+  const [selectedFactory, setSelectedFactory] = useState(() => Number(window.localStorage.getItem("selectedFactory") ?? 0) || 0);
+  const [saveStatus, setSaveStatus] = useState("공장 선택 대기 중");
+  const applyFactory = () => {
+    window.localStorage.setItem("selectedFactory", String(selectedFactory));
+    setSaveStatus(`${factories[selectedFactory]} 저장 완료`);
+    window.setTimeout(onClose, 250);
+  };
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-[24px]">
@@ -854,6 +885,7 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
           <aside className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <div className="text-[14px] font-black text-[#6f879d]">현재 선택</div>
             <div className="mt-[10px] text-[32px] font-black leading-none text-[#173f69]">{factories[selectedFactory]}</div>
+            <div className="mt-[12px] rounded-[8px] bg-[#eef7ff] px-[10px] py-[8px] text-[13px] font-black text-[#45657f]">{saveStatus}</div>
           </aside>
           <div className="grid grid-cols-2 gap-[8px]">
         {factories.map((factory, index) => (
@@ -881,7 +913,7 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
         <div className="grid h-[72px] grid-cols-[1fr_160px_180px] gap-[10px] border-t border-[#dbe7f1] bg-white px-[18px] py-[12px]">
           <span />
           <button className="rounded-[8px] border border-[#cfdde8] bg-[#f8fbfd] text-[19px] font-black text-[#45657f]" onClick={onClose} type="button">취소</button>
-          <button className="rounded-[8px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)]" onClick={onClose} type="button">적용</button>
+          <button className="rounded-[8px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)]" onClick={applyFactory} type="button">적용</button>
         </div>
       </section>
     </div>
@@ -889,19 +921,35 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
 }
 
 function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onClose: () => void }) {
-  const [sortMode, setSortMode] = useState<"setting" | "time">("setting");
-  const [operationMode, setOperationMode] = useState<"local" | "remote">("remote");
-  const [controlMode, setControlMode] = useState<"single" | "group">("group");
+  const [sortMode, setSortMode] = useState<"setting" | "time">((dashboard.control.sortModeWord & 0x00ff) === 1 ? "time" : "setting");
+  const [operationMode, setOperationMode] = useState<"local" | "remote">(((dashboard.control.operationModeWord >> 8) & 0xff) === 0 ? "local" : "remote");
+  const [controlMode, setControlMode] = useState<"single" | "group">(dashboard.control.controlModeWord === 1 ? "group" : "single");
+  const [settings, setSettings] = useState({
+    noLoadPressure: dashboard.control.noLoadPressure.toFixed(1),
+    loadPressure: dashboard.control.loadPressure.toFixed(1),
+    pressureGap: dashboard.control.pressureGap.toFixed(1),
+    lowAlarmPressure: dashboard.control.lowAlarmPressure.toFixed(1),
+    changeHours: String(dashboard.control.changeHours),
+    runUnits: String(dashboard.control.runUnits),
+  });
   const [commandStatus, setCommandStatus] = useState("명령 대기 중");
   const [commandBusy, setCommandBusy] = useState(false);
-  const controls = [
-    ["무부하 압력", dashboard.control.noLoadPressure.toFixed(1), "bar"],
-    ["부하 압력", dashboard.control.loadPressure.toFixed(1), "bar"],
-    ["장비별 압력차", dashboard.control.pressureGap.toFixed(1), "bar"],
-    ["저압경보 압력 설정", "0.0", "bar"],
-    ["교환 운전 시간", String(dashboard.control.changeHours), "hr"],
-    ["가동 대수", String(dashboard.control.runUnits), "ea"],
+  const controls: Array<[string, keyof typeof settings, string, string]> = [
+    ["무부하 압력", "noLoadPressure", "bar", "0.1"],
+    ["부하 압력", "loadPressure", "bar", "0.1"],
+    ["장비별 압력차", "pressureGap", "bar", "0.1"],
+    ["저압경보 압력 설정", "lowAlarmPressure", "bar", "0.1"],
+    ["교환 운전 시간", "changeHours", "hr", "1"],
+    ["가동 대수", "runUnits", "ea", "1"],
   ];
+  const updateSetting = (key: keyof typeof settings, value: string) => {
+    setSettings((current) => ({ ...current, [key]: value }));
+  };
+  const numberValue = (key: keyof typeof settings) => {
+    const value = Number(settings[key]);
+    if (!Number.isFinite(value)) throw new Error(`${key} 값이 올바르지 않습니다`);
+    return value;
+  };
 
   const sendGroupOperation = async (action: "run" | "stop") => {
     setCommandBusy(true);
@@ -923,23 +971,31 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
   };
 
   const saveGroupSettings = async () => {
-    if (dashboard.control.noLoadPressure <= 0 && dashboard.control.loadPressure <= 0) {
-      setCommandStatus("통신 기준값이 없어 저장을 중단했습니다");
-      return;
-    }
-
     setCommandBusy(true);
     setCommandStatus("통합운전 설정 저장 중...");
     try {
+      const noLoadPressure = numberValue("noLoadPressure");
+      const loadPressure = numberValue("loadPressure");
+      const pressureGap = numberValue("pressureGap");
+      const lowAlarmPressure = numberValue("lowAlarmPressure");
+      const runUnits = Math.trunc(numberValue("runUnits"));
+      const changeHours = Math.trunc(numberValue("changeHours"));
+      if (noLoadPressure <= 0 && loadPressure <= 0) {
+        throw new Error("기준 압력값이 없습니다");
+      }
       const response = await fetch(`${apiBase()}/control/group-settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          no_load_pressure: dashboard.control.noLoadPressure,
-          load_pressure: dashboard.control.loadPressure,
-          pressure_gap: dashboard.control.pressureGap,
-          run_units: dashboard.control.runUnits,
-          change_hours: dashboard.control.changeHours,
+          no_load_pressure: noLoadPressure,
+          load_pressure: loadPressure,
+          pressure_gap: pressureGap,
+          low_alarm_pressure: lowAlarmPressure,
+          run_units: runUnits,
+          change_hours: changeHours,
+          sort_mode: sortMode,
+          operation_mode: operationMode,
+          control_mode: controlMode,
         }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -974,13 +1030,21 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
             <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
               <PanelHeading eyebrow="CONTROL VALUES">제어 기준값</PanelHeading>
               <div className="mt-[12px] grid grid-cols-3 gap-[10px]">
-              {controls.map(([label, value, unit]) => (
+              {controls.map(([label, key, unit, step]) => (
                 <div key={label} className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px]">
                   <div className="text-[14px] font-black text-[#6f879d]">{label}</div>
-                  <div className="mt-[8px] flex items-end justify-between">
-                    <span className="text-[27px] font-black leading-none text-[#173f69]">{value}</span>
+                  <label className="mt-[8px] flex items-end justify-between gap-[8px]">
+                    <input
+                      className="min-w-0 flex-1 rounded-[6px] border border-[#c9deef] bg-white px-[8px] py-[5px] text-right text-[25px] font-black leading-none text-[#173f69] outline-none focus:border-[#237bd0]"
+                      disabled={commandBusy}
+                      inputMode="decimal"
+                      onChange={(event) => updateSetting(key, event.target.value)}
+                      step={step}
+                      type="number"
+                      value={settings[key]}
+                    />
                     <span className="text-[14px] font-black text-[#6f879d]">{unit}</span>
-                  </div>
+                  </label>
                 </div>
               ))}
               </div>
@@ -1103,6 +1167,25 @@ function SegmentedOption({
 function SettingsDialog({ onClose }: { onClose: () => void }) {
   const modes = Array.from({ length: 7 }, (_, index) => [`${index + 1}`, "3", "2", "0", "0"]);
   const factories = ["공장 1", "공장 2", "공장 3", "공장 4", "공장 5"];
+  const [useModeCount, setUseModeCount] = useState("1");
+  const [saveStatus, setSaveStatus] = useState("설정 저장 대기 중");
+  const [saving, setSaving] = useState(false);
+  const saveUseModeCount = async () => {
+    setSaving(true);
+    setSaveStatus("설정 저장 명령 전송 중...");
+    try {
+      const count = Math.trunc(Number(useModeCount));
+      if (!Number.isFinite(count) || count < 1 || count > 16) throw new Error("사용모드 개수 범위는 1~16입니다");
+      const result = await enqueueMapWriteBatch("settings_use_mode_count", [
+        { key: "004E", address: 0x4e, length: 2, value: count },
+      ]);
+      setSaveStatus(`저장 명령 대기열 등록 #${result.id}`);
+    } catch (error) {
+      setSaveStatus(`저장 실패: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <DialogShell onClose={onClose} title="설정" wide>
@@ -1140,11 +1223,12 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             </div>
             <div className="mt-[12px] grid h-[46px] grid-cols-[1fr_58px_78px_58px_120px] gap-[8px]">
               <div className="flex items-center text-[17px] font-black text-[#173f69]">사용모드 개수 설정</div>
-              <ChoiceButton>-</ChoiceButton>
-              <div className="flex items-center justify-center rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] text-[22px] font-black text-[#173f69]">1</div>
-              <ChoiceButton>+</ChoiceButton>
-              <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-bold text-white" type="button">저장</button>
+              <ChoiceButton onClick={() => setUseModeCount((value) => String(Math.max(1, Number(value) - 1)))}>-</ChoiceButton>
+              <input className="min-w-0 rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] text-center text-[22px] font-black text-[#173f69]" disabled={saving} min={1} max={16} onChange={(event) => setUseModeCount(event.target.value)} type="number" value={useModeCount} />
+              <ChoiceButton onClick={() => setUseModeCount((value) => String(Math.min(16, Number(value) + 1)))}>+</ChoiceButton>
+              <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-bold text-white disabled:opacity-55" disabled={saving} onClick={saveUseModeCount} type="button">저장</button>
             </div>
+            <div className="mt-[8px] rounded-[8px] bg-[#eef7ff] px-[10px] py-[8px] text-[13px] font-black text-[#45657f]">{saveStatus}</div>
           </div>
           <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <PanelHeading eyebrow="FACTORY">공장 정보</PanelHeading>
@@ -1172,10 +1256,11 @@ function SettingSummary({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ChoiceButton({ active = false, children }: { active?: boolean; children: ReactNode }) {
+function ChoiceButton({ active = false, children, onClick }: { active?: boolean; children: ReactNode; onClick?: () => void }) {
   return (
     <button
       className={`rounded-[8px] border text-[19px] font-bold ${active ? "border-[#237bd0] bg-[#237bd0] text-white" : "border-[#9fc8ea] bg-white text-[#237bd0]"}`}
+      onClick={onClick}
       type="button"
     >
       {children}

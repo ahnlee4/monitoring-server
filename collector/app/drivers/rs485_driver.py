@@ -263,9 +263,10 @@ class RS485Collector(BaseCollector):
         port = self._open_serial()
         for write in writes:
             address = int(write["address"])
-            value = int(write["value"])
             length = int(write.get("length", 2))
-            request = build_map_write_request(address, value, length)
+            data = bytes_from_hex(str(write["data_hex"])) if "data_hex" in write else None
+            value = int(write.get("value", 0))
+            request = build_map_write_request(address, value, length, data)
             port.reset_input_buffer()
             port.write(request)
             port.flush()
@@ -355,26 +356,33 @@ def build_full_read_request(mem_addr: int) -> bytes:
     return append_crc(payload)
 
 
-def build_map_write_request(address: int, value: int, length: int = 2) -> bytes:
-    if length != 2:
-        raise ValueError(f"unsupported map write length: {length}")
+def build_map_write_request(address: int, value: int = 0, length: int = 2, data: bytes | None = None) -> bytes:
     if not 0 <= address <= 0xFFFF:
         raise ValueError(f"unsupported map write address: 0x{address:X}")
+    if not 1 <= length <= 0xFFFF:
+        raise ValueError(f"unsupported map write length: {length}")
 
-    value &= 0xFFFF
+    payload_data = data if data is not None else int(value).to_bytes(length, byteorder="big", signed=False)
+    if len(payload_data) != length:
+        raise ValueError(f"map write data length {len(payload_data)} did not match declared length {length}")
     payload = bytes(
         [
             FRAME_MASTER_ID,
             CMD_MAP_WRITE,
             (address >> 8) & 0xFF,
             address & 0xFF,
-            0x00,
-            0x02,
-            (value >> 8) & 0xFF,
-            value & 0xFF,
+            (length >> 8) & 0xFF,
+            length & 0xFF,
         ]
-    )
+    ) + payload_data
     return append_crc(payload)
+
+
+def bytes_from_hex(value: str) -> bytes:
+    compact = re.sub(r"[^0-9A-Fa-f]", "", value)
+    if len(compact) % 2:
+        raise ValueError(f"hex data must have an even number of digits: {value}")
+    return bytes.fromhex(compact)
 
 
 def decode_full_read_response(frame: bytes) -> tuple[int, int, list[int]]:

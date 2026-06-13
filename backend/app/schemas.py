@@ -119,8 +119,27 @@ class GroupSettingsIn(BaseModel):
     no_load_pressure: float
     load_pressure: float
     pressure_gap: float
+    low_alarm_pressure: float = 0
     run_units: int
     change_hours: int
+    sort_mode: Literal["setting", "time"] = "setting"
+    operation_mode: Literal["local", "remote"] = "remote"
+    control_mode: Literal["single", "group"] = "group"
+
+
+class MapWriteIn(BaseModel):
+    key: str | None = None
+    address: int | None = None
+    high_addr: int | None = None
+    low_addr: int | None = None
+    length: int = 2
+    value: int | None = None
+    data_hex: str | None = None
+
+
+class MapWriteBatchIn(BaseModel):
+    source: str = "frontend"
+    writes: list[MapWriteIn]
 
 
 class ControlCommandAckIn(BaseModel):

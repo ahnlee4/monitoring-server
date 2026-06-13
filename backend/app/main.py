@@ -25,6 +25,8 @@ from app.schemas import (
     DeviceOut,
     GroupOperationIn,
     GroupSettingsIn,
+    MapWriteBatchIn,
+    MapWriteIn,
     OverviewOut,
     TelemetryIngestRequest,
     TelemetryRecordOut,
@@ -176,6 +178,41 @@ def current_map_int(db: Session, key: str, fallback: int = 0) -> int:
         return fallback
 
 
+def set_word_high_byte(current: int, high_byte: int) -> int:
+    return ((high_byte & 0xFF) << 8) | (current & 0x00FF)
+
+
+def set_word_low_byte(current: int, low_byte: int) -> int:
+    return (current & 0xFF00) | (low_byte & 0xFF)
+
+
+def normalize_map_write(write: MapWriteIn) -> dict:
+    if write.address is None:
+        if write.high_addr is None or write.low_addr is None:
+            raise HTTPException(status_code=422, detail="write requires address or high_addr/low_addr")
+        address = ((write.high_addr & 0xFF) << 8) | (write.low_addr & 0xFF)
+    else:
+        address = write.address
+
+    if not 0 <= address <= 0xFFFF:
+        raise HTTPException(status_code=422, detail=f"invalid write address: {address}")
+    if not 1 <= write.length <= 255:
+        raise HTTPException(status_code=422, detail=f"invalid write length: {write.length}")
+    if write.data_hex is None and write.value is None:
+        raise HTTPException(status_code=422, detail="write requires value or data_hex")
+
+    normalized = {
+        "key": write.key,
+        "address": address,
+        "length": write.length,
+    }
+    if write.data_hex is not None:
+        normalized["data_hex"] = write.data_hex
+    else:
+        normalized["value"] = int(write.value or 0)
+    return normalized
+
+
 @app.get("/api/yujin/map-schema")
 def yujin_map_schema() -> dict:
     return build_yujin_map_schema()
@@ -217,8 +254,22 @@ async def create_group_settings_command(
         {"key": "0016", "address": 0x16, "length": 2, "value": round(payload.no_load_pressure * 10)},
         {"key": "0018", "address": 0x18, "length": 2, "value": round(payload.load_pressure * 10)},
         {"key": "001A", "address": 0x1A, "length": 2, "value": round(payload.pressure_gap * 10)},
+        {"key": "0054", "address": 0x54, "length": 2, "value": round(payload.low_alarm_pressure * 10)},
         {"key": "0026", "address": 0x26, "length": 2, "value": int(payload.run_units)},
         {"key": "0046", "address": 0x46, "length": 2, "value": int(payload.change_hours)},
+        {"key": "0034", "address": 0x34, "length": 2, "value": 1 if payload.control_mode == "group" else 0},
+        {
+            "key": "0036",
+            "address": 0x36,
+            "length": 2,
+            "value": set_word_low_byte(current_map_int(db, "0036", 0), 1 if payload.sort_mode == "time" else 0),
+        },
+        {
+            "key": "0080",
+            "address": 0x80,
+            "length": 2,
+            "value": set_word_high_byte(current_map_int(db, "0080", 0), 0 if payload.operation_mode == "local" else 1),
+        },
     ]
     command = enqueue_control_command(
         db,
@@ -226,6 +277,26 @@ async def create_group_settings_command(
         {
             "source": "group_settings",
             "writes": writes,
+        },
+    )
+    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    return command_out(command)
+
+
+@app.post("/api/control/map-write-batch", response_model=ControlCommandOut)
+async def create_map_write_batch_command(
+    payload: MapWriteBatchIn,
+    db: Session = Depends(get_db),
+) -> ControlCommandOut:
+    if not payload.writes:
+        raise HTTPException(status_code=422, detail="writes cannot be empty")
+
+    command = enqueue_control_command(
+        db,
+        "map_write_batch",
+        {
+            "source": payload.source,
+            "writes": [normalize_map_write(write) for write in payload.writes],
         },
     )
     await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
