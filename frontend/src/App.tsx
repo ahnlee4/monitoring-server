@@ -41,6 +41,7 @@ type DashboardState = {
 };
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
+const APP_VERSION = "0.1.1";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -61,7 +62,7 @@ const OPTION_LABELS = [
 const emptyDashboard: DashboardState = {
   integratedRun: false,
   mainPressure: 0,
-  appVersion: "-",
+  appVersion: APP_VERSION,
   firmwareVersion: "-",
   lowPressureAlarm: "none",
   sortMode: "setting",
