@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.6";
+const APP_VERSION = "0.1.7";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -658,27 +658,27 @@ function QuickButtons({
         <img src="/menu.png" alt="" className="h-[56px] w-[56px] object-contain" />
       </button>
       {menuOpen ? (
-        <div className="absolute bottom-[70px] right-0 z-20 grid w-[300px] gap-0">
+        <div className="absolute bottom-[68px] right-0 z-20 grid w-[238px] gap-[3px] rounded-[8px] border border-[#75b4ee] bg-[#eef7ff]/95 p-[6px] shadow-[0_8px_18px_rgba(0,0,0,0.28)] backdrop-blur-sm">
           {menuItems.map((item) => (
             <button
               key={item.label}
-              className="grid h-[88px] grid-cols-[180px_20px_100px] items-center bg-transparent p-0"
+              className="grid h-[48px] grid-cols-[150px_8px_62px] items-center bg-transparent p-0"
               onClick={() => handleMenuAction(item.action)}
               type="button"
             >
-              <span className="flex h-[50px] items-center justify-center border border-[#d2e8ff] bg-[#e9f5ff] text-[22px] font-bold text-[#303f9f]">
+              <span className="flex h-full items-center justify-center rounded-[4px] border border-[#75b4ee] bg-white text-[18px] font-bold text-[#303f9f] shadow-[1px_1px_1px_#c2c2c2]">
                 {item.label}
               </span>
               <span />
               <span className="flex h-full items-center justify-center">
-                <img src={item.icon} alt="" className="h-[88px] w-[88px] object-contain" />
+                <img src={item.icon} alt="" className="h-[52px] w-[52px] object-contain" />
               </span>
             </button>
           ))}
-          <button className="grid h-[88px] grid-cols-[200px_100px] items-center bg-transparent p-0" onClick={() => setMenuOpen(false)} type="button">
+          <button className="grid h-[42px] grid-cols-[1fr_62px] items-center bg-transparent p-0" onClick={() => setMenuOpen(false)} type="button">
             <span />
             <span className="flex h-full items-center justify-center">
-              <img src="/close.png" alt="" className="h-[88px] w-[88px] object-contain" />
+              <img src="/close.png" alt="" className="h-[46px] w-[46px] object-contain" />
             </span>
           </button>
         </div>
