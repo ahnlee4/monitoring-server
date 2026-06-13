@@ -41,7 +41,7 @@ type DashboardState = {
 };
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.2";
+const APP_VERSION = "0.1.3";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -312,7 +312,7 @@ function TopBar({ dashboard, now }: { dashboard: DashboardState; now: Date }) {
       <TopPanel tone="pressure">압력 : {dashboard.mainPressure.toFixed(1)} bar</TopPanel>
       <TopPanel tone="date">
         <span>{formatDateTime(now)}</span>
-        <small>App Ver.{dashboard.appVersion} / Fw Ver.{dashboard.firmwareVersion}</small>
+        <small>App {dashboard.appVersion} / Fw {dashboard.firmwareVersion}</small>
       </TopPanel>
       <TopPanel tone="lock">
         <img src="/unlock.png" alt="unlock" className="h-[58px] w-[58px] object-contain" />
