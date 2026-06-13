@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.18";
+const APP_VERSION = "0.1.19";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -195,7 +195,8 @@ export default function App() {
 }
 
 function buildDashboardFromMap(values: Record<string, YujinMapValue>): DashboardState {
-  const compressors = Array.from({ length: 8 }, (_, index) => buildCompressorFromMap(values, index));
+  const oilfreeSelector = liveMapNumber(values, "0006", 0);
+  const compressors = Array.from({ length: 8 }, (_, index) => buildCompressorFromMap(values, index, oilfreeSelector));
   const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
   const compQty = clamp(Math.trunc(liveMapNumber(values, "004E", 0)), 0, 8);
   const mainPressure = scale10(liveMapNumber(values, "0000", 0));
@@ -226,12 +227,26 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
   };
 }
 
-function buildCompressorFromMap(values: Record<string, YujinMapValue>, index: number): CompressorState {
+function buildCompressorFromMap(
+  values: Record<string, YujinMapValue>,
+  index: number,
+  oilfreeSelector: number,
+): CompressorState {
   const compNo = index + 1;
   const oilPrefix = `2${compNo.toString(16).toUpperCase()}`;
   const injectionPrefix = `1${compNo.toString(16).toUpperCase()}`;
-  const read = (oilOffset: string, injectionOffset: string = oilOffset, fallbackValue = 0) =>
-    liveMapNumber(values, `${oilPrefix}${oilOffset}`, liveMapNumber(values, `${injectionPrefix}${injectionOffset}`, fallbackValue));
+  const isOilfree = Boolean(oilfreeSelector & (1 << index));
+  const primaryPrefix = isOilfree ? oilPrefix : injectionPrefix;
+  const fallbackPrefix = isOilfree ? injectionPrefix : oilPrefix;
+  const read = (oilOffset: string, injectionOffset: string = oilOffset, fallbackValue = 0) => {
+    const primaryOffset = isOilfree ? oilOffset : injectionOffset;
+    const fallbackOffset = isOilfree ? injectionOffset : oilOffset;
+    return liveMapNumber(
+      values,
+      `${primaryPrefix}${primaryOffset}`,
+      liveMapNumber(values, `${fallbackPrefix}${fallbackOffset}`, fallbackValue),
+    );
+  };
 
   const pressure = scale10(read("00", "00", 0));
   const temperature = scale10(read("0C", "02", 0));
@@ -251,7 +266,7 @@ function buildCompressorFromMap(values: Record<string, YujinMapValue>, index: nu
   const version2 = Math.trunc(read("80", "80", 0));
   const runHoursLow = read("9A", "68", 0);
   const runHoursHigh = read("9C", "6A", 0);
-  const connected = hasRecentValue(values, `${oilPrefix}00`) || hasRecentValue(values, `${injectionPrefix}00`);
+  const connected = hasRecentValue(values, `${primaryPrefix}00`) || hasRecentValue(values, `${fallbackPrefix}00`);
   const modelName = connected ? getOilfreeModelName(model1, version1, version2) : "-";
   const isInverter = version1 === 3 || rpm > 0 || controlPressure > 0;
 

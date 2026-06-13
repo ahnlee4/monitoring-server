@@ -20,6 +20,9 @@ CMD_CHANGED_DATA = 0x15
 MEM_ADDR_COMP1 = 0x11
 MEM_ADDR_COMP8 = 0x18
 CRC_POLY = 0xA001
+SYSTEM_OILFREE_SELECTOR_OFFSET = 0x06
+INJECTION_SIGNED_OFFSETS = {0x00, 0x02, 0x04, 0x06, 0x08}
+OILFREE_SIGNED_OFFSETS = set(range(0x00, 0x28, 2))
 
 
 @dataclass(frozen=True)
@@ -144,6 +147,7 @@ class RS485Collector(BaseCollector):
         self.debug_hex = debug_hex
         self._serial: serial.Serial | None = None
         self._word_cache: dict[int, list[int]] = {}
+        self._is_injection = [True] * self.comp_qty
 
     def poll(self) -> CollectorBatch:
         recorded_at = datetime.now(timezone.utc).isoformat()
@@ -154,6 +158,8 @@ class RS485Collector(BaseCollector):
             port = self._open_serial()
             system_words = self._poll_address(port, 0x00)
             if system_words is not None:
+                self._word_cache[0x00] = system_words
+                self._update_equipment_types(system_words)
                 map_values.extend(words_to_generic_map_values(0x00, system_words))
                 time.sleep(self.inter_request_delay)
 
@@ -164,7 +170,7 @@ class RS485Collector(BaseCollector):
                     continue
                 self._word_cache[mem_addr] = words
                 frames.append(self._to_frame(comp_index, words, recorded_at))
-                map_values.extend(words_to_map_values(comp_index, words))
+                map_values.extend(words_to_map_values(comp_index, words, self._is_injection[comp_index]))
                 time.sleep(self.inter_request_delay)
         except Exception as exc:
             self._close_serial()
@@ -199,6 +205,15 @@ class RS485Collector(BaseCollector):
                 self._serial.close()
             finally:
                 self._serial = None
+
+    def _update_equipment_types(self, system_words: list[int]) -> None:
+        selector_index = SYSTEM_OILFREE_SELECTOR_OFFSET // 2
+        if selector_index >= len(system_words):
+            return
+
+        oilfree_selector = int(system_words[selector_index])
+        for index in range(self.comp_qty):
+            self._is_injection[index] = not bool(oilfree_selector & (1 << index))
 
     def _poll_address(self, port: serial.Serial, mem_addr: int) -> list[int] | None:
         request = build_full_read_request(mem_addr)
@@ -424,19 +439,18 @@ def values_to_metrics(values: dict[str, float | int]) -> Iterable[tuple[str, flo
         yield key, value, unit_by_key.get(key, "")
 
 
-def words_to_map_values(comp_index: int, words: list[int]) -> list[MapValueUpdate]:
+def words_to_map_values(comp_index: int, words: list[int], is_injection: bool) -> list[MapValueUpdate]:
     comp_no = comp_index + 1
-    oilfree_prefix = f"2{comp_no:X}"
-    injection_prefix = f"1{comp_no:X}"
+    prefix = f"{1 if is_injection else 2}{comp_no:X}"
+    signed_offsets = INJECTION_SIGNED_OFFSETS if is_injection else OILFREE_SIGNED_OFFSETS
     updates: list[MapValueUpdate] = []
 
     for word_index, word in enumerate(words):
         offset = word_index * 2
         if offset > 0xA4:
             break
-        value = signed_16(word) if word_index < len(COMP_FIELDS) and COMP_FIELDS[word_index].signed else word
-        updates.append(MapValueUpdate(key=f"{oilfree_prefix}{offset:02X}", value=value))
-        updates.append(MapValueUpdate(key=f"{injection_prefix}{offset:02X}", value=value))
+        value = signed_16(word) if offset in signed_offsets else word
+        updates.append(MapValueUpdate(key=f"{prefix}{offset:02X}", value=value))
 
     return updates
 
