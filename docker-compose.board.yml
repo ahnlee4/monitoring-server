@@ -18,7 +18,7 @@ services:
       retries: 5
 
   backend:
-    image: ahnlee4/monitoring-backend:latest
+    image: ghcr.io/ahnlee4/monitoring-backend:latest
     container_name: monitoring-backend
     restart: unless-stopped
     network_mode: host
@@ -38,7 +38,7 @@ services:
       retries: 5
 
   frontend:
-    image: ahnlee4/monitoring-frontend:latest
+    image: ghcr.io/ahnlee4/monitoring-frontend:latest
     container_name: monitoring-frontend
     restart: unless-stopped
     network_mode: host
@@ -47,7 +47,7 @@ services:
       VITE_WS_PATH: ${VITE_WS_PATH}
 
   collector:
-    image: ahnlee4/monitoring-collector:latest
+    image: ghcr.io/ahnlee4/monitoring-collector:latest
     container_name: monitoring-collector
     restart: unless-stopped
     network_mode: host

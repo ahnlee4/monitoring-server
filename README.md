@@ -201,6 +201,19 @@ RS485_BAUDRATE=9600
 docker compose up -d --build
 ```
 
+보드 배포에서는 보드에서 이미지를 빌드하지 않고 GitHub Container Registry 이미지를 내려받아 실행합니다.
+
+```bash
+git pull
+./scripts/start-board.sh
+```
+
+`docker-compose.board.yml`은 `ghcr.io/ahnlee4/monitoring-*` 이미지를 사용합니다. private package로 생성된 경우 보드에서 한 번 GHCR 로그인이 필요합니다.
+
+```bash
+echo '<github-token>' | docker login ghcr.io -u ahnlee4 --password-stdin
+```
+
 ### 7-6. 외부에서 접속
 기본값으로 `NGINX_PORT=80`을 사용하면 브라우저에서 아래 주소로 접속합니다.
 
