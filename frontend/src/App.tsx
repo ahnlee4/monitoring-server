@@ -48,7 +48,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.27";
+const APP_VERSION = "0.1.28";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -507,17 +507,7 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
 
 function DisconnectedOverlay() {
   return (
-    <div className="absolute inset-[2px] flex items-center justify-center border border-[#9fc9fa] bg-[#f6fbff]/95">
-      <div className="absolute inset-0 opacity-[0.28] [background-image:linear-gradient(45deg,#d7eafa_25%,transparent_25%,transparent_50%,#d7eafa_50%,#d7eafa_75%,transparent_75%,transparent)] [background-size:14px_14px]" />
-      <div className="relative flex w-[148px] flex-col items-center justify-center rounded-[10px] border border-[#b8d8f4] bg-white/90 px-[14px] py-[16px] shadow-[0_6px_16px_rgba(42,92,135,0.12)]">
-        <div className="relative h-[58px] w-[58px] rounded-full border-[3px] border-[#9fbad2] bg-[#eef6fd]">
-          <span className="absolute left-[14px] top-[26px] h-[3px] w-[30px] rotate-45 rounded-full bg-[#6e879d]" />
-          <span className="absolute left-[14px] top-[26px] h-[3px] w-[30px] -rotate-45 rounded-full bg-[#6e879d]" />
-        </div>
-        <div className="mt-[12px] text-center text-[19px] font-black leading-none text-[#244c75]">통신 대기</div>
-        <div className="mt-[6px] text-center text-[12px] font-bold text-[#6f879d]">장비 연결 없음</div>
-      </div>
-    </div>
+    <div className="absolute inset-[2px] border border-[#9fc9fa] bg-[#f6fbff]/80 [background-image:linear-gradient(45deg,rgba(150,188,219,0.36)_25%,transparent_25%,transparent_50%,rgba(150,188,219,0.36)_50%,rgba(150,188,219,0.36)_75%,transparent_75%,transparent)] [background-size:16px_16px]" />
   );
 }
 
