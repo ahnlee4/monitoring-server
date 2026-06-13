@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, select, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
@@ -52,8 +52,17 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
+    migrate_legacy_schema()
     seed_devices()
     seed_yujin_map()
+
+
+def migrate_legacy_schema() -> None:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE current_values ADD COLUMN IF NOT EXISTS value_num DOUBLE PRECISION"))
+        connection.execute(text("ALTER TABLE current_values ADD COLUMN IF NOT EXISTS value_text VARCHAR(255)"))
+        connection.execute(text("ALTER TABLE telemetry_records ADD COLUMN IF NOT EXISTS value_num DOUBLE PRECISION"))
+        connection.execute(text("ALTER TABLE telemetry_records ADD COLUMN IF NOT EXISTS value_text VARCHAR(255)"))
 
 
 def seed_devices() -> None:
