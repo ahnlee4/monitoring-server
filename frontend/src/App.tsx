@@ -48,7 +48,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.28";
+const APP_VERSION = "0.1.29";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -488,9 +488,9 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
         <div className="flex items-center justify-center overflow-hidden border border-[#75b4ee] bg-[#b3d4ff] px-[6px] text-center text-[20px] font-bold leading-none text-[#0d4da5] shadow-[2px_2px_1px_#ababab]">
           {compressor.name} ({compressor.model})
         </div>
-        <MetricRow label="압력" value={`${compressor.pressure.toFixed(1)} bar`} size="large" />
+        <MetricRow label="압력" value={`${compressor.pressure.toFixed(1)} bar`} />
         <TripleRow label={pressureLabel} valueA={secondValue} valueB={thirdValue} />
-        <MetricRow label="온도" value={`${compressor.temperature.toFixed(1)} ℃`} size="large" />
+        <MetricRow label="온도" value={`${compressor.temperature.toFixed(1)} ℃`} />
         <div className="relative grid grid-cols-2 gap-[2px]">
           <StatusCell tone={compressor.local ? "local" : "remote"}>{compressor.local ? "로 컬" : "리모트"}</StatusCell>
           <StatusCell tone={compressor.running ? "running" : "stop"}>{compressor.running ? "부 하" : "정 지"}</StatusCell>
@@ -511,11 +511,11 @@ function DisconnectedOverlay() {
   );
 }
 
-function MetricRow({ label, value, size = "normal" }: { label: string; value: string; size?: "normal" | "large" }) {
+function MetricRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid min-h-0 grid-cols-[96px_1fr_1fr] gap-[3px]">
       <MetricLabel>{label}</MetricLabel>
-      <MetricValue className="col-span-2" large={size === "large"}>
+      <MetricValue className="col-span-2">
         {value}
       </MetricValue>
     </div>
@@ -526,8 +526,8 @@ function TripleRow({ label, valueA, valueB }: { label: string; valueA: string; v
   return (
     <div className="grid min-h-0 grid-cols-[96px_1fr_1fr] gap-[3px]">
       <MetricLabel>{label}</MetricLabel>
-      <MetricValue>{valueA}</MetricValue>
-      <MetricValue>{valueB}</MetricValue>
+      <MetricValue compact>{valueA}</MetricValue>
+      <MetricValue compact>{valueB}</MetricValue>
     </div>
   );
 }
@@ -542,18 +542,16 @@ function MetricLabel({ children }: { children: ReactNode }) {
 
 function MetricValue({
   children,
-  large = false,
+  compact = false,
   className = "",
 }: {
   children: ReactNode;
-  large?: boolean;
+  compact?: boolean;
   className?: string;
 }) {
   return (
     <div
-      className={`flex min-h-0 items-center justify-end overflow-hidden border border-[#75b4ee] bg-white px-[10px] text-right font-bold leading-tight tracking-[-0.01em] ${
-        large ? "text-[23px]" : "text-[18px]"
-      } ${className}`}
+      className={`flex min-h-0 items-center justify-end overflow-hidden border border-[#75b4ee] bg-white px-[10px] text-right font-bold leading-tight tracking-[-0.01em] ${compact ? "text-[18px]" : "text-[23px]"} ${className}`}
     >
       {children}
     </div>
@@ -569,7 +567,7 @@ function StatusCell({ tone, children }: { tone: "local" | "remote" | "running" |
   }[tone];
 
   return (
-    <div className={`flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] px-[2px] text-center text-[19px] font-bold leading-none ${toneClass}`}>
+    <div className={`flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] px-[2px] text-center text-[23px] font-bold leading-none tracking-[-0.04em] ${toneClass}`}>
       {children}
     </div>
   );
@@ -597,7 +595,7 @@ function FlagCell({ tone, children }: { tone: "alarm" | "fault"; children: React
   const activeClass = tone === "alarm" ? "bg-[#ffff00] text-black" : "bg-[#ff4f4f] text-black";
 
   return (
-    <div className={`flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] px-[2px] text-center text-[20px] font-black leading-none ${activeClass}`}>
+    <div className={`flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] px-[2px] text-center text-[23px] font-black leading-none tracking-[-0.04em] ${activeClass}`}>
       {children}
     </div>
   );
