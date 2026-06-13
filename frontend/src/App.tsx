@@ -48,7 +48,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.23";
+const APP_VERSION = "0.1.24";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -385,10 +385,8 @@ async function enqueueMapWriteBatch(
 function TopBar({ dashboard, now }: { dashboard: DashboardState; now: Date }) {
   return (
     <header className="grid min-h-0 grid-cols-[241px_241px_241px_65px_241px_241px] gap-[2px]">
-      <TopPanel tone={dashboard.integratedRun ? "run" : "stop"}>
-        {dashboard.integratedRun ? "통합 운전 중" : "통합 운전 정지"}
-      </TopPanel>
-      <TopPanel tone="pressure">압력 : {dashboard.mainPressure.toFixed(1)} bar</TopPanel>
+      <TopRunPanel running={dashboard.integratedRun} />
+      <TopPressurePanel value={dashboard.mainPressure} />
       <TopPanel tone="date">
         <span>{formatDateTime(now)}</span>
         <small>App {dashboard.appVersion} / Fw {dashboard.firmwareVersion}</small>
@@ -407,11 +405,36 @@ function TopBar({ dashboard, now }: { dashboard: DashboardState; now: Date }) {
   );
 }
 
+function TopRunPanel({ running }: { running: boolean }) {
+  return (
+    <TopPanel tone={running ? "run" : "stop"} emphasis>
+      <span className="text-[13px] font-black leading-none tracking-[0.12em] text-white/90">통합 운전</span>
+      <span className="mt-[5px] text-[31px] font-black leading-none tracking-[-0.04em] text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.16)]">
+        {running ? "운전 중" : "정 지"}
+      </span>
+    </TopPanel>
+  );
+}
+
+function TopPressurePanel({ value }: { value: number }) {
+  return (
+    <TopPanel tone="pressure" emphasis>
+      <span className="text-[13px] font-black leading-none tracking-[0.14em] text-[#1b5c96]">메인 압력</span>
+      <span className="mt-[3px] flex items-end justify-center gap-[6px] leading-none text-[#083f73] drop-shadow-[0_1px_0_rgba(255,255,255,0.45)]">
+        <strong className="font-black tabular-nums tracking-[-0.07em] text-[38px]">{value.toFixed(1)}</strong>
+        <small className="pb-[5px] text-[17px] font-black tracking-[-0.03em]">bar</small>
+      </span>
+    </TopPanel>
+  );
+}
+
 function TopPanel({
   tone,
+  emphasis = false,
   children,
 }: {
   tone: "run" | "stop" | "pressure" | "date" | "lock" | "title";
+  emphasis?: boolean;
   children: ReactNode;
 }) {
   const toneClass = {
@@ -425,7 +448,7 @@ function TopPanel({
 
   return (
     <div
-      className={`flex min-h-0 flex-col items-center justify-center overflow-hidden rounded-[4px] border px-[4px] text-center text-[23px] font-bold leading-tight text-white ${toneClass}`}
+      className={`flex min-h-0 flex-col items-center justify-center overflow-hidden rounded-[4px] border px-[4px] text-center font-bold leading-tight text-white ${emphasis ? "text-[21px]" : "text-[23px]"} ${toneClass}`}
     >
       {children}
     </div>
