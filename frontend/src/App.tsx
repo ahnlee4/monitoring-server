@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.5";
+const APP_VERSION = "0.1.6";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -633,11 +633,11 @@ function QuickButtons({
   onToggleDetail: () => void;
   setMenuOpen: (open: boolean) => void;
 }) {
-  const menuItems: Array<{ label: string; action: () => void }> = [
-    { label: "공장 변경", action: () => onOpenDialog("factory") },
-    { label: "설정", action: () => onOpenDialog("settings") },
-    { label: "통합운전 설정", action: () => onOpenDialog("control") },
-    { label: activeScreen === "detail" ? "메인 화면" : "상세 화면", action: onToggleDetail },
+  const menuItems: Array<{ label: string; icon: string; action: () => void }> = [
+    { label: "공장 변경", icon: "/factory.png", action: () => onOpenDialog("factory") },
+    { label: "설정", icon: "/setting.png", action: () => onOpenDialog("settings") },
+    { label: "통합운전 설정", icon: "/control.png", action: () => onOpenDialog("control") },
+    { label: activeScreen === "detail" ? "메인 화면" : "상세 화면", icon: activeScreen === "detail" ? "/device_back.png" : "/device.png", action: onToggleDetail },
   ];
   const handleMenuAction = (action: () => void) => {
     action();
@@ -658,17 +658,29 @@ function QuickButtons({
         <img src="/menu.png" alt="" className="h-[56px] w-[56px] object-contain" />
       </button>
       {menuOpen ? (
-        <div className="absolute bottom-[70px] right-0 z-20 grid w-[180px] gap-[3px]">
+        <div className="absolute bottom-[70px] right-0 z-20 grid w-[300px] gap-0">
           {menuItems.map((item) => (
             <button
               key={item.label}
-              className="rounded-[5px] border border-[#25b9f5] bg-white px-[10px] py-[6px] text-right text-[17px] font-bold text-[#303f9f]"
+              className="grid h-[88px] grid-cols-[180px_20px_100px] items-center bg-transparent p-0"
               onClick={() => handleMenuAction(item.action)}
               type="button"
             >
-              {item.label}
+              <span className="flex h-[50px] items-center justify-center border border-[#d2e8ff] bg-[#e9f5ff] text-[22px] font-bold text-[#303f9f]">
+                {item.label}
+              </span>
+              <span />
+              <span className="flex h-full items-center justify-center">
+                <img src={item.icon} alt="" className="h-[88px] w-[88px] object-contain" />
+              </span>
             </button>
           ))}
+          <button className="grid h-[88px] grid-cols-[200px_100px] items-center bg-transparent p-0" onClick={() => setMenuOpen(false)} type="button">
+            <span />
+            <span className="flex h-full items-center justify-center">
+              <img src="/close.png" alt="" className="h-[88px] w-[88px] object-contain" />
+            </span>
+          </button>
         </div>
       ) : null}
     </div>
@@ -836,7 +848,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
   return (
     <DialogShell onClose={onClose} title="설정" wide>
       <div className="grid max-h-[650px] gap-[8px] overflow-y-auto bg-[#eef7ff] p-[8px]">
-        <div className="grid grid-cols-4 gap-[4px] border border-[#75b4ee] bg-white p-[6px]">
+        <div className="grid grid-cols-2 gap-[4px] border border-[#75b4ee] bg-white p-[6px]">
           <SettingRow label="Connect IP Setting" value="121.164.120.200" />
           <SettingRow label="Port Setting" value="1502" />
           <SettingRow label="Login Pw Setting" value="1234" />
@@ -883,7 +895,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
 
 function SettingRow({ label, unit = "", value }: { label: string; unit?: string; value: string }) {
   return (
-    <div className="grid min-h-[42px] grid-cols-[1fr_120px_54px] border border-[#d2e8ff] bg-white">
+    <div className="grid min-h-[42px] grid-cols-[1fr_170px_54px] border border-[#d2e8ff] bg-white">
       <div className="flex items-center justify-center bg-[#fbfdff] px-[6px] text-center text-[16px] font-bold">{label}</div>
       <div className="flex items-center justify-center border-x border-[#d2e8ff] text-[20px] font-bold text-[#0d4da5]">{value}</div>
       <div className="flex items-center justify-center text-[16px] font-bold text-[#0d4da5]">{unit}</div>
