@@ -149,39 +149,26 @@ class RS485Collector(BaseCollector):
         recorded_at = datetime.now(timezone.utc).isoformat()
         frames: list[TelemetryFrame] = []
         map_values: list[MapValueUpdate] = []
-        connected_bits = 0
-        representative_pressure: int | None = None
-        any_running = False
 
         try:
             port = self._open_serial()
+            system_words = self._poll_address(port, 0x00)
+            if system_words is not None:
+                map_values.extend(words_to_generic_map_values(0x00, system_words))
+                time.sleep(self.inter_request_delay)
+
             for comp_index in range(self.comp_qty):
                 mem_addr = MEM_ADDR_COMP1 + comp_index
-                words = self._poll_comp(port, mem_addr)
+                words = self._poll_address(port, mem_addr)
                 if words is None:
                     continue
                 self._word_cache[mem_addr] = words
                 frames.append(self._to_frame(comp_index, words, recorded_at))
                 map_values.extend(words_to_map_values(comp_index, words))
-                connected_bits |= 1 << comp_index
-                if representative_pressure is None and words:
-                    representative_pressure = signed_16(words[0])
-                if len(words) > 29 and (words[24] or words[29]):
-                    any_running = True
                 time.sleep(self.inter_request_delay)
         except Exception as exc:
             self._close_serial()
             print(f"collector-rs485 error on {self.serial_port}: {exc}")
-
-        map_values.extend(
-            [
-                MapValueUpdate(key="0002", value=connected_bits),
-                MapValueUpdate(key="004E", value=self.comp_qty),
-                MapValueUpdate(key="0050", value=1 if any_running else 0),
-            ]
-        )
-        if representative_pressure is not None:
-            map_values.append(MapValueUpdate(key="0000", value=representative_pressure))
 
         return CollectorBatch(
             source="collector-uart4",
@@ -213,7 +200,7 @@ class RS485Collector(BaseCollector):
             finally:
                 self._serial = None
 
-    def _poll_comp(self, port: serial.Serial, mem_addr: int) -> list[int] | None:
+    def _poll_address(self, port: serial.Serial, mem_addr: int) -> list[int] | None:
         request = build_full_read_request(mem_addr)
         port.reset_input_buffer()
         port.write(request)
@@ -223,7 +210,7 @@ class RS485Collector(BaseCollector):
         try:
             frame = self._read_frame(port)
         except Uart4ProtocolError as exc:
-            print(f"collector-uart4 comp {mem_addr - MEM_ADDR_COMP1 + 1} no valid response: {exc}")
+            print(f"collector-uart4 addr 0x{mem_addr:02X} no valid response: {exc}")
             return None
 
         self._debug("rx", frame)
@@ -339,11 +326,10 @@ class RS485Collector(BaseCollector):
 
 
 def build_full_read_request(mem_addr: int) -> bytes:
-    if not MEM_ADDR_COMP1 <= mem_addr <= MEM_ADDR_COMP8:
-        raise ValueError(f"unsupported compressor memory address: 0x{mem_addr:02X}")
+    if not 0 <= mem_addr <= 0xFF:
+        raise ValueError(f"unsupported GLINK memory address: 0x{mem_addr:X}")
 
-    device_id = mem_addr - 0x10
-    payload = bytes([device_id, CMD_FULL_READ, mem_addr, 0x00, 0x00, 0x00])
+    payload = bytes([FRAME_MASTER_ID, CMD_FULL_READ, mem_addr, 0x00, 0x00, 0x00])
     return append_crc(payload)
 
 
@@ -453,6 +439,14 @@ def words_to_map_values(comp_index: int, words: list[int]) -> list[MapValueUpdat
         updates.append(MapValueUpdate(key=f"{injection_prefix}{offset:02X}", value=value))
 
     return updates
+
+
+def words_to_generic_map_values(high_addr: int, words: list[int]) -> list[MapValueUpdate]:
+    prefix = f"{high_addr:02X}"
+    return [
+        MapValueUpdate(key=f"{prefix}{word_index * 2:02X}", value=word)
+        for word_index, word in enumerate(words)
+    ]
 
 
 def words_from_bytes(data: bytes) -> list[int]:
