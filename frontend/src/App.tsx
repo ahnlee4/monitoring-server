@@ -40,8 +40,11 @@ type DashboardState = {
   compressors: CompressorState[];
 };
 
+type ActiveDialog = "factory" | "settings" | "control" | null;
+type ActiveScreen = "main" | "detail";
+
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.4";
+const APP_VERSION = "0.1.5";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -102,6 +105,8 @@ function emptyCompressor(index: number): CompressorState {
 export default function App() {
   const [now, setNow] = useState(new Date());
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeDialog, setActiveDialog] = useState<ActiveDialog>(null);
+  const [activeScreen, setActiveScreen] = useState<ActiveScreen>("main");
   const [mapValues, setMapValues] = useState<Record<string, YujinMapValue>>({});
 
   useEffect(() => {
@@ -149,24 +154,41 @@ export default function App() {
 
   const dashboard = useMemo(() => buildDashboardFromMap(mapValues), [mapValues]);
   const lowPressureText = getLowPressureText(dashboard.lowPressureAlarm);
+  const showMainScreen = activeScreen === "main";
 
   return (
     <main className="flex min-h-screen items-center justify-center overflow-hidden bg-black text-black">
-      <section className="h-[800px] w-[1280px] overflow-hidden bg-white">
+      <section className="relative h-[800px] w-[1280px] overflow-hidden bg-white">
         <div className="grid h-full grid-rows-[74px_578px_148px]">
           <TopBar dashboard={dashboard} now={now} />
 
           <section className="relative min-h-0">
-            <div className="grid h-full grid-cols-4 grid-rows-2 gap-[3px]">
-              {dashboard.compressors.map((compressor) => (
-                <CompressorCard key={compressor.id} compressor={compressor} />
-              ))}
-            </div>
-            {lowPressureText ? <AlarmStrip tone={dashboard.lowPressureAlarm} text={lowPressureText} /> : null}
+            {showMainScreen ? (
+              <>
+                <div className="grid h-full grid-cols-4 grid-rows-2 gap-[3px]">
+                  {dashboard.compressors.map((compressor) => (
+                    <CompressorCard key={compressor.id} compressor={compressor} />
+                  ))}
+                </div>
+                {lowPressureText ? <AlarmStrip tone={dashboard.lowPressureAlarm} text={lowPressureText} /> : null}
+              </>
+            ) : (
+              <DetailScreen dashboard={dashboard} />
+            )}
           </section>
 
-          <Footer dashboard={dashboard} menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+          <Footer
+            activeScreen={activeScreen}
+            dashboard={dashboard}
+            menuOpen={menuOpen}
+            onOpenDialog={setActiveDialog}
+            onToggleDetail={() => setActiveScreen((screen) => (screen === "detail" ? "main" : "detail"))}
+            setMenuOpen={setMenuOpen}
+          />
         </div>
+        {activeDialog === "factory" ? <FactoryDialog onClose={() => setActiveDialog(null)} /> : null}
+        {activeDialog === "settings" ? <SettingsDialog onClose={() => setActiveDialog(null)} /> : null}
+        {activeDialog === "control" ? <ControlDialog dashboard={dashboard} onClose={() => setActiveDialog(null)} /> : null}
       </section>
     </main>
   );
@@ -475,12 +497,18 @@ function AlarmStrip({ tone, text }: { tone: DashboardState["lowPressureAlarm"]; 
 }
 
 function Footer({
+  activeScreen,
   dashboard,
   menuOpen,
+  onOpenDialog,
+  onToggleDetail,
   setMenuOpen,
 }: {
+  activeScreen: ActiveScreen;
   dashboard: DashboardState;
   menuOpen: boolean;
+  onOpenDialog: (dialog: ActiveDialog) => void;
+  onToggleDetail: () => void;
   setMenuOpen: (open: boolean) => void;
 }) {
   return (
@@ -491,7 +519,13 @@ function Footer({
       <ControlPanel control={dashboard.control} />
       <VerticalTitle>옵션</VerticalTitle>
       <OptionPanel options={dashboard.options} />
-      <QuickButtons menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+      <QuickButtons
+        activeScreen={activeScreen}
+        menuOpen={menuOpen}
+        onOpenDialog={onOpenDialog}
+        onToggleDetail={onToggleDetail}
+        setMenuOpen={setMenuOpen}
+      />
     </footer>
   );
 }
@@ -587,16 +621,33 @@ function OptionPanel({ options }: { options: DashboardState["options"] }) {
 }
 
 function QuickButtons({
+  activeScreen,
   menuOpen,
+  onOpenDialog,
+  onToggleDetail,
   setMenuOpen,
 }: {
+  activeScreen: ActiveScreen;
   menuOpen: boolean;
+  onOpenDialog: (dialog: ActiveDialog) => void;
+  onToggleDetail: () => void;
   setMenuOpen: (open: boolean) => void;
 }) {
+  const menuItems: Array<{ label: string; action: () => void }> = [
+    { label: "공장 변경", action: () => onOpenDialog("factory") },
+    { label: "설정", action: () => onOpenDialog("settings") },
+    { label: "통합운전 설정", action: () => onOpenDialog("control") },
+    { label: activeScreen === "detail" ? "메인 화면" : "상세 화면", action: onToggleDetail },
+  ];
+  const handleMenuAction = (action: () => void) => {
+    action();
+    setMenuOpen(false);
+  };
+
   return (
     <div className="relative grid min-h-0 grid-rows-2 gap-[4px]">
-      <button className="flex items-center justify-center bg-transparent p-0" type="button" aria-label="장비">
-        <img src="/device.png" alt="" className="h-[56px] w-[56px] object-contain" />
+      <button className="flex items-center justify-center bg-transparent p-0" onClick={onToggleDetail} type="button" aria-label="상세 화면">
+        <img src={activeScreen === "detail" ? "/device_back.png" : "/device.png"} alt="" className="h-[56px] w-[56px] object-contain" />
       </button>
       <button
         className="flex items-center justify-center bg-transparent p-0"
@@ -608,14 +659,250 @@ function QuickButtons({
       </button>
       {menuOpen ? (
         <div className="absolute bottom-[70px] right-0 z-20 grid w-[180px] gap-[3px]">
-          {["공장 변경", "설정", "통합운전 설정", "상세 화면"].map((item) => (
-            <button key={item} className="rounded-[5px] border border-[#25b9f5] bg-white px-[10px] py-[6px] text-right text-[17px] font-bold text-[#303f9f]" type="button">
-              {item}
+          {menuItems.map((item) => (
+            <button
+              key={item.label}
+              className="rounded-[5px] border border-[#25b9f5] bg-white px-[10px] py-[6px] text-right text-[17px] font-bold text-[#303f9f]"
+              onClick={() => handleMenuAction(item.action)}
+              type="button"
+            >
+              {item.label}
             </button>
           ))}
         </div>
       ) : null}
     </div>
+  );
+}
+
+function DetailScreen({ dashboard }: { dashboard: DashboardState }) {
+  const connectedCount = dashboard.compressors.filter((compressor) => compressor.connected).length;
+
+  return (
+    <div className="grid h-full grid-rows-[46px_1fr] gap-[3px] bg-[#eef7ff] p-[3px]">
+      <div className="grid grid-cols-[220px_1fr_190px_190px] gap-[3px]">
+        <HeaderCell>상세 화면</HeaderCell>
+        <HeaderCell>컴프레샤 / DIO / AIO 상태 통합 보기</HeaderCell>
+        <HeaderCell>연결 {connectedCount} / {dashboard.compressors.length}</HeaderCell>
+        <HeaderCell>메인압력 {dashboard.mainPressure.toFixed(1)} bar</HeaderCell>
+      </div>
+      <div className="grid min-h-0 grid-cols-4 grid-rows-2 gap-[3px]">
+        {dashboard.compressors.map((compressor) => (
+          <DetailDeviceCard key={compressor.id} compressor={compressor} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DetailDeviceCard({ compressor }: { compressor: CompressorState }) {
+  const rows = [
+    ["압력", `${compressor.pressure.toFixed(1)} bar`],
+    ["온도", `${compressor.temperature.toFixed(1)} ℃`],
+    ["무부하", `${compressor.noLoadPressure.toFixed(1)} bar`],
+    ["부하", `${compressor.loadPressure.toFixed(1)} bar`],
+    ["제어압력", `${compressor.controlPressure?.toFixed(1) ?? "0.0"} bar`],
+    ["RPM", `${compressor.rpm ?? 0}`],
+    ["운전시간", `${compressor.totalHours.toLocaleString("ko-KR")} hr`],
+  ];
+
+  return (
+    <article className="grid min-h-0 grid-rows-[38px_1fr_42px] border border-[#75b4ee] bg-white">
+      <div className="flex items-center justify-center bg-[#b3d4ff] text-[19px] font-bold text-[#0d4da5]">
+        {compressor.name} ({compressor.model})
+      </div>
+      <div className="grid min-h-0 grid-cols-2 content-start gap-0 p-[3px]">
+        {rows.map(([label, value]) => (
+          <div key={label} className="grid min-h-[32px] grid-cols-[78px_1fr] border border-[#d2e8ff]">
+            <div className="flex items-center justify-center bg-[#eef7ff] text-[13px] font-bold">{label}</div>
+            <div className="flex items-center justify-center bg-white text-[15px] font-bold">{value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-4 gap-[2px] p-[2px]">
+        <MiniLamp active={compressor.connected} label={compressor.connected ? "통신" : "끊김"} />
+        <MiniLamp active={compressor.local} label={compressor.local ? "LOCAL" : "REMOTE"} />
+        <MiniLamp active={compressor.running} label={compressor.running ? "운전" : "정지"} />
+        <MiniLamp active={compressor.fault || compressor.alarm} danger label={compressor.fault ? "고장" : compressor.alarm ? "알람" : "정상"} />
+      </div>
+    </article>
+  );
+}
+
+function MiniLamp({ active, danger = false, label }: { active: boolean; danger?: boolean; label: string }) {
+  const className = active ? (danger ? "bg-[#ff6565] text-black" : "bg-[#4caa70] text-white") : "bg-[#d5d5d5] text-black";
+  return <div className={`flex items-center justify-center text-[13px] font-bold ${className}`}>{label}</div>;
+}
+
+function HeaderCell({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-center border border-[#75b4ee] bg-[#3374ce] px-[6px] text-center text-[20px] font-bold text-white">
+      {children}
+    </div>
+  );
+}
+
+function DialogShell({ children, onClose, title, wide = false }: { children: ReactNode; onClose: () => void; title: string; wide?: boolean }) {
+  return (
+    <div className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 pt-[94px]">
+      <section className={`${wide ? "w-[1040px]" : "w-[560px]"} overflow-hidden border border-[#75b4ee] bg-white shadow-[0_10px_25px_rgba(0,0,0,0.35)]`}>
+        <div className="grid h-[54px] grid-cols-[1fr_120px] bg-[#3374ce]">
+          <div className="flex items-center justify-center text-[24px] font-bold text-white">{title}</div>
+          <button className="bg-[#0d4da5] text-[22px] font-bold text-white" onClick={onClose} type="button">
+            닫기
+          </button>
+        </div>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+function FactoryDialog({ onClose }: { onClose: () => void }) {
+  const factories = ["공장 1", "공장 2", "공장 3", "공장 4", "공장 5"];
+
+  return (
+    <DialogShell onClose={onClose} title="공장 변경">
+      <div className="grid gap-[2px] p-[8px]">
+        {factories.map((factory, index) => (
+          <label key={factory} className="grid h-[52px] grid-cols-[58px_1fr] border border-[#d2e8ff] bg-[#fbfdff]">
+            <input checked={index === 0} className="m-auto h-[22px] w-[22px] accent-[#3374ce]" readOnly type="radio" />
+            <span className="flex items-center border-l border-[#d2e8ff] px-[14px] text-[22px] font-bold">{factory}</span>
+          </label>
+        ))}
+        <div className="mt-[6px] grid h-[50px] grid-cols-2 gap-[2px]">
+          <button className="bg-[#3374ce] text-[22px] font-bold text-white" onClick={onClose} type="button">닫기</button>
+          <button className="bg-[#3374ce] text-[22px] font-bold text-white" type="button">저장</button>
+        </div>
+      </div>
+    </DialogShell>
+  );
+}
+
+function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onClose: () => void }) {
+  const controls = [
+    ["무부하 압력", dashboard.control.noLoadPressure.toFixed(1), "bar"],
+    ["부하 압력", dashboard.control.loadPressure.toFixed(1), "bar"],
+    ["장비별 압력차", dashboard.control.pressureGap.toFixed(1), "bar"],
+    ["저압경보 압력 설정", "0.0", "bar"],
+    ["교환 운전 시간", String(dashboard.control.changeHours), "hr"],
+    ["가동 대수", String(dashboard.control.runUnits), "ea"],
+  ];
+
+  return (
+    <DialogShell onClose={onClose} title="통합운전 설정" wide>
+      <div className="grid grid-cols-[430px_1fr_180px] gap-[8px] bg-[#eef7ff] p-[8px]">
+        <div className="grid content-start gap-[4px] border border-[#75b4ee] bg-white p-[5px]">
+          {controls.map(([label, value, unit]) => (
+            <SettingRow key={label} label={label} unit={unit} value={value} />
+          ))}
+        </div>
+        <div className="grid content-start gap-[8px] border border-[#75b4ee] bg-white p-[8px]">
+          <SectionTitle>정렬 설정</SectionTitle>
+          <div className="grid h-[54px] grid-cols-3 gap-[4px]">
+            <ChoiceButton active>설정순</ChoiceButton>
+            <ChoiceButton>시간순</ChoiceButton>
+            <label className="flex items-center justify-center gap-[6px] border border-[#75b4ee] text-[14px] font-bold text-[#0d4da5]">
+              <input readOnly type="checkbox" /> 절약모드
+            </label>
+          </div>
+          <SettingRow label="인버터 메인 호기" unit="호기" value="0" />
+          <SettingRow label="인버터 제어압력 설정" unit="bar" value="0.0" />
+          <SectionTitle>운전 모드 설정</SectionTitle>
+          <div className="grid h-[54px] grid-cols-2 gap-[4px]">
+            <ChoiceButton>LOCAL</ChoiceButton>
+            <ChoiceButton active>REMOTE</ChoiceButton>
+          </div>
+          <div className="grid h-[54px] grid-cols-2 gap-[4px]">
+            <ChoiceButton>개별 운전</ChoiceButton>
+            <ChoiceButton active>통합 운전</ChoiceButton>
+          </div>
+        </div>
+        <div className="grid content-start gap-[8px] border border-[#75b4ee] bg-white p-[8px]">
+          <SectionTitle>통합운전</SectionTitle>
+          <button className="h-[88px] bg-[#e42222] text-[32px] font-bold text-white" type="button">운전</button>
+          <button className="h-[88px] bg-[#8f8f8f] text-[32px] font-bold text-white" type="button">정지</button>
+          <button className="h-[50px] bg-[#3374ce] text-[22px] font-bold text-white" type="button">저장</button>
+        </div>
+      </div>
+    </DialogShell>
+  );
+}
+
+function SettingsDialog({ onClose }: { onClose: () => void }) {
+  const modes = Array.from({ length: 7 }, (_, index) => [`${index + 1}`, "3", "2", "0", "0"]);
+  const factories = ["공장 1", "공장 2", "공장 3", "공장 4", "공장 5"];
+
+  return (
+    <DialogShell onClose={onClose} title="설정" wide>
+      <div className="grid max-h-[650px] gap-[8px] overflow-y-auto bg-[#eef7ff] p-[8px]">
+        <div className="grid grid-cols-4 gap-[4px] border border-[#75b4ee] bg-white p-[6px]">
+          <SettingRow label="Connect IP Setting" value="121.164.120.200" />
+          <SettingRow label="Port Setting" value="1502" />
+          <SettingRow label="Login Pw Setting" value="1234" />
+          <SettingRow label="Setting Pw Setting" value="471112" />
+        </div>
+        <div className="grid gap-[4px] border border-[#75b4ee] bg-white p-[6px]">
+          <SectionTitle>사용모드 / 정렬 설정</SectionTitle>
+          {modes.map(([no, a, b, c, index]) => (
+            <div key={no} className="grid h-[42px] grid-cols-[44px_1fr_1fr_1fr_80px] gap-[3px]">
+              <div className="flex items-center justify-center border border-[#d2e8ff] font-bold">{no}</div>
+              {[a, b, c, index].map((value, idx) => (
+                <div key={idx} className="flex items-center justify-center border border-[#d2e8ff] bg-[#fbfdff] text-[18px] font-bold">{value}</div>
+              ))}
+            </div>
+          ))}
+          <div className="grid h-[46px] grid-cols-[1fr_56px_70px_56px_110px] gap-[4px]">
+            <div className="flex items-center justify-center text-[19px] font-bold text-[#0d4da5]">사용모드 개수 설정</div>
+            <ChoiceButton>-</ChoiceButton>
+            <div className="flex items-center justify-center border border-[#75b4ee] bg-white text-[24px] font-bold">1</div>
+            <ChoiceButton>+</ChoiceButton>
+            <button className="bg-[#3374ce] text-[20px] font-bold text-white" type="button">저장</button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-[8px]">
+          <div className="grid gap-[4px] border border-[#75b4ee] bg-white p-[6px]">
+            <SectionTitle>공장 정보</SectionTitle>
+            {factories.map((factory) => (
+              <div key={factory} className="grid h-[38px] grid-cols-[120px_1fr]">
+                <div className="flex items-center justify-center border border-[#d2e8ff] font-bold">{factory}</div>
+                <div className="flex items-center px-[8px] border border-[#d2e8ff]">192.168.0.10</div>
+              </div>
+            ))}
+          </div>
+          <div className="grid content-start gap-[6px] border border-[#75b4ee] bg-white p-[6px]">
+            <SectionTitle>DIO BIT 설정</SectionTitle>
+            <SettingRow label="BIT0" value="운전" />
+            <SettingRow label="BIT4" value="고장" />
+          </div>
+        </div>
+      </div>
+    </DialogShell>
+  );
+}
+
+function SettingRow({ label, unit = "", value }: { label: string; unit?: string; value: string }) {
+  return (
+    <div className="grid min-h-[42px] grid-cols-[1fr_120px_54px] border border-[#d2e8ff] bg-white">
+      <div className="flex items-center justify-center bg-[#fbfdff] px-[6px] text-center text-[16px] font-bold">{label}</div>
+      <div className="flex items-center justify-center border-x border-[#d2e8ff] text-[20px] font-bold text-[#0d4da5]">{value}</div>
+      <div className="flex items-center justify-center text-[16px] font-bold text-[#0d4da5]">{unit}</div>
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <div className="flex h-[34px] items-center justify-center bg-[#b3d4ff] text-[18px] font-bold text-[#0d4da5]">{children}</div>;
+}
+
+function ChoiceButton({ active = false, children }: { active?: boolean; children: ReactNode }) {
+  return (
+    <button
+      className={`border text-[19px] font-bold ${active ? "border-[#3374ce] bg-[#3374ce] text-white" : "border-[#3374ce] bg-white text-[#3374ce]"}`}
+      type="button"
+    >
+      {children}
+    </button>
   );
 }
 
