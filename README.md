@@ -192,7 +192,7 @@ COLLECTOR_API_URL=http://backend:8000/api/ingest/telemetry
 ```env
 COLLECTOR_DRIVER=rs485
 RS485_SERIAL_PORT=/dev/ttyUSB0
-RS485_BAUDRATE=115200
+RS485_BAUDRATE=38400
 ```
 
 ### 7-5. 서비스 기동

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PORT="${1:-${RS485_SERIAL_PORT:-/dev/ttyUSB0}}"
-BAUDRATE="${2:-${RS485_BAUDRATE:-115200}}"
+BAUDRATE="${2:-${RS485_BAUDRATE:-38400}}"
 INTERVAL_SECONDS="${3:-1}"
 
 if [[ ! -e "$PORT" ]]; then

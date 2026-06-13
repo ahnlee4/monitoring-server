@@ -12,7 +12,7 @@ def build_collector() -> tuple[BaseCollector, int]:
 
     if driver == "rs485":
         serial_port = get_env("RS485_SERIAL_PORT", "/dev/ttyUSB0")
-        baudrate = get_int_env("RS485_BAUDRATE", 115200)
+        baudrate = get_int_env("RS485_BAUDRATE", 38400)
         comp_qty = get_int_env("RS485_COMP_QTY", 8)
         response_timeout = float(get_env("RS485_RESPONSE_TIMEOUT_SECONDS", "0.8"))
         inter_request_delay = float(get_env("RS485_INTER_REQUEST_DELAY_SECONDS", "0.05"))
