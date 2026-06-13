@@ -9,7 +9,7 @@ import re
 import serial
 
 from app.base import BaseCollector
-from app.models import AlarmEvent, CollectorBatch, Metric, TelemetryFrame
+from app.models import AlarmEvent, CollectorBatch, MapValueUpdate, Metric, TelemetryFrame
 
 
 FRAME_START = 0x65
@@ -146,6 +146,10 @@ class RS485Collector(BaseCollector):
     def poll(self) -> CollectorBatch:
         recorded_at = datetime.now(timezone.utc).isoformat()
         frames: list[TelemetryFrame] = []
+        map_values: list[MapValueUpdate] = []
+        connected_bits = 0
+        representative_pressure: int | None = None
+        any_running = False
 
         try:
             port = self._open_serial()
@@ -156,12 +160,33 @@ class RS485Collector(BaseCollector):
                     continue
                 self._word_cache[mem_addr] = words
                 frames.append(self._to_frame(comp_index, words, recorded_at))
+                map_values.extend(words_to_map_values(comp_index, words))
+                connected_bits |= 1 << comp_index
+                if representative_pressure is None and words:
+                    representative_pressure = signed_16(words[0])
+                if len(words) > 29 and (words[24] or words[29]):
+                    any_running = True
                 time.sleep(self.inter_request_delay)
         except Exception as exc:
             self._close_serial()
             print(f"collector-rs485 error on {self.serial_port}: {exc}")
 
-        return CollectorBatch(source="collector-uart4", recorded_at=recorded_at, frames=frames)
+        map_values.extend(
+            [
+                MapValueUpdate(key="0002", value=connected_bits),
+                MapValueUpdate(key="004E", value=self.comp_qty),
+                MapValueUpdate(key="0050", value=1 if any_running else 0),
+            ]
+        )
+        if representative_pressure is not None:
+            map_values.append(MapValueUpdate(key="0000", value=representative_pressure))
+
+        return CollectorBatch(
+            source="collector-uart4",
+            recorded_at=recorded_at,
+            frames=frames,
+            map_values=map_values,
+        )
 
     def _open_serial(self) -> serial.Serial:
         if self._serial and self._serial.is_open:
@@ -367,6 +392,23 @@ def values_to_metrics(values: dict[str, float | int]) -> Iterable[tuple[str, flo
     unit_by_key = {field.metric_key: field.unit for field in COMP_FIELDS}
     for key, value in values.items():
         yield key, value, unit_by_key.get(key, "")
+
+
+def words_to_map_values(comp_index: int, words: list[int]) -> list[MapValueUpdate]:
+    comp_no = comp_index + 1
+    oilfree_prefix = f"2{comp_no:X}"
+    injection_prefix = f"1{comp_no:X}"
+    updates: list[MapValueUpdate] = []
+
+    for word_index, word in enumerate(words):
+        offset = word_index * 2
+        if offset > 0xA4:
+            break
+        value = signed_16(word) if word_index < len(COMP_FIELDS) and COMP_FIELDS[word_index].signed else word
+        updates.append(MapValueUpdate(key=f"{oilfree_prefix}{offset:02X}", value=value))
+        updates.append(MapValueUpdate(key=f"{injection_prefix}{offset:02X}", value=value))
+
+    return updates
 
 
 def words_from_bytes(data: bytes) -> list[int]:

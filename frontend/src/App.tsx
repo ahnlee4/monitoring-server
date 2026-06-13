@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import type { UpdateEvent, YujinMapValue } from "./types";
 
 type CompressorState = {
   id: number;
@@ -213,13 +214,52 @@ const mockDashboard: DashboardState = {
 export default function App() {
   const [now, setNow] = useState(new Date());
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mapValues, setMapValues] = useState<Record<string, YujinMapValue>>({});
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const dashboard = useMemo(() => mockDashboard, []);
+  useEffect(() => {
+    let cancelled = false;
+    let reloadTimer: number | undefined;
+    let pollTimer: number | undefined;
+
+    const loadMapValues = async () => {
+      try {
+        const response = await fetch(`${apiBase()}/yujin/map-values?limit=2000`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`map-values ${response.status}`);
+        const values = (await response.json()) as YujinMapValue[];
+        if (!cancelled) setMapValues(toMapRecord(values));
+      } catch (error) {
+        console.error("failed to load map values", error);
+      }
+    };
+
+    const scheduleReload = () => {
+      window.clearTimeout(reloadTimer);
+      reloadTimer = window.setTimeout(loadMapValues, 120);
+    };
+
+    loadMapValues();
+    pollTimer = window.setInterval(loadMapValues, 3000);
+    const socket = new WebSocket(wsUrl());
+    socket.onmessage = (event) => {
+      const message = JSON.parse(event.data) as UpdateEvent;
+      if (message.type === "yujin_map_update") scheduleReload();
+    };
+    socket.onerror = () => socket.close();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(reloadTimer);
+      window.clearInterval(pollTimer);
+      socket.close();
+    };
+  }, []);
+
+  const dashboard = useMemo(() => buildDashboardFromMap(mapValues), [mapValues]);
   const lowPressureText = getLowPressureText(dashboard.lowPressureAlarm);
 
   return (
@@ -242,6 +282,131 @@ export default function App() {
       </section>
     </main>
   );
+}
+
+function buildDashboardFromMap(values: Record<string, YujinMapValue>): DashboardState {
+  const compressors = Array.from({ length: 8 }, (_, index) => buildCompressorFromMap(values, index));
+  const connectedMask = mapNumber(values, "0002", maskFromCompressors(compressors));
+  const compQty = clamp(Math.trunc(mapNumber(values, "004E", 8)), 1, 8);
+  const mainPressure = scale10(mapNumber(values, "0000", compressors[0]?.pressure * 10 || 0));
+  const optionDevice = mapNumber(values, "004A", 0);
+  const lowAlarmStep = mapNumber(values, "0054", 0);
+
+  return {
+    ...mockDashboard,
+    integratedRun: (mapNumber(values, "0050", 0) & 0x0001) === 0x0001,
+    mainPressure,
+    lowPressureAlarm: lowAlarmStep > 0 ? "warning" : "none",
+    control: {
+      noLoadPressure: scale10(mapNumber(values, "0016", mockDashboard.control.noLoadPressure * 10)),
+      loadPressure: scale10(mapNumber(values, "0018", mockDashboard.control.loadPressure * 10)),
+      pressureGap: scale10(mapNumber(values, "001A", mockDashboard.control.pressureGap * 10)),
+      runUnits: Math.trunc(mapNumber(values, "0026", mockDashboard.control.runUnits)),
+      changeHours: Math.trunc(mapNumber(values, "0046", mockDashboard.control.changeHours)),
+      remainMinutes: Math.trunc(mapNumber(values, "0048", mockDashboard.control.remainMinutes)),
+    },
+    options: buildOptions(optionDevice),
+    compressors: compressors.map((compressor, index) => ({
+      ...compressor,
+      connected: Boolean(connectedMask & (1 << index)),
+      name: `${index + 1}호기`,
+      model: compressor.model || mockDashboard.compressors[index].model,
+      pressure: index < compQty ? compressor.pressure : 0,
+    })),
+  };
+}
+
+function buildCompressorFromMap(values: Record<string, YujinMapValue>, index: number): CompressorState {
+  const fallback = mockDashboard.compressors[index];
+  const compNo = index + 1;
+  const oilPrefix = `2${compNo.toString(16).toUpperCase()}`;
+  const injectionPrefix = `1${compNo.toString(16).toUpperCase()}`;
+  const read = (oilOffset: string, injectionOffset: string = oilOffset, fallbackValue = 0) =>
+    mapNumber(values, `${oilPrefix}${oilOffset}`, mapNumber(values, `${injectionPrefix}${injectionOffset}`, fallbackValue));
+
+  const pressure = scale10(read("00", "00", fallback.pressure * 10));
+  const temperature = scale10(read("0C", "02", fallback.temperature * 10));
+  const noLoadPressure = scale10(read("4E", "26", fallback.noLoadPressure * 10));
+  const loadPressure = scale10(read("50", "28", fallback.loadPressure * 10));
+  const controlPressure = scale10(read("46", "20", (fallback.controlPressure ?? fallback.pressure) * 10));
+  const rpm = Math.trunc(read("38", "04", fallback.rpm ?? 0));
+  const alarm = read("28", "0A", 0);
+  const faultLow = read("2A", "0C", 0);
+  const faultHigh = read("2C", "0C", 0);
+  const faultInv = read("2E", "0E", 0);
+  const runMode = read("3A", "18", 0);
+  const cpStatus = read("30", "16", 0);
+  const extRunStop = read("44", "1A", fallback.local ? 0 : 1);
+  const runHoursLow = read("9A", "68", fallback.totalHours);
+  const runHoursHigh = read("9C", "6A", 0);
+
+  return {
+    ...fallback,
+    pressure,
+    temperature,
+    noLoadPressure,
+    loadPressure,
+    controlPressure,
+    rpm,
+    local: extRunStop === 0,
+    running: runMode !== 0 || cpStatus !== 0,
+    connected: hasRecentValue(values, `${oilPrefix}00`) || hasRecentValue(values, `${injectionPrefix}00`),
+    alarm: alarm !== 0,
+    fault: faultLow !== 0 || faultHigh !== 0 || faultInv !== 0,
+    inverter: rpm > 0 || controlPressure > 0,
+    totalHours: Math.trunc(runHoursHigh * 65536 + runHoursLow),
+  };
+}
+
+function buildOptions(optionDevice: number) {
+  const base = mockDashboard.options;
+  const bit = (position: number) => Boolean(optionDevice & (1 << position));
+
+  return base.map((option, index) => {
+    const mappedBits = [0, 1, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 7];
+    return { ...option, checked: optionDevice ? bit(mappedBits[index] ?? index) : option.checked };
+  });
+}
+
+function toMapRecord(values: YujinMapValue[]) {
+  return values.reduce<Record<string, YujinMapValue>>((record, item) => {
+    record[item.key.toUpperCase()] = item;
+    return record;
+  }, {});
+}
+
+function mapNumber(values: Record<string, YujinMapValue>, key: string, fallback = 0) {
+  const raw = values[key.toUpperCase()]?.value;
+  if (raw === undefined || raw === null || raw === "") return fallback;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function hasRecentValue(values: Record<string, YujinMapValue>, key: string) {
+  const value = values[key.toUpperCase()];
+  return Boolean(value?.updated_at && value.source !== "seed");
+}
+
+function maskFromCompressors(compressors: CompressorState[]) {
+  return compressors.reduce((mask, compressor, index) => (compressor.connected ? mask | (1 << index) : mask), 0);
+}
+
+function scale10(value: number) {
+  return Math.round((value / 10) * 10) / 10;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function apiBase() {
+  return import.meta.env.VITE_API_BASE || "/api";
+}
+
+function wsUrl() {
+  const configuredPath = import.meta.env.VITE_WS_PATH || "/ws/dashboard";
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}${configuredPath}`;
 }
 
 function TopBar({ dashboard, now }: { dashboard: DashboardState; now: Date }) {

@@ -241,7 +241,9 @@ async def ingest_yujin_map_values(
 
         value_text = str(item.value)
         current = db.scalar(select(YujinMapValue).where(YujinMapValue.definition_id == definition.id))
+        changed = True
         if current:
+            changed = current.value_text != value_text
             current.value_text = value_text
             current.updated_at = recorded_at
             current.source = payload.source
@@ -254,14 +256,15 @@ async def ingest_yujin_map_values(
             )
             db.add(current)
 
-        db.add(
-            YujinMapValueHistory(
-                definition_id=definition.id,
-                value_text=value_text,
-                recorded_at=recorded_at,
-                source=payload.source,
+        if changed:
+            db.add(
+                YujinMapValueHistory(
+                    definition_id=definition.id,
+                    value_text=value_text,
+                    recorded_at=recorded_at,
+                    source=payload.source,
+                )
             )
-        )
         updated_keys.append(key)
 
     db.commit()
