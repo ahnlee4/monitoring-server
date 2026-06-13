@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.12";
+const APP_VERSION = "0.1.13";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -827,6 +827,9 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
 }
 
 function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onClose: () => void }) {
+  const [sortMode, setSortMode] = useState<"setting" | "time">("setting");
+  const [operationMode, setOperationMode] = useState<"local" | "remote">("remote");
+  const [controlMode, setControlMode] = useState<"single" | "group">("group");
   const controls = [
     ["무부하 압력", dashboard.control.noLoadPressure.toFixed(1), "bar"],
     ["부하 압력", dashboard.control.loadPressure.toFixed(1), "bar"],
@@ -837,42 +840,126 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
   ];
 
   return (
-    <DialogShell onClose={onClose} title="통합운전 설정" wide>
-      <div className="grid grid-cols-[430px_1fr_180px] gap-[8px] bg-[#eef7ff] p-[8px]">
-        <div className="grid content-start gap-[4px] border border-[#75b4ee] bg-white p-[5px]">
-          {controls.map(([label, value, unit]) => (
-            <SettingRow key={label} label={label} unit={unit} value={value} />
-          ))}
-        </div>
-        <div className="grid content-start gap-[8px] border border-[#75b4ee] bg-white p-[8px]">
-          <SectionTitle>정렬 설정</SectionTitle>
-          <div className="grid h-[54px] grid-cols-3 gap-[4px]">
-            <ChoiceButton active>설정순</ChoiceButton>
-            <ChoiceButton>시간순</ChoiceButton>
-            <label className="flex items-center justify-center gap-[6px] border border-[#75b4ee] text-[14px] font-bold text-[#0d4da5]">
-              <input readOnly type="checkbox" /> 절약모드
-            </label>
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-[24px]">
+      <section className="w-[1040px] overflow-hidden rounded-[18px] border border-[#81b9ed] bg-[linear-gradient(150deg,#fafdff_0%,#e5f2ff_100%)] shadow-[0_20px_44px_rgba(4,31,69,0.42),inset_0_1px_0_rgba(255,255,255,0.92)]">
+        <div className="grid h-[78px] grid-cols-[74px_1fr_92px] items-center border-b border-[#b7d8f4] bg-[linear-gradient(90deg,#1b64b2_0%,#3a9ddd_100%)] px-[14px]">
+          <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[16px] bg-white/18 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]">
+            <img src="/control.png" alt="" className="h-[38px] w-[38px] object-contain" />
           </div>
-          <SettingRow label="인버터 메인 호기" unit="호기" value="0" />
-          <SettingRow label="인버터 제어압력 설정" unit="bar" value="0.0" />
-          <SectionTitle>운전 모드 설정</SectionTitle>
-          <div className="grid h-[54px] grid-cols-2 gap-[4px]">
-            <ChoiceButton>LOCAL</ChoiceButton>
-            <ChoiceButton active>REMOTE</ChoiceButton>
+          <div className="min-w-0">
+            <div className="text-[25px] font-black leading-none text-white">통합운전 설정</div>
+            <div className="mt-[7px] text-[14px] font-bold tracking-[0.08em] text-[#d7efff]">GROUP OPERATION CONTROL</div>
           </div>
-          <div className="grid h-[54px] grid-cols-2 gap-[4px]">
-            <ChoiceButton>개별 운전</ChoiceButton>
-            <ChoiceButton active>통합 운전</ChoiceButton>
+          <button className="h-[42px] rounded-[12px] bg-white/16 text-[18px] font-black text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]" onClick={onClose} type="button">
+            닫기
+          </button>
+        </div>
+        <div className="grid grid-cols-[430px_1fr_205px] gap-[12px] p-[14px]">
+          <div className="rounded-[15px] border border-[#c4ddf4] bg-white/86 p-[12px] shadow-[0_7px_18px_rgba(30,93,151,0.12)]">
+            <PanelHeading eyebrow="PRESSURE / COUNT">제어 기준값</PanelHeading>
+            <div className="mt-[10px] grid gap-[8px]">
+              {controls.map(([label, value, unit]) => (
+                <div key={label} className="grid h-[48px] grid-cols-[1fr_120px_48px] items-center rounded-[11px] border border-[#d3e7f8] bg-[#f8fcff] px-[10px]">
+                  <div className="text-[16px] font-black text-[#244c75]">{label}</div>
+                  <div className="flex items-center justify-center rounded-[8px] bg-white text-[22px] font-black text-[#0d4da5] shadow-[inset_0_0_0_1px_#d7e8f6]">{value}</div>
+                  <div className="text-center text-[15px] font-black text-[#5f7f9c]">{unit}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="grid content-start gap-[12px] rounded-[15px] border border-[#c4ddf4] bg-white/86 p-[12px] shadow-[0_7px_18px_rgba(30,93,151,0.12)]">
+            <PanelHeading eyebrow="MODE / INVERTER">운전 조건</PanelHeading>
+            <div className="grid gap-[8px]">
+              <SegmentedOption
+                items={[
+                  ["setting", "설정순"],
+                  ["time", "시간순"],
+                ]}
+                selected={sortMode}
+                onSelect={(value) => setSortMode(value as "setting" | "time")}
+              />
+              <label className="flex h-[46px] items-center justify-between rounded-[11px] border border-[#d3e7f8] bg-[#f8fcff] px-[14px] text-[16px] font-black text-[#244c75]">
+                <span>절약모드</span>
+                <input readOnly className="h-[22px] w-[22px] accent-[#237bd0]" type="checkbox" />
+              </label>
+              <div className="grid h-[48px] grid-cols-[1fr_92px_46px] items-center rounded-[11px] border border-[#d3e7f8] bg-[#f8fcff] px-[10px]">
+                <span className="text-[16px] font-black text-[#244c75]">인버터 메인 호기</span>
+                <span className="flex h-[32px] items-center justify-center rounded-[8px] bg-white text-[20px] font-black text-[#0d4da5] shadow-[inset_0_0_0_1px_#d7e8f6]">0</span>
+                <span className="text-center text-[14px] font-black text-[#5f7f9c]">호기</span>
+              </div>
+              <div className="grid h-[48px] grid-cols-[1fr_92px_46px] items-center rounded-[11px] border border-[#d3e7f8] bg-[#f8fcff] px-[10px]">
+                <span className="text-[16px] font-black text-[#244c75]">인버터 제어압력 설정</span>
+                <span className="flex h-[32px] items-center justify-center rounded-[8px] bg-white text-[20px] font-black text-[#0d4da5] shadow-[inset_0_0_0_1px_#d7e8f6]">0.0</span>
+                <span className="text-center text-[14px] font-black text-[#5f7f9c]">bar</span>
+              </div>
+            </div>
+            <PanelHeading eyebrow="OPERATION MODE">운전 모드</PanelHeading>
+            <SegmentedOption
+              items={[
+                ["local", "LOCAL"],
+                ["remote", "REMOTE"],
+              ]}
+              selected={operationMode}
+              onSelect={(value) => setOperationMode(value as "local" | "remote")}
+            />
+            <SegmentedOption
+              items={[
+                ["single", "개별 운전"],
+                ["group", "통합 운전"],
+              ]}
+              selected={controlMode}
+              onSelect={(value) => setControlMode(value as "single" | "group")}
+            />
+          </div>
+          <div className="grid content-start gap-[12px] rounded-[15px] border border-[#c4ddf4] bg-white/86 p-[12px] shadow-[0_7px_18px_rgba(30,93,151,0.12)]">
+            <PanelHeading eyebrow="ACTION">통합운전</PanelHeading>
+            <div className="rounded-[14px] border border-[#d3e7f8] bg-[#f8fcff] p-[10px] text-center">
+              <div className="text-[13px] font-black tracking-[0.12em] text-[#7c97b0]">CURRENT MODE</div>
+              <div className="mt-[6px] text-[24px] font-black text-[#0d4da5]">{operationMode.toUpperCase()}</div>
+            </div>
+            <button className="h-[82px] rounded-[16px] bg-[linear-gradient(145deg,#ff4f4f,#d71920)] text-[32px] font-black text-white shadow-[0_11px_20px_rgba(208,31,38,0.28)]" type="button">운전</button>
+            <button className="h-[82px] rounded-[16px] bg-[linear-gradient(145deg,#8b98a5,#5f6973)] text-[32px] font-black text-white shadow-[0_11px_20px_rgba(70,82,94,0.24)]" type="button">정지</button>
+            <button className="h-[52px] rounded-[14px] bg-[linear-gradient(90deg,#1d6fc4,#39a1e7)] text-[20px] font-black text-white shadow-[0_8px_18px_rgba(33,117,199,0.25)]" type="button">저장</button>
           </div>
         </div>
-        <div className="grid content-start gap-[8px] border border-[#75b4ee] bg-white p-[8px]">
-          <SectionTitle>통합운전</SectionTitle>
-          <button className="h-[88px] bg-[#e42222] text-[32px] font-bold text-white" type="button">운전</button>
-          <button className="h-[88px] bg-[#8f8f8f] text-[32px] font-bold text-white" type="button">정지</button>
-          <button className="h-[50px] bg-[#3374ce] text-[22px] font-bold text-white" type="button">저장</button>
-        </div>
-      </div>
-    </DialogShell>
+      </section>
+    </div>
+  );
+}
+
+function PanelHeading({ children, eyebrow }: { children: ReactNode; eyebrow: string }) {
+  return (
+    <div className="flex h-[40px] items-center justify-between border-b border-[#c9e1f5]">
+      <span className="text-[20px] font-black text-[#173f69]">{children}</span>
+      <span className="text-[11px] font-black tracking-[0.12em] text-[#7c97b0]">{eyebrow}</span>
+    </div>
+  );
+}
+
+function SegmentedOption({
+  items,
+  onSelect,
+  selected,
+}: {
+  items: Array<[string, string]>;
+  onSelect: (value: string) => void;
+  selected: string;
+}) {
+  return (
+    <div className="grid h-[48px] grid-cols-2 rounded-[12px] border border-[#d3e7f8] bg-[#edf6fe] p-[4px]">
+      {items.map(([value, label]) => (
+        <button
+          key={value}
+          className={`rounded-[9px] text-[18px] font-black transition-colors ${
+            selected === value ? "bg-[#237bd0] text-white shadow-[0_4px_10px_rgba(35,123,208,0.28)]" : "text-[#3e6488]"
+          }`}
+          onClick={() => onSelect(value)}
+          type="button"
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 
