@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.14";
+const APP_VERSION = "0.1.15";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -246,11 +246,18 @@ function buildCompressorFromMap(values: Record<string, YujinMapValue>, index: nu
   const runMode = read("3A", "18", 0);
   const cpStatus = read("30", "16", 0);
   const extRunStop = read("44", "1A", 0);
+  const model1 = Math.trunc(read("7C", "7C", 0));
+  const version1 = Math.trunc(read("7E", "7E", 0));
+  const version2 = Math.trunc(read("80", "80", 0));
   const runHoursLow = read("9A", "68", 0);
   const runHoursHigh = read("9C", "6A", 0);
+  const connected = hasRecentValue(values, `${oilPrefix}00`) || hasRecentValue(values, `${injectionPrefix}00`);
+  const modelName = connected ? getOilfreeModelName(model1, version1, version2) : "-";
+  const isInverter = version1 === 3 || rpm > 0 || controlPressure > 0;
 
   return {
     ...emptyCompressor(index),
+    model: modelName,
     pressure,
     temperature,
     noLoadPressure,
@@ -259,12 +266,22 @@ function buildCompressorFromMap(values: Record<string, YujinMapValue>, index: nu
     rpm,
     local: extRunStop === 0,
     running: runMode !== 0 || cpStatus !== 0,
-    connected: hasRecentValue(values, `${oilPrefix}00`) || hasRecentValue(values, `${injectionPrefix}00`),
+    connected,
     alarm: alarm !== 0,
     fault: faultLow !== 0 || faultHigh !== 0 || faultInv !== 0,
-    inverter: rpm > 0 || controlPressure > 0,
+    inverter: isInverter,
     totalHours: Math.trunc(runHoursHigh * 65536 + runHoursLow),
   };
+}
+
+function getOilfreeModelName(model1: number, version1: number, version2: number) {
+  const modelMap = ["55F", "75F", "90F", "110F", "132F", "160F", "190F", "225F", "260F", "135F"];
+  const model = modelMap[model1] ?? "";
+  if (!model) return "-";
+
+  const cooling = version2 === 1 ? "W" : "A";
+  const version = version1 === 1 ? "R" : version1 === 2 ? "S" : version1 === 3 ? "V" : "-";
+  return `Micos ${model}${cooling}${version}`;
 }
 
 function buildOptions(optionDevice: number) {
@@ -707,6 +724,9 @@ function DetailScreen({ dashboard }: { dashboard: DashboardState }) {
 }
 
 function DetailDeviceCard({ compressor }: { compressor: CompressorState }) {
+  const imageSrc = getDetailDeviceImage(compressor);
+  const statusText = compressor.connected ? (compressor.fault ? "FAULT" : compressor.running ? "RUN" : "RDY") : "FAIL";
+  const statusImage = !compressor.connected ? "/failure.png" : compressor.fault ? "/fault.png" : null;
   const rows = [
     ["압력", `${compressor.pressure.toFixed(1)} bar`],
     ["온도", `${compressor.temperature.toFixed(1)} ℃`],
@@ -718,26 +738,42 @@ function DetailDeviceCard({ compressor }: { compressor: CompressorState }) {
   ];
 
   return (
-    <article className="grid min-h-0 grid-rows-[38px_1fr_42px] border border-[#75b4ee] bg-white">
-      <div className="flex items-center justify-center bg-[#b3d4ff] text-[19px] font-bold text-[#0d4da5]">
+    <article className="grid min-h-0 grid-rows-[38px_1fr_40px] overflow-hidden border border-[#75b4ee] bg-white">
+      <div className="flex items-center justify-center bg-[#b3d4ff] px-[6px] text-center text-[19px] font-bold leading-none text-[#0d4da5]">
         {compressor.name} ({compressor.model})
       </div>
-      <div className="grid min-h-0 grid-cols-2 content-start gap-0 p-[3px]">
-        {rows.map(([label, value]) => (
-          <div key={label} className="grid min-h-[32px] grid-cols-[78px_1fr] border border-[#d2e8ff]">
-            <div className="flex items-center justify-center bg-[#eef7ff] text-[13px] font-bold">{label}</div>
-            <div className="flex items-center justify-center bg-white text-[15px] font-bold">{value}</div>
+      <div className="grid min-h-0 grid-cols-[152px_1fr] gap-[3px] bg-[#f5fbff] p-[3px]">
+        <div className="grid min-h-0 grid-rows-[1fr_28px] overflow-hidden border border-[#d2e8ff] bg-white">
+          <div className="relative flex min-h-0 items-center justify-center p-[4px]">
+            <img src={imageSrc} alt={compressor.model} className="max-h-full max-w-full object-contain" />
+            {statusImage ? <img src={statusImage} alt={statusText} className="absolute inset-x-[6px] top-[50%] h-[34px] -translate-y-1/2 object-fill" /> : null}
           </div>
-        ))}
+          <div className="flex items-center justify-center bg-[#eef7ff] text-[15px] font-black text-[#0d4da5]">{compressor.inverter ? "INVERTER" : "STANDARD"}</div>
+        </div>
+        <div className="grid min-h-0 grid-cols-2 content-start gap-[2px]">
+          {rows.map(([label, value]) => (
+            <div key={label} className="grid min-h-[30px] grid-cols-[76px_1fr] overflow-hidden border border-[#d2e8ff] bg-white">
+              <div className="flex items-center justify-center bg-[#eef7ff] text-[13px] font-bold">{label}</div>
+              <div className="flex items-center justify-center text-[15px] font-bold">{value}</div>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="grid grid-cols-4 gap-[2px] p-[2px]">
-        <MiniLamp active={compressor.connected} label={compressor.connected ? "통신" : "끊김"} />
+        <MiniLamp active={compressor.connected} danger={!compressor.connected} label={compressor.connected ? "통신" : "끊김"} />
         <MiniLamp active={compressor.local} label={compressor.local ? "LOCAL" : "REMOTE"} />
         <MiniLamp active={compressor.running} label={compressor.running ? "운전" : "정지"} />
         <MiniLamp active={compressor.fault || compressor.alarm} danger label={compressor.fault ? "고장" : compressor.alarm ? "알람" : "정상"} />
       </div>
     </article>
   );
+}
+
+function getDetailDeviceImage(compressor: CompressorState) {
+  if (compressor.model !== "-" && !compressor.model.includes("Micos")) {
+    return compressor.inverter ? "/injection_v_mini.png" : "/injection_mini.png";
+  }
+  return compressor.inverter ? "/equip_mini.png" : "/equip_n_mini.png";
 }
 
 function MiniLamp({ active, danger = false, label }: { active: boolean; danger?: boolean; label: string }) {
