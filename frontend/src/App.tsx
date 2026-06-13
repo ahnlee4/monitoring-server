@@ -48,7 +48,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.26";
+const APP_VERSION = "0.1.27";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -427,8 +427,8 @@ function TopBar({ dashboard, now }: { dashboard: DashboardState; now: Date }) {
 function TopRunPanel({ running }: { running: boolean }) {
   return (
     <TopPanel tone={running ? "run" : "stop"} emphasis>
-      <span className="text-[13px] font-black leading-none tracking-[0.12em] text-white/90">통합 운전</span>
-      <span className="mt-[5px] text-[31px] font-black leading-none tracking-[-0.04em] text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.16)]">
+      <span className="block w-full text-center text-[13px] font-black leading-none tracking-[0.12em] text-white/90">통합 운전</span>
+      <span className="mt-[5px] block w-full text-center text-[31px] font-black leading-none tracking-[-0.04em] text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.16)]">
         {running ? "운전 중" : "정 지"}
       </span>
     </TopPanel>
@@ -438,10 +438,11 @@ function TopRunPanel({ running }: { running: boolean }) {
 function TopPressurePanel({ value }: { value: number }) {
   return (
     <TopPanel tone="pressure" emphasis>
-      <span className="text-[13px] font-black leading-none tracking-[0.14em] text-[#1b5c96]">메인 압력</span>
-      <span className="mt-[3px] flex items-end justify-center gap-[6px] leading-none text-[#083f73] drop-shadow-[0_1px_0_rgba(255,255,255,0.45)]">
-        <strong className="font-black tabular-nums tracking-[-0.07em] text-[38px]">{value.toFixed(1)}</strong>
-        <small className="pb-[5px] text-[17px] font-black tracking-[-0.03em]">bar</small>
+      <span className="block w-full text-center text-[13px] font-black leading-none tracking-[0.14em] text-[#1b5c96]">메인 압력</span>
+      <span className="mt-[3px] grid w-full grid-cols-[42px_1fr_42px] items-end leading-none text-[#083f73] drop-shadow-[0_1px_0_rgba(255,255,255,0.45)]">
+        <span />
+        <strong className="text-center font-black tabular-nums tracking-[-0.07em] text-[38px]">{value.toFixed(1)}</strong>
+        <small className="pb-[5px] text-left text-[17px] font-black tracking-[-0.03em]">bar</small>
       </span>
     </TopPanel>
   );
