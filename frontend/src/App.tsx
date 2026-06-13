@@ -41,7 +41,7 @@ type DashboardState = {
 };
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.3";
+const APP_VERSION = "0.1.4";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -608,7 +608,7 @@ function QuickButtons({
       </button>
       {menuOpen ? (
         <div className="absolute bottom-[70px] right-0 z-20 grid w-[180px] gap-[3px]">
-          {["CCTV", "로그 파일", "설정", "그룹운전 설정", "LOG"].map((item) => (
+          {["공장 변경", "설정", "통합운전 설정", "상세 화면"].map((item) => (
             <button key={item} className="rounded-[5px] border border-[#25b9f5] bg-white px-[10px] py-[6px] text-right text-[17px] font-bold text-[#303f9f]" type="button">
               {item}
             </button>
