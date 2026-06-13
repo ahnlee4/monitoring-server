@@ -20,7 +20,7 @@ class TelemetryIngestRequest(BaseModel):
     device_name: str | None = None
     location: str | None = None
     status: str = "running"
-    source: str = "collector-mock"
+    source: str = "collector-uart4"
     metrics: list[MetricIn]
     alarms: list[AlarmIn] = []
     recorded_at: datetime | None = None

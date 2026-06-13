@@ -76,9 +76,18 @@ def seed_yujin_map() -> None:
         *schema["expanded_examples"]["module"],
     ]
     with SessionLocal() as db:
-        existing_keys = set(db.scalars(select(YujinMapDefinition.key)).all())
         for item in entries:
-            if item["key"] in existing_keys:
+            definition = db.scalar(select(YujinMapDefinition).where(YujinMapDefinition.key == item["key"]))
+            if definition:
+                definition.default_value = item["default_value"]
+                definition.name = item["name"]
+                definition.section = item["section"]
+                current = db.scalar(
+                    select(YujinMapValue).where(YujinMapValue.definition_id == definition.id)
+                )
+                if current and current.source in {"seed", "collector-mock"}:
+                    current.value_text = item["default_value"]
+                    current.source = "seed"
                 continue
             definition = YujinMapDefinition(
                 key=item["key"],

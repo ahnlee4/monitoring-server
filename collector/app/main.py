@@ -3,21 +3,12 @@ import time
 from app.base import BaseCollector
 from app.client import BackendClient
 from app.config import get_env, get_int_env
-from app.drivers.mock_driver import MockCollector
 from app.drivers.rs485_driver import RS485Collector
 
 
 def build_collector() -> tuple[BaseCollector, int]:
-    driver = get_env("COLLECTOR_DRIVER", "mock").strip().lower()
+    driver = get_env("COLLECTOR_DRIVER", "rs485").strip().lower()
     interval = get_int_env("COLLECTOR_INTERVAL_SECONDS", 3)
-
-    if driver == "mock":
-        device_codes = [
-            code.strip()
-            for code in get_env("COLLECTOR_DEVICE_CODES", "PRESS-01,FURNACE-01,PUMP-01").split(",")
-            if code.strip()
-        ]
-        return MockCollector(device_codes=device_codes), interval
 
     if driver == "rs485":
         serial_port = get_env("RS485_SERIAL_PORT", "/dev/ttyUSB0")
