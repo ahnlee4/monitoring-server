@@ -40,6 +40,8 @@ type DashboardState = {
   compressors: CompressorState[];
 };
 
+const LIVE_VALUE_MAX_AGE_MS = 30_000;
+
 const mockDashboard: DashboardState = {
   integratedRun: false,
   mainPressure: 7.1,
@@ -211,6 +213,46 @@ const mockDashboard: DashboardState = {
   ],
 };
 
+const emptyDashboard: DashboardState = {
+  integratedRun: false,
+  mainPressure: 0,
+  appVersion: mockDashboard.appVersion,
+  firmwareVersion: "-",
+  lowPressureAlarm: "none",
+  sortMode: "setting",
+  control: {
+    noLoadPressure: 0,
+    loadPressure: 0,
+    pressureGap: 0,
+    runUnits: 0,
+    changeHours: 0,
+    remainMinutes: 0,
+  },
+  options: mockDashboard.options.map((option) => ({ ...option, checked: false })),
+  compressors: Array.from({ length: 8 }, (_, index) => emptyCompressor(index)),
+};
+
+function emptyCompressor(index: number): CompressorState {
+  return {
+    id: index + 1,
+    name: `${index + 1}호기`,
+    model: "-",
+    pressure: 0,
+    temperature: 0,
+    noLoadPressure: 0,
+    loadPressure: 0,
+    controlPressure: 0,
+    rpm: 0,
+    local: false,
+    running: false,
+    connected: false,
+    alarm: false,
+    fault: false,
+    inverter: false,
+    totalHours: 0,
+  };
+}
+
 export default function App() {
   const [now, setNow] = useState(new Date());
   const [menuOpen, setMenuOpen] = useState(false);
@@ -286,43 +328,42 @@ export default function App() {
 
 function buildDashboardFromMap(values: Record<string, YujinMapValue>): DashboardState {
   const compressors = Array.from({ length: 8 }, (_, index) => buildCompressorFromMap(values, index));
-  const connectedMask = mapNumber(values, "0002", maskFromCompressors(compressors));
-  const compQty = clamp(Math.trunc(mapNumber(values, "004E", 8)), 0, 8);
-  const mainPressure = scale10(mapNumber(values, "0000", compressors[0]?.pressure * 10 || 0));
-  const optionDevice = mapNumber(values, "004A", 0);
-  const lowAlarmStep = mapNumber(values, "0054", 0);
+  const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
+  const compQty = clamp(Math.trunc(liveMapNumber(values, "004E", 0)), 0, 8);
+  const mainPressure = scale10(liveMapNumber(values, "0000", 0));
+  const optionDevice = liveMapNumber(values, "004A", 0);
+  const lowAlarmStep = liveMapNumber(values, "0054", 0);
 
   return {
-    ...mockDashboard,
-    integratedRun: (mapNumber(values, "0050", 0) & 0x0001) === 0x0001,
+    ...emptyDashboard,
+    integratedRun: (liveMapNumber(values, "0050", 0) & 0x0001) === 0x0001,
     mainPressure,
     lowPressureAlarm: lowAlarmStep > 0 ? "warning" : "none",
     control: {
-      noLoadPressure: scale10(mapNumber(values, "0016", 0)),
-      loadPressure: scale10(mapNumber(values, "0018", 0)),
-      pressureGap: scale10(mapNumber(values, "001A", 0)),
-      runUnits: Math.trunc(mapNumber(values, "0026", 0)),
-      changeHours: Math.trunc(mapNumber(values, "0046", 0)),
-      remainMinutes: Math.trunc(mapNumber(values, "0048", 0)),
+      noLoadPressure: scale10(liveMapNumber(values, "0016", 0)),
+      loadPressure: scale10(liveMapNumber(values, "0018", 0)),
+      pressureGap: scale10(liveMapNumber(values, "001A", 0)),
+      runUnits: Math.trunc(liveMapNumber(values, "0026", 0)),
+      changeHours: Math.trunc(liveMapNumber(values, "0046", 0)),
+      remainMinutes: Math.trunc(liveMapNumber(values, "0048", 0)),
     },
     options: buildOptions(optionDevice),
     compressors: compressors.map((compressor, index) => ({
       ...compressor,
       connected: Boolean(connectedMask & (1 << index)),
       name: `${index + 1}호기`,
-      model: compressor.model || mockDashboard.compressors[index].model,
+      model: compressor.model,
       pressure: index < compQty ? compressor.pressure : 0,
     })),
   };
 }
 
 function buildCompressorFromMap(values: Record<string, YujinMapValue>, index: number): CompressorState {
-  const fallback = mockDashboard.compressors[index];
   const compNo = index + 1;
   const oilPrefix = `2${compNo.toString(16).toUpperCase()}`;
   const injectionPrefix = `1${compNo.toString(16).toUpperCase()}`;
   const read = (oilOffset: string, injectionOffset: string = oilOffset, fallbackValue = 0) =>
-    mapNumber(values, `${oilPrefix}${oilOffset}`, mapNumber(values, `${injectionPrefix}${injectionOffset}`, fallbackValue));
+    liveMapNumber(values, `${oilPrefix}${oilOffset}`, liveMapNumber(values, `${injectionPrefix}${injectionOffset}`, fallbackValue));
 
   const pressure = scale10(read("00", "00", 0));
   const temperature = scale10(read("0C", "02", 0));
@@ -341,7 +382,7 @@ function buildCompressorFromMap(values: Record<string, YujinMapValue>, index: nu
   const runHoursHigh = read("9C", "6A", 0);
 
   return {
-    ...fallback,
+    ...emptyCompressor(index),
     pressure,
     temperature,
     noLoadPressure,
@@ -359,12 +400,12 @@ function buildCompressorFromMap(values: Record<string, YujinMapValue>, index: nu
 }
 
 function buildOptions(optionDevice: number) {
-  const base = mockDashboard.options;
+  const base = emptyDashboard.options;
   const bit = (position: number) => Boolean(optionDevice & (1 << position));
 
   return base.map((option, index) => {
     const mappedBits = [0, 1, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 7];
-    return { ...option, checked: optionDevice ? bit(mappedBits[index] ?? index) : option.checked };
+    return { ...option, checked: optionDevice ? bit(mappedBits[index] ?? index) : false };
   });
 }
 
@@ -375,8 +416,10 @@ function toMapRecord(values: YujinMapValue[]) {
   }, {});
 }
 
-function mapNumber(values: Record<string, YujinMapValue>, key: string, fallback = 0) {
-  const raw = values[key.toUpperCase()]?.value;
+function liveMapNumber(values: Record<string, YujinMapValue>, key: string, fallback = 0) {
+  const item = values[key.toUpperCase()];
+  if (!isLiveMapValue(item)) return fallback;
+  const raw = item.value;
   if (raw === undefined || raw === null || raw === "") return fallback;
   const numeric = Number(raw);
   return Number.isFinite(numeric) ? numeric : fallback;
@@ -384,7 +427,12 @@ function mapNumber(values: Record<string, YujinMapValue>, key: string, fallback 
 
 function hasRecentValue(values: Record<string, YujinMapValue>, key: string) {
   const value = values[key.toUpperCase()];
-  return Boolean(value?.updated_at && value.source !== "seed");
+  return isLiveMapValue(value);
+}
+
+function isLiveMapValue(value: YujinMapValue | undefined) {
+  if (!value?.updated_at || value.source === "seed") return false;
+  return Date.now() - new Date(value.updated_at).getTime() <= LIVE_VALUE_MAX_AGE_MS;
 }
 
 function maskFromCompressors(compressors: CompressorState[]) {
