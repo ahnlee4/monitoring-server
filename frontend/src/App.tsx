@@ -48,7 +48,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.24";
+const APP_VERSION = "0.1.25";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -380,6 +380,25 @@ async function enqueueMapWriteBatch(
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json();
+}
+
+type ControlCommandStatus = {
+  id: number;
+  status: "pending" | "in_progress" | "completed" | "failed";
+  error?: string | null;
+};
+
+async function waitForControlCommand(commandId: number, onStatus: (status: ControlCommandStatus) => void) {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const response = await fetch(`${apiBase()}/control/commands/${commandId}`);
+    if (!response.ok) throw new Error(`status HTTP ${response.status}`);
+    const status = (await response.json()) as ControlCommandStatus;
+    onStatus(status);
+    if (status.status === "completed") return status;
+    if (status.status === "failed") throw new Error(status.error || "collector command failed");
+    await new Promise((resolve) => window.setTimeout(resolve, 150));
+  }
+  throw new Error("명령 응답 시간 초과");
 }
 
 function TopBar({ dashboard, now }: { dashboard: DashboardState; now: Date }) {
@@ -999,7 +1018,12 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
-      setCommandStatus(`명령 대기열 등록 #${result.id}`);
+      setCommandStatus(`명령 #${result.id} 전송 대기...`);
+      await waitForControlCommand(result.id, (status) => {
+        if (status.status === "pending") setCommandStatus(`명령 #${result.id} 대기 중...`);
+        if (status.status === "in_progress") setCommandStatus(`명령 #${result.id} 장비 전송 중...`);
+        if (status.status === "completed") setCommandStatus(`명령 #${result.id} 전송 완료`);
+      });
     } catch (error) {
       setCommandStatus(`명령 전송 실패: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -1037,7 +1061,12 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
-      setCommandStatus(`저장 명령 대기열 등록 #${result.id}`);
+      setCommandStatus(`저장 #${result.id} 전송 대기...`);
+      await waitForControlCommand(result.id, (status) => {
+        if (status.status === "pending") setCommandStatus(`저장 #${result.id} 대기 중...`);
+        if (status.status === "in_progress") setCommandStatus(`저장 #${result.id} 장비 전송 중...`);
+        if (status.status === "completed") setCommandStatus(`저장 #${result.id} 전송 완료`);
+      });
     } catch (error) {
       setCommandStatus(`저장 실패: ${error instanceof Error ? error.message : String(error)}`);
     } finally {

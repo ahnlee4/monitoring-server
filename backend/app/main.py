@@ -328,6 +328,17 @@ def next_control_commands(
     return [command_out(command) for command in commands]
 
 
+@app.get("/api/control/commands/{command_id}", response_model=ControlCommandOut)
+def get_control_command(
+    command_id: int,
+    db: Session = Depends(get_db),
+) -> ControlCommandOut:
+    command = db.get(ControlCommand, command_id)
+    if not command:
+        raise HTTPException(status_code=404, detail="Command not found")
+    return command_out(command)
+
+
 @app.post("/api/control/commands/{command_id}/ack", response_model=ControlCommandOut)
 async def ack_control_command(
     command_id: int,

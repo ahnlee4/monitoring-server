@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable
 import re
+import threading
 
 import serial
 
@@ -137,7 +138,8 @@ class RS485Collector(BaseCollector):
         comp_qty: int = 8,
         response_timeout: float = 0.8,
         inter_request_delay: float = 0.05,
-        write_request_delay: float = 0.25,
+        write_request_delay: float = 0.05,
+        write_response_timeout: float = 0.25,
         debug_hex: bool = False,
     ) -> None:
         self.serial_port = serial_port
@@ -146,8 +148,10 @@ class RS485Collector(BaseCollector):
         self.response_timeout = response_timeout
         self.inter_request_delay = inter_request_delay
         self.write_request_delay = write_request_delay
+        self.write_response_timeout = write_response_timeout
         self.debug_hex = debug_hex
         self._serial: serial.Serial | None = None
+        self._serial_lock = threading.RLock()
         self._word_cache: dict[int, list[int]] = {}
         self._is_injection = [True] * self.comp_qty
 
@@ -193,27 +197,29 @@ class RS485Collector(BaseCollector):
         )
 
     def _open_serial(self) -> serial.Serial:
-        if self._serial and self._serial.is_open:
+        with self._serial_lock:
+            if self._serial and self._serial.is_open:
+                return self._serial
+
+            self._serial = serial.Serial(
+                port=self.serial_port,
+                baudrate=self.baudrate,
+                bytesize=serial.EIGHTBITS,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE,
+                timeout=self.response_timeout,
+                write_timeout=self.response_timeout,
+            )
+            print(f"collector-uart4 opened {self.serial_port} @ {self.baudrate} 8N1")
             return self._serial
 
-        self._serial = serial.Serial(
-            port=self.serial_port,
-            baudrate=self.baudrate,
-            bytesize=serial.EIGHTBITS,
-            parity=serial.PARITY_NONE,
-            stopbits=serial.STOPBITS_ONE,
-            timeout=self.response_timeout,
-            write_timeout=self.response_timeout,
-        )
-        print(f"collector-uart4 opened {self.serial_port} @ {self.baudrate} 8N1")
-        return self._serial
-
     def _close_serial(self) -> None:
-        if self._serial:
-            try:
-                self._serial.close()
-            finally:
-                self._serial = None
+        with self._serial_lock:
+            if self._serial:
+                try:
+                    self._serial.close()
+                finally:
+                    self._serial = None
 
     def _update_equipment_types(self, system_words: list[int]) -> None:
         selector_index = SYSTEM_OILFREE_SELECTOR_OFFSET // 2
@@ -225,17 +231,18 @@ class RS485Collector(BaseCollector):
             self._is_injection[index] = not bool(oilfree_selector & (1 << index))
 
     def _poll_address(self, port: serial.Serial, mem_addr: int) -> list[int] | None:
-        request = build_full_read_request(mem_addr)
-        port.reset_input_buffer()
-        port.write(request)
-        port.flush()
-        self._debug("tx", request)
+        with self._serial_lock:
+            request = build_full_read_request(mem_addr)
+            port.reset_input_buffer()
+            port.write(request)
+            port.flush()
+            self._debug("tx", request)
 
-        try:
-            frame = self._read_frame(port)
-        except Uart4ProtocolError as exc:
-            print(f"collector-uart4 addr 0x{mem_addr:02X} no valid response: {exc}")
-            return None
+            try:
+                frame = self._read_frame(port)
+            except Uart4ProtocolError as exc:
+                print(f"collector-uart4 addr 0x{mem_addr:02X} no valid response: {exc}")
+                return None
 
         self._debug("rx", frame)
         command = frame[1]
@@ -269,42 +276,90 @@ class RS485Collector(BaseCollector):
             data = bytes_from_hex(str(write["data_hex"])) if "data_hex" in write else None
             value = int(write.get("value", 0))
             request = build_map_write_request(address, value, length, data)
-            port.reset_input_buffer()
-            port.write(request)
-            port.flush()
-            self._debug("tx-control", request)
+            with self._serial_lock:
+                port.reset_input_buffer()
+                port.write(request)
+                port.flush()
+                self._debug("tx-control", request)
+                self._read_control_response(port, address)
             time.sleep(self.write_request_delay)
 
-    def _read_frame(self, port: serial.Serial) -> bytes:
-        deadline = time.monotonic() + self.response_timeout
+    def _read_control_response(self, port: serial.Serial, address: int) -> None:
+        if self.write_response_timeout <= 0:
+            return
+        try:
+            frame = self._read_frame(port, self.write_response_timeout)
+        except Uart4ProtocolError as exc:
+            print(f"collector-uart4 write addr 0x{address:04X} no immediate response: {exc}")
+            return
 
-        while time.monotonic() < deadline:
-            first = port.read(1)
-            if not first:
-                continue
-            if first[0] != FRAME_START:
-                continue
+        self._debug("rx-control", frame)
+        try:
+            self._apply_response_frame(frame, expected_mem_addr=(address >> 8) & 0xFF)
+        except Uart4ProtocolError as exc:
+            print(f"collector-uart4 write addr 0x{address:04X} response ignored: {exc}")
 
-            command_raw = port.read(1)
-            if len(command_raw) != 1:
-                break
-            command = command_raw[0]
+    def _apply_response_frame(self, frame: bytes, expected_mem_addr: int | None = None) -> list[int]:
+        command = frame[1]
+        if command == CMD_FULL_READ:
+            response_mem_addr, start_offset, words = decode_full_read_response(frame)
+            if expected_mem_addr is not None and response_mem_addr != expected_mem_addr:
+                raise Uart4ProtocolError(
+                    f"response address 0x{response_mem_addr:02X} did not match expected 0x{expected_mem_addr:02X}"
+                )
+            merged = merge_words([], start_offset, words)
+            self._word_cache[response_mem_addr] = merged
+            return merged
 
-            if command == CMD_FULL_READ:
-                header_rest = read_exact(port, 4)
-                byte_count = (header_rest[2] << 8) | header_rest[3]
-                payload_crc = read_exact(port, byte_count + 2)
-                frame = first + command_raw + header_rest + payload_crc
-            elif command == CMD_CHANGED_DATA:
-                len_bytes = read_exact(port, 2)
-                byte_count = (len_bytes[0] << 8) | len_bytes[1]
-                payload_crc = read_exact(port, byte_count + 2)
-                frame = first + command_raw + len_bytes + payload_crc
-            else:
-                continue
+        if command == CMD_CHANGED_DATA:
+            updates = decode_changed_data_response(frame)
+            if expected_mem_addr is None:
+                raise Uart4ProtocolError("changed-data response needs an expected address")
+            existing = self._word_cache.get(expected_mem_addr, [])
+            merged = apply_word_updates(existing, updates)
+            self._word_cache[expected_mem_addr] = merged
+            return merged
 
-            validate_crc(frame)
-            return frame
+        raise Uart4ProtocolError(f"unsupported command 0x{command:02X}")
+
+    def _read_frame(self, port: serial.Serial, timeout: float | None = None) -> bytes:
+        effective_timeout = self.response_timeout if timeout is None else timeout
+        deadline = time.monotonic() + effective_timeout
+        previous_timeout = port.timeout
+        if timeout is not None:
+            port.timeout = timeout
+
+        try:
+            while time.monotonic() < deadline:
+                first = port.read(1)
+                if not first:
+                    continue
+                if first[0] != FRAME_START:
+                    continue
+
+                command_raw = port.read(1)
+                if len(command_raw) != 1:
+                    break
+                command = command_raw[0]
+
+                if command == CMD_FULL_READ:
+                    header_rest = read_exact(port, 4)
+                    byte_count = (header_rest[2] << 8) | header_rest[3]
+                    payload_crc = read_exact(port, byte_count + 2)
+                    frame = first + command_raw + header_rest + payload_crc
+                elif command == CMD_CHANGED_DATA:
+                    len_bytes = read_exact(port, 2)
+                    byte_count = (len_bytes[0] << 8) | len_bytes[1]
+                    payload_crc = read_exact(port, byte_count + 2)
+                    frame = first + command_raw + len_bytes + payload_crc
+                else:
+                    continue
+
+                validate_crc(frame)
+                return frame
+        finally:
+            if timeout is not None:
+                port.timeout = previous_timeout
 
         raise Uart4ProtocolError("timeout waiting for UART4 frame")
 

@@ -1,4 +1,5 @@
 import time
+import threading
 
 from app.base import BaseCollector
 from app.client import BackendClient
@@ -16,7 +17,8 @@ def build_collector() -> tuple[BaseCollector, int]:
         comp_qty = get_int_env("RS485_COMP_QTY", 8)
         response_timeout = float(get_env("RS485_RESPONSE_TIMEOUT_SECONDS", "0.8"))
         inter_request_delay = float(get_env("RS485_INTER_REQUEST_DELAY_SECONDS", "0.05"))
-        write_request_delay = float(get_env("RS485_WRITE_REQUEST_DELAY_SECONDS", "0.25"))
+        write_request_delay = float(get_env("RS485_WRITE_REQUEST_DELAY_SECONDS", "0.05"))
+        write_response_timeout = float(get_env("RS485_WRITE_RESPONSE_TIMEOUT_SECONDS", "0.25"))
         debug_hex = get_env("RS485_DEBUG_HEX", "true").strip().lower() in ("1", "true", "yes", "on")
         return (
             RS485Collector(
@@ -26,6 +28,7 @@ def build_collector() -> tuple[BaseCollector, int]:
                 response_timeout=response_timeout,
                 inter_request_delay=inter_request_delay,
                 write_request_delay=write_request_delay,
+                write_response_timeout=write_response_timeout,
                 debug_hex=debug_hex,
             ),
             interval,
@@ -41,6 +44,37 @@ def default_control_api_url(yujin_api_url: str) -> str:
     return "http://backend:8000/api/control"
 
 
+def run_control_loop(
+    collector: BaseCollector,
+    client: BackendClient,
+    command_limit: int,
+    command_delay: float,
+    poll_seconds: float,
+) -> None:
+    while True:
+        try:
+            commands = client.fetch_control_commands(limit=command_limit)
+        except Exception as exc:
+            print(f"collector control command fetch error: {exc}")
+            commands = []
+
+        for command in commands:
+            try:
+                collector.execute_control_command(command)
+                client.ack_control_command(command.id, "completed")
+                print(f"collector control command {command.id} completed")
+            except Exception as exc:
+                error = str(exc)
+                try:
+                    client.ack_control_command(command.id, "failed", error)
+                except Exception as ack_exc:
+                    print(f"collector control command {command.id} ack error: {ack_exc}")
+                print(f"collector control command {command.id} failed: {error}")
+            time.sleep(command_delay)
+
+        time.sleep(poll_seconds)
+
+
 def main() -> None:
     api_url = get_env("COLLECTOR_API_URL", "http://backend:8000/api/ingest/telemetry")
     yujin_api_url = get_env("COLLECTOR_YUJIN_API_URL", "http://backend:8000/api/yujin/ingest-map")
@@ -48,7 +82,8 @@ def main() -> None:
     publish_telemetry = get_env("COLLECTOR_PUBLISH_TELEMETRY", "false").strip().lower() in ("1", "true", "yes", "on")
     request_timeout = float(get_env("COLLECTOR_REQUEST_TIMEOUT_SECONDS", "15"))
     control_command_limit = get_int_env("COLLECTOR_CONTROL_COMMAND_LIMIT", 1)
-    control_command_delay = float(get_env("COLLECTOR_CONTROL_COMMAND_DELAY_SECONDS", "0.5"))
+    control_command_delay = float(get_env("COLLECTOR_CONTROL_COMMAND_DELAY_SECONDS", "0.05"))
+    control_poll_seconds = float(get_env("COLLECTOR_CONTROL_POLL_SECONDS", "0.1"))
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
     collector, interval = build_collector()
@@ -59,6 +94,12 @@ def main() -> None:
         control_api_url=control_api_url,
         request_timeout=request_timeout,
     )
+
+    threading.Thread(
+        target=run_control_loop,
+        args=(collector, client, control_command_limit, control_command_delay, control_poll_seconds),
+        daemon=True,
+    ).start()
 
     while True:
         batch = collector.poll()
@@ -75,26 +116,6 @@ def main() -> None:
                 print(f"sent yujin map batch with {len(batch.map_values)} values")
             except Exception as exc:
                 print(f"collector yujin map publish error: {exc}")
-
-        try:
-            commands = client.fetch_control_commands(limit=control_command_limit)
-        except Exception as exc:
-            print(f"collector control command fetch error: {exc}")
-            commands = []
-
-        for command in commands:
-            try:
-                collector.execute_control_command(command)
-                client.ack_control_command(command.id, "completed")
-                print(f"collector control command {command.id} completed")
-                time.sleep(control_command_delay)
-            except Exception as exc:
-                error = str(exc)
-                try:
-                    client.ack_control_command(command.id, "failed", error)
-                except Exception as ack_exc:
-                    print(f"collector control command {command.id} ack error: {ack_exc}")
-                print(f"collector control command {command.id} failed: {error}")
         time.sleep(interval)
 
 
