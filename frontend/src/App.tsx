@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.19";
+const APP_VERSION = "0.1.20";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -165,7 +165,7 @@ export default function App() {
           <section className="relative min-h-0">
             {showMainScreen ? (
               <>
-                <div className="grid h-full grid-cols-4 grid-rows-2 gap-[3px]">
+                <div className="grid h-full grid-cols-4 grid-rows-2 gap-0">
                   {dashboard.compressors.map((compressor) => (
                     <CompressorCard key={compressor.id} compressor={compressor} />
                   ))}
@@ -415,25 +415,21 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
   const thirdValue = compressor.inverter ? `${compressor.rpm ?? 0} rpm` : `${compressor.loadPressure.toFixed(1)} bar`;
 
   return (
-    <article className="relative min-h-0 overflow-hidden bg-white p-[3px]">
-      <div className="grid h-full grid-rows-[44px_1fr_1fr_1fr_1fr_1fr] gap-[3px] border border-[#75b4ee] bg-[#d8ecff] p-[3px] shadow-[inset_0_0_0_1px_#ffffff]">
+    <article className="relative min-h-0 overflow-hidden bg-white">
+      <div className="grid h-full grid-rows-[42px_1fr_1fr_1fr_1fr_1fr] gap-[2px] border border-[#75b4ee] bg-[#d8ecff] p-[2px] shadow-[inset_0_0_0_1px_#ffffff]">
         <div className="flex items-center justify-center overflow-hidden border border-[#75b4ee] bg-[#b3d4ff] px-[6px] text-center text-[20px] font-bold leading-none text-[#0d4da5] shadow-[2px_2px_1px_#ababab]">
           {compressor.name} ({compressor.model})
         </div>
         <MetricRow label="압력" value={`${compressor.pressure.toFixed(1)} bar`} size="large" />
         <TripleRow label={pressureLabel} valueA={secondValue} valueB={thirdValue} />
         <MetricRow label="온도" value={`${compressor.temperature.toFixed(1)} ℃`} size="large" />
-        <div className="grid grid-cols-2 gap-[3px]">
+        <div className="grid grid-cols-4 gap-[2px]">
           <StatusCell tone={compressor.local ? "local" : "remote"}>{compressor.local ? "로 컬" : "리모트"}</StatusCell>
           <StatusCell tone={compressor.running ? "running" : "stop"}>{compressor.running ? "부 하" : "정 지"}</StatusCell>
+          {compressor.alarm ? <FlagCell tone="alarm">알 람</FlagCell> : <FlagPlaceholder />}
+          {compressor.fault ? <FlagCell tone="fault">고 장</FlagCell> : <FlagPlaceholder />}
         </div>
         <MetricRow label="총 운전시간" value={`${compressor.totalHours.toLocaleString("ko-KR")} hr`} />
-        {compressor.alarm || compressor.fault ? (
-          <div className="absolute bottom-[52px] left-[2px] right-[2px] grid h-[34px] grid-cols-2 gap-[2px]">
-            {compressor.alarm ? <FlagCell tone="alarm">알 람</FlagCell> : <span />}
-            {compressor.fault ? <FlagCell tone="fault">고 장</FlagCell> : <span />}
-          </div>
-        ) : null}
       </div>
       {!compressor.connected ? (
         <div className="absolute inset-[2px] flex items-center justify-center bg-white">
@@ -502,7 +498,7 @@ function StatusCell({ tone, children }: { tone: "local" | "remote" | "running" |
   }[tone];
 
   return (
-    <div className={`flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] px-[3px] text-center text-[22px] font-bold ${toneClass}`}>
+    <div className={`flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] px-[2px] text-center text-[19px] font-bold leading-none ${toneClass}`}>
       {children}
     </div>
   );
@@ -512,10 +508,14 @@ function FlagCell({ tone, children }: { tone: "alarm" | "fault"; children: React
   const activeClass = tone === "alarm" ? "bg-[#ffff00] text-black" : "bg-[#ff6565] text-black";
 
   return (
-    <div className={`flex min-h-0 animate-pulse items-center justify-center overflow-hidden px-[3px] text-center text-[18px] font-bold ${activeClass}`}>
+    <div className={`flex min-h-0 animate-pulse items-center justify-center overflow-hidden border border-[#75b4ee] px-[2px] text-center text-[18px] font-black leading-none ${activeClass}`}>
       {children}
     </div>
   );
+}
+
+function FlagPlaceholder() {
+  return <div className="min-h-0 border border-[#75b4ee] bg-[#eef7ff]" />;
 }
 
 function AlarmStrip({ tone, text }: { tone: DashboardState["lowPressureAlarm"]; text: string }) {
