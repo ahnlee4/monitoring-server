@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.11";
+const APP_VERSION = "0.1.12";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -755,7 +755,7 @@ function HeaderCell({ children }: { children: ReactNode }) {
 
 function DialogShell({ children, onClose, title, wide = false }: { children: ReactNode; onClose: () => void; title: string; wide?: boolean }) {
   return (
-    <div className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 pt-[42px]">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-[24px]">
       <section className={`${wide ? "w-[1040px]" : "w-[560px]"} overflow-hidden border border-[#75b4ee] bg-white shadow-[0_10px_25px_rgba(0,0,0,0.35)]`}>
         <div className="grid h-[54px] grid-cols-[1fr_120px] bg-[#3374ce]">
           <div className="flex items-center justify-center text-[24px] font-bold text-white">{title}</div>
@@ -774,7 +774,7 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
   const [selectedFactory, setSelectedFactory] = useState(0);
 
   return (
-    <div className="absolute inset-0 z-50 flex items-start justify-center bg-black/55 pt-[92px]">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-[24px]">
       <section className="w-[620px] overflow-hidden rounded-[18px] border border-[#81b9ed] bg-[linear-gradient(150deg,#fafdff_0%,#e3f2ff_100%)] shadow-[0_20px_44px_rgba(4,31,69,0.42),inset_0_1px_0_rgba(255,255,255,0.92)]">
         <div className="grid h-[82px] grid-cols-[74px_1fr_84px] items-center border-b border-[#b7d8f4] bg-[linear-gradient(90deg,#1b64b2_0%,#3995dd_100%)] px-[14px]">
           <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[16px] bg-white/18 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]">
