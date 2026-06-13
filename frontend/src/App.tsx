@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.9";
+const APP_VERSION = "0.1.10";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -675,9 +675,8 @@ function QuickButtons({
               <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[9px] bg-[#e4f2ff] shadow-[inset_0_0_0_1px_#bfdbf5]">
                 <img src={item.icon} alt="" className="h-[29px] w-[29px] object-contain" />
               </span>
-              <span className="flex min-w-0 flex-col justify-center">
+              <span className="flex min-w-0 items-center">
                 <span className="text-[18px] font-black leading-none text-[#163d69]">{item.label}</span>
-                <span className="mt-[4px] h-[2px] w-[32px] rounded-full bg-[#48a4e8] opacity-70 transition-all group-hover:w-[58px]" />
               </span>
             </button>
           ))}
