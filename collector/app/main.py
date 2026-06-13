@@ -32,10 +32,17 @@ def build_collector() -> tuple[BaseCollector, int]:
     raise ValueError(f"Unsupported collector driver: {driver}")
 
 
+def default_control_api_url(yujin_api_url: str) -> str:
+    suffix = "/api/yujin/ingest-map"
+    if yujin_api_url.endswith(suffix):
+        return f"{yujin_api_url[: -len(suffix)]}/api/control"
+    return "http://backend:8000/api/control"
+
+
 def main() -> None:
     api_url = get_env("COLLECTOR_API_URL", "http://backend:8000/api/ingest/telemetry")
     yujin_api_url = get_env("COLLECTOR_YUJIN_API_URL", "http://backend:8000/api/yujin/ingest-map")
-    control_api_url = get_env("COLLECTOR_CONTROL_API_URL", "http://backend:8000/api/control")
+    control_api_url = get_env("COLLECTOR_CONTROL_API_URL", default_control_api_url(yujin_api_url))
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
     collector, interval = build_collector()
