@@ -16,7 +16,6 @@ def build_collector() -> tuple[BaseCollector, int]:
         comp_qty = get_int_env("RS485_COMP_QTY", 8)
         response_timeout = float(get_env("RS485_RESPONSE_TIMEOUT_SECONDS", "0.8"))
         inter_request_delay = float(get_env("RS485_INTER_REQUEST_DELAY_SECONDS", "0.05"))
-        full_read_bytes = get_int_env("RS485_FULL_READ_BYTES", 166)
         debug_hex = get_env("RS485_DEBUG_HEX", "true").strip().lower() in ("1", "true", "yes", "on")
         return (
             RS485Collector(
@@ -25,7 +24,6 @@ def build_collector() -> tuple[BaseCollector, int]:
                 comp_qty=comp_qty,
                 response_timeout=response_timeout,
                 inter_request_delay=inter_request_delay,
-                full_read_bytes=full_read_bytes,
                 debug_hex=debug_hex,
             ),
             interval,
