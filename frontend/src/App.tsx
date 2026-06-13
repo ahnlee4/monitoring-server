@@ -287,7 +287,7 @@ export default function App() {
 function buildDashboardFromMap(values: Record<string, YujinMapValue>): DashboardState {
   const compressors = Array.from({ length: 8 }, (_, index) => buildCompressorFromMap(values, index));
   const connectedMask = mapNumber(values, "0002", maskFromCompressors(compressors));
-  const compQty = clamp(Math.trunc(mapNumber(values, "004E", 8)), 1, 8);
+  const compQty = clamp(Math.trunc(mapNumber(values, "004E", 8)), 0, 8);
   const mainPressure = scale10(mapNumber(values, "0000", compressors[0]?.pressure * 10 || 0));
   const optionDevice = mapNumber(values, "004A", 0);
   const lowAlarmStep = mapNumber(values, "0054", 0);
@@ -298,12 +298,12 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
     mainPressure,
     lowPressureAlarm: lowAlarmStep > 0 ? "warning" : "none",
     control: {
-      noLoadPressure: scale10(mapNumber(values, "0016", mockDashboard.control.noLoadPressure * 10)),
-      loadPressure: scale10(mapNumber(values, "0018", mockDashboard.control.loadPressure * 10)),
-      pressureGap: scale10(mapNumber(values, "001A", mockDashboard.control.pressureGap * 10)),
-      runUnits: Math.trunc(mapNumber(values, "0026", mockDashboard.control.runUnits)),
-      changeHours: Math.trunc(mapNumber(values, "0046", mockDashboard.control.changeHours)),
-      remainMinutes: Math.trunc(mapNumber(values, "0048", mockDashboard.control.remainMinutes)),
+      noLoadPressure: scale10(mapNumber(values, "0016", 0)),
+      loadPressure: scale10(mapNumber(values, "0018", 0)),
+      pressureGap: scale10(mapNumber(values, "001A", 0)),
+      runUnits: Math.trunc(mapNumber(values, "0026", 0)),
+      changeHours: Math.trunc(mapNumber(values, "0046", 0)),
+      remainMinutes: Math.trunc(mapNumber(values, "0048", 0)),
     },
     options: buildOptions(optionDevice),
     compressors: compressors.map((compressor, index) => ({
@@ -324,20 +324,20 @@ function buildCompressorFromMap(values: Record<string, YujinMapValue>, index: nu
   const read = (oilOffset: string, injectionOffset: string = oilOffset, fallbackValue = 0) =>
     mapNumber(values, `${oilPrefix}${oilOffset}`, mapNumber(values, `${injectionPrefix}${injectionOffset}`, fallbackValue));
 
-  const pressure = scale10(read("00", "00", fallback.pressure * 10));
-  const temperature = scale10(read("0C", "02", fallback.temperature * 10));
-  const noLoadPressure = scale10(read("4E", "26", fallback.noLoadPressure * 10));
-  const loadPressure = scale10(read("50", "28", fallback.loadPressure * 10));
-  const controlPressure = scale10(read("46", "20", (fallback.controlPressure ?? fallback.pressure) * 10));
-  const rpm = Math.trunc(read("38", "04", fallback.rpm ?? 0));
+  const pressure = scale10(read("00", "00", 0));
+  const temperature = scale10(read("0C", "02", 0));
+  const noLoadPressure = scale10(read("4E", "26", 0));
+  const loadPressure = scale10(read("50", "28", 0));
+  const controlPressure = scale10(read("46", "20", 0));
+  const rpm = Math.trunc(read("38", "04", 0));
   const alarm = read("28", "0A", 0);
   const faultLow = read("2A", "0C", 0);
   const faultHigh = read("2C", "0C", 0);
   const faultInv = read("2E", "0E", 0);
   const runMode = read("3A", "18", 0);
   const cpStatus = read("30", "16", 0);
-  const extRunStop = read("44", "1A", fallback.local ? 0 : 1);
-  const runHoursLow = read("9A", "68", fallback.totalHours);
+  const extRunStop = read("44", "1A", 0);
+  const runHoursLow = read("9A", "68", 0);
   const runHoursHigh = read("9C", "6A", 0);
 
   return {
