@@ -36,6 +36,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   frontend:
     image: ghcr.io/ahnlee4/monitoring-frontend:latest
@@ -69,7 +70,8 @@ services:
       RS485_INTER_REQUEST_DELAY_SECONDS: ${RS485_INTER_REQUEST_DELAY_SECONDS:-0.05}
       RS485_DEBUG_HEX: ${RS485_DEBUG_HEX:-true}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     volumes:
       - /dev:/dev
 
