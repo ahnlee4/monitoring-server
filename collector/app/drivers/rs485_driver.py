@@ -162,6 +162,13 @@ class RS485Collector(BaseCollector):
                 self._update_equipment_types(system_words)
                 map_values.extend(words_to_generic_map_values(0x00, system_words))
                 time.sleep(self.inter_request_delay)
+            else:
+                return CollectorBatch(
+                    source="collector-uart4",
+                    recorded_at=recorded_at,
+                    frames=frames,
+                    map_values=map_values,
+                )
 
             for comp_index in range(self.comp_qty):
                 mem_addr = MEM_ADDR_COMP1 + comp_index
