@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.7";
+const APP_VERSION = "0.1.8";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -756,7 +756,7 @@ function HeaderCell({ children }: { children: ReactNode }) {
 
 function DialogShell({ children, onClose, title, wide = false }: { children: ReactNode; onClose: () => void; title: string; wide?: boolean }) {
   return (
-    <div className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 pt-[94px]">
+    <div className="absolute inset-0 z-50 flex items-start justify-center bg-black/60 pt-[42px]">
       <section className={`${wide ? "w-[1040px]" : "w-[560px]"} overflow-hidden border border-[#75b4ee] bg-white shadow-[0_10px_25px_rgba(0,0,0,0.35)]`}>
         <div className="grid h-[54px] grid-cols-[1fr_120px] bg-[#3374ce]">
           <div className="flex items-center justify-center text-[24px] font-bold text-white">{title}</div>
@@ -847,36 +847,36 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <DialogShell onClose={onClose} title="설정" wide>
-      <div className="grid max-h-[650px] gap-[8px] overflow-y-auto bg-[#eef7ff] p-[8px]">
+      <div className="grid max-h-[690px] gap-[6px] overflow-y-auto bg-[#eef7ff] p-[6px]">
         <div className="grid grid-cols-2 gap-[4px] border border-[#75b4ee] bg-white p-[6px]">
-          <SettingRow label="Connect IP Setting" value="121.164.120.200" />
-          <SettingRow label="Port Setting" value="1502" />
-          <SettingRow label="Login Pw Setting" value="1234" />
-          <SettingRow label="Setting Pw Setting" value="471112" />
+          <PlainSettingRow label="Connect IP Setting" value="121.164.120.200" />
+          <PlainSettingRow label="Port Setting" value="1502" />
+          <PlainSettingRow label="Login Pw Setting" value="1234" />
+          <PlainSettingRow label="Setting Pw Setting" value="471112" />
         </div>
         <div className="grid gap-[4px] border border-[#75b4ee] bg-white p-[6px]">
           <SectionTitle>사용모드 / 정렬 설정</SectionTitle>
           {modes.map(([no, a, b, c, index]) => (
-            <div key={no} className="grid h-[42px] grid-cols-[44px_1fr_1fr_1fr_80px] gap-[3px]">
+            <div key={no} className="grid h-[32px] grid-cols-[44px_1fr_1fr_1fr_80px] gap-[3px]">
               <div className="flex items-center justify-center border border-[#d2e8ff] font-bold">{no}</div>
               {[a, b, c, index].map((value, idx) => (
-                <div key={idx} className="flex items-center justify-center border border-[#d2e8ff] bg-[#fbfdff] text-[18px] font-bold">{value}</div>
+                <div key={idx} className="flex items-center justify-center border border-[#d2e8ff] bg-[#fbfdff] text-[16px] font-bold">{value}</div>
               ))}
             </div>
           ))}
-          <div className="grid h-[46px] grid-cols-[1fr_56px_70px_56px_110px] gap-[4px]">
-            <div className="flex items-center justify-center text-[19px] font-bold text-[#0d4da5]">사용모드 개수 설정</div>
+          <div className="grid h-[38px] grid-cols-[1fr_56px_70px_56px_110px] gap-[4px]">
+            <div className="flex items-center justify-center text-[17px] font-bold text-[#0d4da5]">사용모드 개수 설정</div>
             <ChoiceButton>-</ChoiceButton>
-            <div className="flex items-center justify-center border border-[#75b4ee] bg-white text-[24px] font-bold">1</div>
+            <div className="flex items-center justify-center border border-[#75b4ee] bg-white text-[20px] font-bold">1</div>
             <ChoiceButton>+</ChoiceButton>
-            <button className="bg-[#3374ce] text-[20px] font-bold text-white" type="button">저장</button>
+            <button className="bg-[#3374ce] text-[18px] font-bold text-white" type="button">저장</button>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-[8px]">
           <div className="grid gap-[4px] border border-[#75b4ee] bg-white p-[6px]">
             <SectionTitle>공장 정보</SectionTitle>
             {factories.map((factory) => (
-              <div key={factory} className="grid h-[38px] grid-cols-[120px_1fr]">
+              <div key={factory} className="grid h-[32px] grid-cols-[120px_1fr]">
                 <div className="flex items-center justify-center border border-[#d2e8ff] font-bold">{factory}</div>
                 <div className="flex items-center px-[8px] border border-[#d2e8ff]">192.168.0.10</div>
               </div>
@@ -884,8 +884,8 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
           <div className="grid content-start gap-[6px] border border-[#75b4ee] bg-white p-[6px]">
             <SectionTitle>DIO BIT 설정</SectionTitle>
-            <SettingRow label="BIT0" value="운전" />
-            <SettingRow label="BIT4" value="고장" />
+            <PlainSettingRow label="BIT0" value="운전" />
+            <PlainSettingRow label="BIT4" value="고장" />
           </div>
         </div>
       </div>
@@ -903,8 +903,17 @@ function SettingRow({ label, unit = "", value }: { label: string; unit?: string;
   );
 }
 
+function PlainSettingRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-h-[36px] grid-cols-[1fr_210px] border border-[#d2e8ff] bg-white">
+      <div className="flex items-center justify-center bg-[#fbfdff] px-[6px] text-center text-[15px] font-bold">{label}</div>
+      <div className="flex items-center justify-center border-l border-[#d2e8ff] px-[8px] text-center text-[18px] font-bold text-[#0d4da5]">{value}</div>
+    </div>
+  );
+}
+
 function SectionTitle({ children }: { children: ReactNode }) {
-  return <div className="flex h-[34px] items-center justify-center bg-[#b3d4ff] text-[18px] font-bold text-[#0d4da5]">{children}</div>;
+  return <div className="flex h-[30px] items-center justify-center bg-[#b3d4ff] text-[17px] font-bold text-[#0d4da5]">{children}</div>;
 }
 
 function ChoiceButton({ active = false, children }: { active?: boolean; children: ReactNode }) {
