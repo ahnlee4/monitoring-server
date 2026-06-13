@@ -41,8 +41,6 @@ type DashboardState = {
 };
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const BUILD_MARKER = "LIVE MAP ONLY / no mock data";
-
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -162,9 +160,6 @@ export default function App() {
               {dashboard.compressors.map((compressor) => (
                 <CompressorCard key={compressor.id} compressor={compressor} />
               ))}
-            </div>
-            <div className="absolute right-[6px] top-[4px] z-20 rounded bg-white/80 px-[6px] py-[2px] text-[11px] font-bold text-[#0d4da5]">
-              {BUILD_MARKER}
             </div>
             {lowPressureText ? <AlarmStrip tone={dashboard.lowPressureAlarm} text={lowPressureText} /> : null}
           </section>
@@ -365,15 +360,15 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
   const thirdValue = compressor.inverter ? `${compressor.rpm ?? 0} rpm` : `${compressor.loadPressure.toFixed(1)} bar`;
 
   return (
-    <article className="relative min-h-0 overflow-hidden bg-white p-[2px]">
-      <div className="grid h-full grid-rows-[46px_1fr_1fr_1fr_1fr_1fr] gap-[2px] border border-[#8ec3f5] bg-white">
-        <div className="flex items-center justify-center border border-[#8ec3f5] bg-[#b3d4ff] px-[4px] text-center text-[21px] font-bold text-[#0d4da5] shadow-[2px_2px_1px_#ababab]">
+    <article className="relative min-h-0 overflow-hidden bg-white p-[3px]">
+      <div className="grid h-full grid-rows-[44px_1fr_1fr_1fr_1fr_1fr] gap-[3px] border border-[#75b4ee] bg-[#d8ecff] p-[3px] shadow-[inset_0_0_0_1px_#ffffff]">
+        <div className="flex items-center justify-center overflow-hidden border border-[#75b4ee] bg-[#b3d4ff] px-[6px] text-center text-[20px] font-bold leading-none text-[#0d4da5] shadow-[2px_2px_1px_#ababab]">
           {compressor.name} ({compressor.model})
         </div>
         <MetricRow label="압력" value={`${compressor.pressure.toFixed(1)} bar`} size="large" />
         <TripleRow label={pressureLabel} valueA={secondValue} valueB={thirdValue} />
         <MetricRow label="온도" value={`${compressor.temperature.toFixed(1)} ℃`} size="large" />
-        <div className="grid grid-cols-2 gap-[2px]">
+        <div className="grid grid-cols-2 gap-[3px]">
           <StatusCell tone={compressor.local ? "local" : "remote"}>{compressor.local ? "로 컬" : "리모트"}</StatusCell>
           <StatusCell tone={compressor.running ? "running" : "stop"}>{compressor.running ? "부 하" : "정 지"}</StatusCell>
         </div>
@@ -396,16 +391,18 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
 
 function MetricRow({ label, value, size = "normal" }: { label: string; value: string; size?: "normal" | "large" }) {
   return (
-    <div className="grid grid-cols-[0.82fr_1.18fr] gap-[2px]">
+    <div className="grid min-h-0 grid-cols-[96px_1fr_1fr] gap-[3px]">
       <MetricLabel>{label}</MetricLabel>
-      <MetricValue large={size === "large"}>{value}</MetricValue>
+      <MetricValue className="col-span-2" large={size === "large"}>
+        {value}
+      </MetricValue>
     </div>
   );
 }
 
 function TripleRow({ label, valueA, valueB }: { label: string; valueA: string; valueB: string }) {
   return (
-    <div className="grid grid-cols-[0.95fr_1fr_1fr] gap-[2px]">
+    <div className="grid min-h-0 grid-cols-[96px_1fr_1fr] gap-[3px]">
       <MetricLabel>{label}</MetricLabel>
       <MetricValue>{valueA}</MetricValue>
       <MetricValue>{valueB}</MetricValue>
@@ -415,18 +412,26 @@ function TripleRow({ label, valueA, valueB }: { label: string; valueA: string; v
 
 function MetricLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-0 items-center justify-center overflow-hidden border border-[#8ec3f5] bg-[#b0d2ff] px-[3px] text-center text-[18px] font-bold leading-tight">
+    <div className="flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] bg-[#b0d2ff] px-[4px] text-center text-[17px] font-bold leading-tight text-[#13243a]">
       {children}
     </div>
   );
 }
 
-function MetricValue({ children, large = false }: { children: ReactNode; large?: boolean }) {
+function MetricValue({
+  children,
+  large = false,
+  className = "",
+}: {
+  children: ReactNode;
+  large?: boolean;
+  className?: string;
+}) {
   return (
     <div
-      className={`flex min-h-0 items-center justify-center overflow-hidden border border-[#8ec3f5] bg-white px-[3px] text-center font-bold leading-tight ${
-        large ? "text-[22px]" : "text-[17px]"
-      }`}
+      className={`flex min-h-0 items-center justify-end overflow-hidden border border-[#75b4ee] bg-white px-[10px] text-right font-bold leading-tight tracking-[-0.01em] ${
+        large ? "text-[23px]" : "text-[18px]"
+      } ${className}`}
     >
       {children}
     </div>
@@ -442,7 +447,7 @@ function StatusCell({ tone, children }: { tone: "local" | "remote" | "running" |
   }[tone];
 
   return (
-    <div className={`flex min-h-0 items-center justify-center overflow-hidden px-[3px] text-center text-[22px] font-bold ${toneClass}`}>
+    <div className={`flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] px-[3px] text-center text-[22px] font-bold ${toneClass}`}>
       {children}
     </div>
   );
@@ -462,7 +467,7 @@ function AlarmStrip({ tone, text }: { tone: DashboardState["lowPressureAlarm"]; 
   const toneClass = tone === "reserve" ? "text-[#1c55cc]" : "text-[#d90000]";
 
   return (
-      <div className={`absolute bottom-0 left-0 right-0 z-10 h-[44px] bg-[#c1c1c1] text-center text-[30px] font-black leading-[44px] ${toneClass}`}>
+    <div className={`absolute bottom-0 left-0 right-0 z-10 h-[44px] bg-[#c1c1c1] text-center text-[30px] font-black leading-[44px] ${toneClass}`}>
       {text}
     </div>
   );
@@ -478,7 +483,7 @@ function Footer({
   setMenuOpen: (open: boolean) => void;
 }) {
   return (
-    <footer className="relative grid min-h-0 grid-cols-[47px_220px_47px_286px_47px_566px_67px] gap-[0px]">
+    <footer className="relative grid min-h-0 grid-cols-[45px_216px_45px_282px_45px_558px_66px] gap-[2px] bg-white p-[3px]">
       <VerticalTitle>모드</VerticalTitle>
       <ModePanel active={dashboard.sortMode} />
       <VerticalTitle>통합제어</VerticalTitle>
@@ -500,12 +505,12 @@ function VerticalTitle({ children }: { children: string }) {
 
 function ModePanel({ active }: { active: DashboardState["sortMode"] }) {
   return (
-    <div className="grid min-h-0 grid-rows-2 gap-[3px]">
-      <div className="grid grid-cols-2 gap-[3px]">
+    <div className="grid min-h-0 grid-rows-2 gap-[4px] border border-[#9fc9fa] bg-[#eef7ff] p-[3px]">
+      <div className="grid grid-cols-2 gap-[4px]">
         <ModeButton active={active === "setting"}>설정순</ModeButton>
         <ModeButton active={active === "time"}>시간순</ModeButton>
       </div>
-      <div className="grid grid-cols-3 gap-[3px]">
+      <div className="grid grid-cols-3 gap-[4px]">
         <IconButton label="이전" src="/arrow_back_ios_new_24dp.png" />
         <IconButton label="새로고침" src="/refresh_24dp.png" />
         <IconButton label="다음" src="/arrow_forward_ios_24dp.png" />
@@ -517,8 +522,8 @@ function ModePanel({ active }: { active: DashboardState["sortMode"] }) {
 function ModeButton({ active, children }: { active: boolean; children: ReactNode }) {
   return (
     <button
-      className={`rounded-[8px] border text-[22px] font-bold ${
-    active ? "border-[#3374ce] bg-[#3374ce] text-white" : "border-[#3374ce] bg-white text-[#3374ce]"
+      className={`rounded-[6px] border text-[22px] font-bold shadow-[1px_1px_1px_#c2c2c2] ${
+        active ? "border-[#3374ce] bg-[#3374ce] text-white" : "border-[#3374ce] bg-white text-[#3374ce]"
       }`}
       type="button"
     >
@@ -531,7 +536,7 @@ function IconButton({ label, src }: { label: string; src: string }) {
   return (
     <button
       aria-label={label}
-      className="flex items-center justify-center rounded-[8px] border border-[#d6e8ff] bg-white"
+      className="flex items-center justify-center rounded-[6px] border border-[#9fc9fa] bg-white shadow-[1px_1px_1px_#c2c2c2]"
       type="button"
     >
       <img src={src} alt="" className="h-[42px] w-[42px] object-contain" />
@@ -550,13 +555,13 @@ function ControlPanel({ control }: { control: DashboardState["control"] }) {
   ];
 
   return (
-    <div className="grid min-h-0 grid-cols-3 grid-rows-2 gap-[3px]">
+    <div className="grid min-h-0 grid-cols-3 grid-rows-2 gap-[4px] border border-[#9fc9fa] bg-[#eef7ff] p-[3px]">
       {items.map((item) => (
-        <div key={item.label} className="grid min-h-0 grid-rows-[34px_1fr]">
-          <div className="flex items-center justify-center bg-[#8ec3f5] text-center text-[17px] font-bold text-white">
+        <div key={item.label} className="grid min-h-0 grid-rows-[32px_1fr] shadow-[1px_1px_1px_#c2c2c2]">
+          <div className="flex items-center justify-center border border-[#75b4ee] bg-[#8ec3f5] text-center text-[16px] font-bold text-white">
             {item.label}
           </div>
-          <div className="flex items-center justify-center border border-[#8ec3f5] bg-white text-center text-[22px] font-bold">
+          <div className="flex items-center justify-end border border-[#75b4ee] bg-white px-[8px] text-right text-[22px] font-bold">
             {item.value}
           </div>
         </div>
@@ -567,12 +572,12 @@ function ControlPanel({ control }: { control: DashboardState["control"] }) {
 
 function OptionPanel({ options }: { options: DashboardState["options"] }) {
   return (
-    <div className="grid min-h-0 grid-cols-3 grid-rows-5 gap-x-[4px] gap-y-[1px] overflow-hidden border border-[#9fc9fa] bg-white p-[3px]">
+    <div className="grid min-h-0 grid-cols-3 grid-rows-5 gap-x-[6px] gap-y-[2px] overflow-hidden border border-[#9fc9fa] bg-[#fbfdff] px-[7px] py-[5px]">
       {options
         .filter((option) => option.visible !== false)
         .map((option) => (
-          <label key={option.label} className="flex min-h-0 items-center gap-[3px] overflow-hidden text-[12px] font-semibold leading-tight">
-            <input checked={option.checked} className="h-[13px] w-[13px] shrink-0 accent-[#3175ce]" readOnly type="checkbox" />
+          <label key={option.label} className="flex min-h-0 items-center gap-[4px] overflow-hidden text-[12px] font-semibold leading-tight">
+            <input checked={option.checked} className="h-[14px] w-[14px] shrink-0 accent-[#3175ce]" readOnly type="checkbox" />
             <span className="line-clamp-2">{option.label}</span>
           </label>
         ))}
@@ -588,17 +593,17 @@ function QuickButtons({
   setMenuOpen: (open: boolean) => void;
 }) {
   return (
-    <div className="relative grid min-h-0 grid-rows-2 gap-[3px]">
-      <button className="flex items-center justify-center bg-transparent" type="button" aria-label="장비">
-        <img src="/device.png" alt="" className="h-[64px] w-[64px] object-contain" />
+    <div className="relative grid min-h-0 grid-rows-2 gap-[4px] border border-[#9fc9fa] bg-[#eef7ff] p-[3px]">
+      <button className="flex items-center justify-center rounded-[6px] bg-white shadow-[1px_1px_1px_#c2c2c2]" type="button" aria-label="장비">
+        <img src="/device.png" alt="" className="h-[56px] w-[56px] object-contain" />
       </button>
       <button
-        className="flex items-center justify-center bg-transparent"
+        className="flex items-center justify-center rounded-[6px] bg-white shadow-[1px_1px_1px_#c2c2c2]"
         onClick={() => setMenuOpen(!menuOpen)}
         type="button"
         aria-label="메뉴"
       >
-        <img src="/menu.png" alt="" className="h-[64px] w-[64px] object-contain" />
+        <img src="/menu.png" alt="" className="h-[56px] w-[56px] object-contain" />
       </button>
       {menuOpen ? (
         <div className="absolute bottom-[70px] right-0 z-20 grid w-[180px] gap-[3px]">
