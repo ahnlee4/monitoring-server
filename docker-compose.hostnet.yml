@@ -1,0 +1,37 @@
+services:
+  db:
+    network_mode: host
+    ports: []
+
+  backend:
+    build:
+      context: ./backend
+      network: host
+    network_mode: host
+    environment:
+      DATABASE_URL: ${HOST_DATABASE_URL:-postgresql+psycopg2://monitor:monitor123@127.0.0.1:5432/monitoring}
+    ports: []
+
+  frontend:
+    build:
+      context: ./frontend
+      network: host
+    network_mode: host
+    ports: []
+    expose: []
+
+  collector:
+    build:
+      context: ./collector
+      network: host
+    network_mode: host
+    environment:
+      COLLECTOR_API_URL: ${HOST_COLLECTOR_API_URL:-http://127.0.0.1:8000/api/ingest/telemetry}
+      COLLECTOR_YUJIN_API_URL: ${HOST_COLLECTOR_YUJIN_API_URL:-http://127.0.0.1:8000/api/yujin/ingest-map}
+    ports: []
+
+  nginx:
+    network_mode: host
+    ports: []
+    volumes:
+      - ./nginx/nginx.host.conf:/etc/nginx/nginx.conf:ro

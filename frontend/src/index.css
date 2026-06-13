@@ -2,16 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "OriginalNotoSansKR";
+  src: url("/NotoSansKR-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
-  font-family: "IBM Plex Sans KR", "Noto Sans KR", "Segoe UI", sans-serif;
+  font-family: "OriginalNotoSansKR", "Noto Sans KR", sans-serif;
 }
 
 body {
   margin: 0;
   min-width: 320px;
+  background: #ffffff;
 }
 
 * {
   box-sizing: border-box;
+}
+
+button,
+input {
+  font: inherit;
 }

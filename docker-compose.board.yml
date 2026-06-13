@@ -1,0 +1,78 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: monitoring-db
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ahnlee4/monitoring-backend:latest
+    container_name: monitoring-backend
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      DATABASE_URL: ${HOST_DATABASE_URL:-postgresql+psycopg2://monitor:monitor123@127.0.0.1:5432/monitoring}
+      BACKEND_HOST: ${BACKEND_HOST}
+      BACKEND_PORT: ${BACKEND_PORT}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
+      COLLECTOR_TOKEN: ${COLLECTOR_TOKEN}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    image: ahnlee4/monitoring-frontend:latest
+    container_name: monitoring-frontend
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      VITE_API_BASE: ${VITE_API_BASE}
+      VITE_WS_PATH: ${VITE_WS_PATH}
+
+  collector:
+    image: ahnlee4/monitoring-collector:latest
+    container_name: monitoring-collector
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      COLLECTOR_DRIVER: ${COLLECTOR_DRIVER}
+      COLLECTOR_INTERVAL_SECONDS: ${COLLECTOR_INTERVAL_SECONDS}
+      COLLECTOR_DEVICE_CODES: ${COLLECTOR_DEVICE_CODES}
+      COLLECTOR_API_URL: ${HOST_COLLECTOR_API_URL:-http://127.0.0.1:8000/api/ingest/telemetry}
+      COLLECTOR_YUJIN_API_URL: ${HOST_COLLECTOR_YUJIN_API_URL:-http://127.0.0.1:8000/api/yujin/ingest-map}
+      COLLECTOR_TOKEN: ${COLLECTOR_TOKEN}
+      RS485_SERIAL_PORT: ${RS485_SERIAL_PORT}
+      RS485_BAUDRATE: ${RS485_BAUDRATE}
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: monitoring-nginx
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - backend
+      - frontend
+    volumes:
+      - ./nginx/nginx.host.conf:/etc/nginx/nginx.conf:ro
+
+volumes:
+  postgres_data:

@@ -89,6 +89,40 @@ docker compose up --build
 
 기본값은 `COLLECTOR_DRIVER=mock` 이므로 별도 설정 없이 mock 데이터로 전체 시스템이 동작합니다.
 
+일부 ARM 보드 커널은 Docker 기본 브리지/NAT 기능을 제대로 제공하지 않아 `docker.service`가 시작되지 않을 수 있습니다. 이런 경우에는 host-network 우회 구성을 사용합니다.
+
+1. Docker 데몬에 아래 설정을 추가합니다.
+
+```json
+{
+  "bridge": "none",
+  "iptables": false,
+  "ip6tables": false
+}
+```
+
+2. 설정 파일 저장:
+
+```bash
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json >/dev/null <<'EOF'
+{
+  "bridge": "none",
+  "iptables": false,
+  "ip6tables": false
+}
+EOF
+sudo systemctl restart docker
+```
+
+3. host-network 모드로 실행:
+
+```bash
+./scripts/start-hostnet.sh
+```
+
+이 모드에서는 `docker-compose.hostnet.yml`과 `nginx/nginx.host.conf`를 사용하며, 내부 서비스 통신을 `127.0.0.1` 기준으로 우회합니다.
+
 중지:
 
 ```bash
@@ -201,14 +235,70 @@ docker compose logs -f collector
 curl http://localhost/api/health
 ```
 
-### 7-9. 재배포
+### 7-9. 우분투 PC 화면에 자동 로그인 + 키오스크 실행
+
+현장 모니터가 연결된 Ubuntu PC에서 부팅 후 자동으로 대시보드를 띄우려면 최소 GUI를 추가합니다.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y xorg openbox lightdm snapd curl
+sudo snap install chromium
+sudo systemctl enable lightdm
+sudo systemctl set-default graphical.target
+```
+
+자동 로그인 대상 사용자는 현재 접속 계정인 `ubuntu`를 기준으로 설명합니다.
+
+LightDM 자동 로그인 설정 파일 생성:
+
+```bash
+sudo mkdir -p /etc/lightdm/lightdm.conf.d
+sudo tee /etc/lightdm/lightdm.conf.d/50-kiosk.conf >/dev/null <<'EOF'
+[Seat:*]
+autologin-user=ubuntu
+autologin-user-timeout=0
+user-session=openbox
+EOF
+```
+
+Openbox 자동 실행 스크립트 생성:
+
+```bash
+mkdir -p ~/.config/openbox
+cat > ~/.config/openbox/autostart <<'EOF'
+xset s off
+xset -dpms
+xset s noblank
+
+bash -lc 'until curl -fsS http://127.0.0.1/api/health >/dev/null; do sleep 2; done; chromium --kiosk --incognito --disable-infobars --noerrdialogs --disable-session-crashed-bubble http://127.0.0.1' &
+EOF
+chmod +x ~/.config/openbox/autostart
+```
+
+설정 후 재부팅:
+
+```bash
+sudo reboot
+```
+
+재부팅 뒤 동작 흐름은 아래와 같습니다.
+
+1. Ubuntu가 그래픽 모드로 부팅됩니다.
+2. `ubuntu` 사용자가 자동 로그인됩니다.
+3. Openbox가 실행됩니다.
+4. 로컬 API `http://127.0.0.1/api/health`가 응답할 때까지 대기합니다.
+5. Chromium이 `http://127.0.0.1`을 전체화면 키오스크 모드로 엽니다.
+
+키오스크를 잠시 종료하려면 `Alt+F4`로 Chromium을 닫고, 텍스트 콘솔로 이동하려면 `Ctrl+Alt+F3`을 사용합니다.
+
+### 7-10. 재배포
 
 ```bash
 git pull
 docker compose up -d --build
 ```
 
-### 7-10. 중지 및 정리
+### 7-11. 중지 및 정리
 
 ```bash
 docker compose down

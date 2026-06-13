@@ -72,7 +72,7 @@ class YujinMapDefinition(Base):
     __tablename__ = "yujin_map_definitions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    key: Mapped[str] = mapped_column(String(4), unique=True, index=True)
+    key: Mapped[str] = mapped_column(String(16), unique=True, index=True)
     data_type: Mapped[int] = mapped_column(Integer)
     data_length: Mapped[int] = mapped_column(Integer)
     signed: Mapped[bool] = mapped_column(Boolean, default=False)
