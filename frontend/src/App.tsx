@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.13";
+const APP_VERSION = "0.1.14";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -658,21 +658,21 @@ function QuickButtons({
         <img src="/menu.png" alt="" className="h-[56px] w-[56px] object-contain" />
       </button>
       {menuOpen ? (
-        <div className="absolute bottom-[68px] right-0 z-20 w-[256px] overflow-hidden rounded-[14px] border border-[#7fb8ea] bg-[linear-gradient(145deg,rgba(249,253,255,0.98),rgba(218,238,255,0.96))] p-[8px] shadow-[0_16px_32px_rgba(9,45,88,0.35),inset_0_1px_0_rgba(255,255,255,0.9)]">
-          <div className="mb-[7px] flex h-[28px] items-center justify-between border-b border-[#b6d7f2] px-[4px] pb-[6px]">
-            <span className="text-[13px] font-black tracking-[0.18em] text-[#1d5b9d]">QUICK MENU</span>
-            <button className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-[#d8ebfb] text-[15px] font-black text-[#245d94]" onClick={() => setMenuOpen(false)} type="button">
+        <div className="absolute bottom-[68px] right-0 z-20 w-[256px] overflow-hidden rounded-[14px] border border-[#9fc8ea] bg-[#f4f8fc] p-[8px] shadow-[0_12px_26px_rgba(9,45,88,0.28)]">
+          <div className="mb-[7px] flex h-[30px] items-center justify-between border-b border-[#c5dced] px-[4px] pb-[6px]">
+            <span className="text-[13px] font-black tracking-[0.18em] text-[#245d94]">QUICK MENU</span>
+            <button className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-[#dcebf7] text-[15px] font-black text-[#245d94]" onClick={() => setMenuOpen(false)} type="button">
               ×
             </button>
           </div>
           {menuItems.map((item) => (
             <button
               key={item.label}
-              className="group mb-[6px] grid h-[48px] w-full grid-cols-[48px_1fr] items-center gap-[8px] rounded-[10px] border border-[#c7e1f7] bg-white/88 px-[7px] text-left shadow-[0_2px_7px_rgba(31,93,151,0.12)] transition-colors hover:bg-[#f5fbff]"
+              className="group mb-[6px] grid h-[48px] w-full grid-cols-[48px_1fr] items-center gap-[8px] rounded-[10px] border border-[#c9dfef] bg-white px-[7px] text-left shadow-[0_2px_5px_rgba(31,93,151,0.08)] transition-colors hover:bg-[#eef7ff]"
               onClick={() => handleMenuAction(item.action)}
               type="button"
             >
-              <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[9px] bg-[#e4f2ff] shadow-[inset_0_0_0_1px_#bfdbf5]">
+              <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[9px] bg-[#e4f0fa] shadow-[inset_0_0_0_1px_#c7dceb]">
                 <img src={item.icon} alt="" className="h-[29px] w-[29px] object-contain" />
               </span>
               <span className="flex min-w-0 items-center">
@@ -756,10 +756,10 @@ function HeaderCell({ children }: { children: ReactNode }) {
 function DialogShell({ children, onClose, title, wide = false }: { children: ReactNode; onClose: () => void; title: string; wide?: boolean }) {
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-[24px]">
-      <section className={`${wide ? "w-[1040px]" : "w-[560px]"} overflow-hidden border border-[#75b4ee] bg-white shadow-[0_10px_25px_rgba(0,0,0,0.35)]`}>
-        <div className="grid h-[54px] grid-cols-[1fr_120px] bg-[#3374ce]">
+      <section className={`${wide ? "w-[1040px]" : "w-[560px]"} overflow-hidden rounded-[16px] border border-[#9fc8ea] bg-[#f4f8fc] shadow-[0_16px_34px_rgba(4,31,69,0.34)]`}>
+        <div className="grid h-[56px] grid-cols-[1fr_112px] border-b border-[#b9d5ea] bg-[#256fb4]">
           <div className="flex items-center justify-center text-[24px] font-bold text-white">{title}</div>
-          <button className="bg-[#0d4da5] text-[22px] font-bold text-white" onClick={onClose} type="button">
+          <button className="bg-[#1d5f9d] text-[20px] font-bold text-white" onClick={onClose} type="button">
             닫기
           </button>
         </div>
@@ -775,21 +775,21 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-[24px]">
-      <section className="w-[620px] overflow-hidden rounded-[18px] border border-[#81b9ed] bg-[linear-gradient(150deg,#fafdff_0%,#e3f2ff_100%)] shadow-[0_20px_44px_rgba(4,31,69,0.42),inset_0_1px_0_rgba(255,255,255,0.92)]">
-        <div className="grid h-[82px] grid-cols-[74px_1fr_84px] items-center border-b border-[#b7d8f4] bg-[linear-gradient(90deg,#1b64b2_0%,#3995dd_100%)] px-[14px]">
-          <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[16px] bg-white/18 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]">
+      <section className="w-[620px] overflow-hidden rounded-[18px] border border-[#9fc8ea] bg-[#f4f8fc] shadow-[0_16px_34px_rgba(4,31,69,0.34)]">
+        <div className="grid h-[82px] grid-cols-[74px_1fr_84px] items-center border-b border-[#b7d8f4] bg-[#256fb4] px-[14px]">
+          <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[16px] bg-[#e8f2fb]">
             <img src="/factory.png" alt="" className="h-[38px] w-[38px] object-contain" />
           </div>
           <div className="min-w-0">
             <div className="text-[25px] font-black leading-none text-white">공장 변경</div>
             <div className="mt-[7px] text-[14px] font-bold tracking-[0.08em] text-[#d7efff]">SELECT ACTIVE FACTORY</div>
           </div>
-          <button className="h-[42px] rounded-[12px] bg-white/16 text-[18px] font-black text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]" onClick={onClose} type="button">
+          <button className="h-[42px] rounded-[12px] bg-[#1d5f9d] text-[18px] font-black text-white" onClick={onClose} type="button">
             닫기
           </button>
         </div>
         <div className="grid gap-[9px] p-[14px]">
-          <div className="flex h-[44px] items-center justify-between rounded-[12px] border border-[#c8e0f5] bg-white/80 px-[16px]">
+          <div className="flex h-[44px] items-center justify-between rounded-[12px] border border-[#c8e0f5] bg-white px-[16px]">
             <span className="text-[16px] font-black text-[#1c4f82]">현재 선택</span>
             <span className="text-[20px] font-black text-[#0d4da5]">{factories[selectedFactory]}</span>
           </div>
@@ -799,7 +799,7 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
             className={`grid h-[58px] grid-cols-[54px_1fr_84px] items-center rounded-[13px] border px-[10px] text-left transition-colors ${
               selectedFactory === index
                 ? "border-[#2e86d3] bg-[#e5f4ff] shadow-[0_7px_16px_rgba(40,115,190,0.18)]"
-                : "border-[#cfe4f7] bg-white/86 hover:bg-[#f5fbff]"
+                : "border-[#cfe4f7] bg-white hover:bg-[#eef7ff]"
             }`}
             onClick={() => setSelectedFactory(index)}
             type="button"
@@ -817,8 +817,8 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
           </button>
         ))}
         <div className="mt-[3px] grid h-[54px] grid-cols-[1fr_1.3fr] gap-[9px]">
-          <button className="rounded-[13px] border border-[#b8d5ee] bg-white/78 text-[20px] font-black text-[#315f8a]" onClick={onClose} type="button">취소</button>
-          <button className="rounded-[13px] bg-[linear-gradient(90deg,#1d6fc4,#39a1e7)] text-[20px] font-black text-white shadow-[0_8px_18px_rgba(33,117,199,0.28)]" onClick={onClose} type="button">적용</button>
+          <button className="rounded-[13px] border border-[#b8d5ee] bg-white text-[20px] font-black text-[#315f8a]" onClick={onClose} type="button">취소</button>
+          <button className="rounded-[13px] bg-[#237bd0] text-[20px] font-black text-white shadow-[0_6px_14px_rgba(33,117,199,0.22)]" onClick={onClose} type="button">적용</button>
         </div>
         </div>
       </section>
@@ -841,21 +841,21 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-[24px]">
-      <section className="w-[1040px] overflow-hidden rounded-[18px] border border-[#81b9ed] bg-[linear-gradient(150deg,#fafdff_0%,#e5f2ff_100%)] shadow-[0_20px_44px_rgba(4,31,69,0.42),inset_0_1px_0_rgba(255,255,255,0.92)]">
-        <div className="grid h-[78px] grid-cols-[74px_1fr_92px] items-center border-b border-[#b7d8f4] bg-[linear-gradient(90deg,#1b64b2_0%,#3a9ddd_100%)] px-[14px]">
-          <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[16px] bg-white/18 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]">
+      <section className="w-[1040px] overflow-hidden rounded-[18px] border border-[#9fc8ea] bg-[#f4f8fc] shadow-[0_16px_34px_rgba(4,31,69,0.34)]">
+        <div className="grid h-[78px] grid-cols-[74px_1fr_92px] items-center border-b border-[#b7d8f4] bg-[#256fb4] px-[14px]">
+          <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[16px] bg-[#e8f2fb]">
             <img src="/control.png" alt="" className="h-[38px] w-[38px] object-contain" />
           </div>
           <div className="min-w-0">
             <div className="text-[25px] font-black leading-none text-white">통합운전 설정</div>
             <div className="mt-[7px] text-[14px] font-bold tracking-[0.08em] text-[#d7efff]">GROUP OPERATION CONTROL</div>
           </div>
-          <button className="h-[42px] rounded-[12px] bg-white/16 text-[18px] font-black text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]" onClick={onClose} type="button">
+          <button className="h-[42px] rounded-[12px] bg-[#1d5f9d] text-[18px] font-black text-white" onClick={onClose} type="button">
             닫기
           </button>
         </div>
         <div className="grid grid-cols-[430px_1fr_205px] gap-[12px] p-[14px]">
-          <div className="rounded-[15px] border border-[#c4ddf4] bg-white/86 p-[12px] shadow-[0_7px_18px_rgba(30,93,151,0.12)]">
+          <div className="rounded-[15px] border border-[#c4ddf4] bg-white p-[12px] shadow-[0_4px_12px_rgba(30,93,151,0.08)]">
             <PanelHeading eyebrow="PRESSURE / COUNT">제어 기준값</PanelHeading>
             <div className="mt-[10px] grid gap-[8px]">
               {controls.map(([label, value, unit]) => (
@@ -867,7 +867,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
               ))}
             </div>
           </div>
-          <div className="grid content-start gap-[12px] rounded-[15px] border border-[#c4ddf4] bg-white/86 p-[12px] shadow-[0_7px_18px_rgba(30,93,151,0.12)]">
+          <div className="grid content-start gap-[12px] rounded-[15px] border border-[#c4ddf4] bg-white p-[12px] shadow-[0_4px_12px_rgba(30,93,151,0.08)]">
             <PanelHeading eyebrow="MODE / INVERTER">운전 조건</PanelHeading>
             <div className="grid gap-[8px]">
               <SegmentedOption
@@ -911,15 +911,15 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
               onSelect={(value) => setControlMode(value as "single" | "group")}
             />
           </div>
-          <div className="grid content-start gap-[12px] rounded-[15px] border border-[#c4ddf4] bg-white/86 p-[12px] shadow-[0_7px_18px_rgba(30,93,151,0.12)]">
+          <div className="grid content-start gap-[12px] rounded-[15px] border border-[#c4ddf4] bg-white p-[12px] shadow-[0_4px_12px_rgba(30,93,151,0.08)]">
             <PanelHeading eyebrow="ACTION">통합운전</PanelHeading>
             <div className="rounded-[14px] border border-[#d3e7f8] bg-[#f8fcff] p-[10px] text-center">
               <div className="text-[13px] font-black tracking-[0.12em] text-[#7c97b0]">CURRENT MODE</div>
               <div className="mt-[6px] text-[24px] font-black text-[#0d4da5]">{operationMode.toUpperCase()}</div>
             </div>
-            <button className="h-[82px] rounded-[16px] bg-[linear-gradient(145deg,#ff4f4f,#d71920)] text-[32px] font-black text-white shadow-[0_11px_20px_rgba(208,31,38,0.28)]" type="button">운전</button>
-            <button className="h-[82px] rounded-[16px] bg-[linear-gradient(145deg,#8b98a5,#5f6973)] text-[32px] font-black text-white shadow-[0_11px_20px_rgba(70,82,94,0.24)]" type="button">정지</button>
-            <button className="h-[52px] rounded-[14px] bg-[linear-gradient(90deg,#1d6fc4,#39a1e7)] text-[20px] font-black text-white shadow-[0_8px_18px_rgba(33,117,199,0.25)]" type="button">저장</button>
+            <button className="h-[82px] rounded-[16px] bg-[#d92525] text-[32px] font-black text-white shadow-[0_7px_15px_rgba(208,31,38,0.22)]" type="button">운전</button>
+            <button className="h-[82px] rounded-[16px] bg-[#667380] text-[32px] font-black text-white shadow-[0_7px_15px_rgba(70,82,94,0.18)]" type="button">정지</button>
+            <button className="h-[52px] rounded-[14px] bg-[#237bd0] text-[20px] font-black text-white shadow-[0_6px_14px_rgba(33,117,199,0.22)]" type="button">저장</button>
           </div>
         </div>
       </section>
@@ -969,42 +969,42 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <DialogShell onClose={onClose} title="설정" wide>
-      <div className="grid max-h-[690px] gap-[6px] overflow-y-auto bg-[#eef7ff] p-[6px]">
-        <div className="grid grid-cols-2 gap-[4px] border border-[#75b4ee] bg-white p-[6px]">
+      <div className="grid max-h-[690px] gap-[8px] overflow-y-auto bg-[#f4f8fc] p-[10px]">
+        <div className="grid grid-cols-2 gap-[6px] rounded-[13px] border border-[#c4ddf4] bg-white p-[8px] shadow-[0_3px_10px_rgba(30,93,151,0.07)]">
           <PlainSettingRow label="Connect IP Setting" value="121.164.120.200" />
           <PlainSettingRow label="Port Setting" value="1502" />
           <PlainSettingRow label="Login Pw Setting" value="1234" />
           <PlainSettingRow label="Setting Pw Setting" value="471112" />
         </div>
-        <div className="grid gap-[4px] border border-[#75b4ee] bg-white p-[6px]">
+        <div className="grid gap-[5px] rounded-[13px] border border-[#c4ddf4] bg-white p-[8px] shadow-[0_3px_10px_rgba(30,93,151,0.07)]">
           <SectionTitle>사용모드 / 정렬 설정</SectionTitle>
           {modes.map(([no, a, b, c, index]) => (
             <div key={no} className="grid h-[32px] grid-cols-[44px_1fr_1fr_1fr_80px] gap-[3px]">
-              <div className="flex items-center justify-center border border-[#d2e8ff] font-bold">{no}</div>
+              <div className="flex items-center justify-center rounded-[7px] border border-[#d2e8ff] bg-[#f8fcff] font-bold text-[#244c75]">{no}</div>
               {[a, b, c, index].map((value, idx) => (
-                <div key={idx} className="flex items-center justify-center border border-[#d2e8ff] bg-[#fbfdff] text-[16px] font-bold">{value}</div>
+                <div key={idx} className="flex items-center justify-center rounded-[7px] border border-[#d2e8ff] bg-[#fbfdff] text-[16px] font-bold">{value}</div>
               ))}
             </div>
           ))}
           <div className="grid h-[38px] grid-cols-[1fr_56px_70px_56px_110px] gap-[4px]">
             <div className="flex items-center justify-center text-[17px] font-bold text-[#0d4da5]">사용모드 개수 설정</div>
             <ChoiceButton>-</ChoiceButton>
-            <div className="flex items-center justify-center border border-[#75b4ee] bg-white text-[20px] font-bold">1</div>
+            <div className="flex items-center justify-center rounded-[8px] border border-[#9fc8ea] bg-white text-[20px] font-bold">1</div>
             <ChoiceButton>+</ChoiceButton>
-            <button className="bg-[#3374ce] text-[18px] font-bold text-white" type="button">저장</button>
+            <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-bold text-white" type="button">저장</button>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-[8px]">
-          <div className="grid gap-[4px] border border-[#75b4ee] bg-white p-[6px]">
+          <div className="grid gap-[5px] rounded-[13px] border border-[#c4ddf4] bg-white p-[8px] shadow-[0_3px_10px_rgba(30,93,151,0.07)]">
             <SectionTitle>공장 정보</SectionTitle>
             {factories.map((factory) => (
-              <div key={factory} className="grid h-[32px] grid-cols-[120px_1fr]">
-                <div className="flex items-center justify-center border border-[#d2e8ff] font-bold">{factory}</div>
-                <div className="flex items-center px-[8px] border border-[#d2e8ff]">192.168.0.10</div>
+              <div key={factory} className="grid h-[32px] grid-cols-[120px_1fr] gap-[3px]">
+                <div className="flex items-center justify-center rounded-[7px] border border-[#d2e8ff] bg-[#f8fcff] font-bold text-[#244c75]">{factory}</div>
+                <div className="flex items-center rounded-[7px] border border-[#d2e8ff] px-[8px]">192.168.0.10</div>
               </div>
             ))}
           </div>
-          <div className="grid content-start gap-[6px] border border-[#75b4ee] bg-white p-[6px]">
+          <div className="grid content-start gap-[6px] rounded-[13px] border border-[#c4ddf4] bg-white p-[8px] shadow-[0_3px_10px_rgba(30,93,151,0.07)]">
             <SectionTitle>DIO BIT 설정</SectionTitle>
             <PlainSettingRow label="BIT0" value="운전" />
             <PlainSettingRow label="BIT4" value="고장" />
@@ -1017,8 +1017,8 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
 
 function SettingRow({ label, unit = "", value }: { label: string; unit?: string; value: string }) {
   return (
-    <div className="grid min-h-[42px] grid-cols-[1fr_170px_54px] border border-[#d2e8ff] bg-white">
-      <div className="flex items-center justify-center bg-[#fbfdff] px-[6px] text-center text-[16px] font-bold">{label}</div>
+    <div className="grid min-h-[42px] grid-cols-[1fr_170px_54px] overflow-hidden rounded-[9px] border border-[#d2e8ff] bg-white">
+      <div className="flex items-center justify-center bg-[#f8fcff] px-[6px] text-center text-[16px] font-bold">{label}</div>
       <div className="flex items-center justify-center border-x border-[#d2e8ff] text-[20px] font-bold text-[#0d4da5]">{value}</div>
       <div className="flex items-center justify-center text-[16px] font-bold text-[#0d4da5]">{unit}</div>
     </div>
@@ -1027,21 +1027,21 @@ function SettingRow({ label, unit = "", value }: { label: string; unit?: string;
 
 function PlainSettingRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid min-h-[36px] grid-cols-[1fr_210px] border border-[#d2e8ff] bg-white">
-      <div className="flex items-center justify-center bg-[#fbfdff] px-[6px] text-center text-[15px] font-bold">{label}</div>
+    <div className="grid min-h-[36px] grid-cols-[1fr_210px] overflow-hidden rounded-[9px] border border-[#d2e8ff] bg-white">
+      <div className="flex items-center justify-center bg-[#f8fcff] px-[6px] text-center text-[15px] font-bold text-[#244c75]">{label}</div>
       <div className="flex items-center justify-center border-l border-[#d2e8ff] px-[8px] text-center text-[18px] font-bold text-[#0d4da5]">{value}</div>
     </div>
   );
 }
 
 function SectionTitle({ children }: { children: ReactNode }) {
-  return <div className="flex h-[30px] items-center justify-center bg-[#b3d4ff] text-[17px] font-bold text-[#0d4da5]">{children}</div>;
+  return <div className="flex h-[32px] items-center justify-center rounded-[8px] bg-[#dcecf9] text-[17px] font-bold text-[#245d94]">{children}</div>;
 }
 
 function ChoiceButton({ active = false, children }: { active?: boolean; children: ReactNode }) {
   return (
     <button
-      className={`border text-[19px] font-bold ${active ? "border-[#3374ce] bg-[#3374ce] text-white" : "border-[#3374ce] bg-white text-[#3374ce]"}`}
+      className={`rounded-[8px] border text-[19px] font-bold ${active ? "border-[#237bd0] bg-[#237bd0] text-white" : "border-[#9fc8ea] bg-white text-[#237bd0]"}`}
       type="button"
     >
       {children}
