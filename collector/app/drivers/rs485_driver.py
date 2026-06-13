@@ -18,6 +18,7 @@ CMD_CHANGED_DATA = 0x15
 MEM_ADDR_COMP1 = 0x11
 MEM_ADDR_COMP8 = 0x18
 CRC_POLY = 0xA001
+DEFAULT_FULL_READ_BYTES = 166
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,7 @@ class RS485Collector(BaseCollector):
         comp_qty: int = 8,
         response_timeout: float = 0.8,
         inter_request_delay: float = 0.05,
+        full_read_bytes: int = DEFAULT_FULL_READ_BYTES,
         debug_hex: bool = False,
     ) -> None:
         self.serial_port = serial_port
@@ -139,6 +141,7 @@ class RS485Collector(BaseCollector):
         self.comp_qty = max(1, min(comp_qty, 8))
         self.response_timeout = response_timeout
         self.inter_request_delay = inter_request_delay
+        self.full_read_bytes = normalize_read_byte_count(full_read_bytes)
         self.debug_hex = debug_hex
         self._serial: serial.Serial | None = None
         self._word_cache: dict[int, list[int]] = {}
@@ -212,7 +215,7 @@ class RS485Collector(BaseCollector):
                 self._serial = None
 
     def _poll_comp(self, port: serial.Serial, mem_addr: int) -> list[int] | None:
-        request = build_full_read_request(mem_addr)
+        request = build_full_read_request(mem_addr, self.full_read_bytes)
         port.reset_input_buffer()
         port.write(request)
         port.flush()
@@ -316,13 +319,24 @@ class RS485Collector(BaseCollector):
             print(f"collector-uart4 {label}: {data.hex(' ').upper()}")
 
 
-def build_full_read_request(mem_addr: int) -> bytes:
+def build_full_read_request(mem_addr: int, read_bytes: int = DEFAULT_FULL_READ_BYTES) -> bytes:
     if not MEM_ADDR_COMP1 <= mem_addr <= MEM_ADDR_COMP8:
         raise ValueError(f"unsupported compressor memory address: 0x{mem_addr:02X}")
 
+    read_bytes = normalize_read_byte_count(read_bytes)
     device_id = mem_addr - 0x10
-    payload = bytes([device_id, CMD_FULL_READ, mem_addr, 0x00, 0x00, 0x00])
+    payload = bytes([device_id, CMD_FULL_READ, mem_addr, 0x00, (read_bytes >> 8) & 0xFF, read_bytes & 0xFF])
     return append_crc(payload)
+
+
+def normalize_read_byte_count(read_bytes: int) -> int:
+    if read_bytes <= 0:
+        raise ValueError("RS485_FULL_READ_BYTES must be greater than 0")
+    if read_bytes % 2:
+        raise ValueError("RS485_FULL_READ_BYTES must be an even byte count")
+    if read_bytes > 0xFFFF:
+        raise ValueError("RS485_FULL_READ_BYTES must fit in 2 bytes")
+    return read_bytes
 
 
 def decode_full_read_response(frame: bytes) -> tuple[int, int, list[int]]:
