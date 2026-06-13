@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.8";
+const APP_VERSION = "0.1.9";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -658,29 +658,29 @@ function QuickButtons({
         <img src="/menu.png" alt="" className="h-[56px] w-[56px] object-contain" />
       </button>
       {menuOpen ? (
-        <div className="absolute bottom-[68px] right-0 z-20 grid w-[238px] gap-[3px] rounded-[8px] border border-[#75b4ee] bg-[#eef7ff]/95 p-[6px] shadow-[0_8px_18px_rgba(0,0,0,0.28)] backdrop-blur-sm">
+        <div className="absolute bottom-[68px] right-0 z-20 w-[256px] overflow-hidden rounded-[14px] border border-[#7fb8ea] bg-[linear-gradient(145deg,rgba(249,253,255,0.98),rgba(218,238,255,0.96))] p-[8px] shadow-[0_16px_32px_rgba(9,45,88,0.35),inset_0_1px_0_rgba(255,255,255,0.9)]">
+          <div className="mb-[7px] flex h-[28px] items-center justify-between border-b border-[#b6d7f2] px-[4px] pb-[6px]">
+            <span className="text-[13px] font-black tracking-[0.18em] text-[#1d5b9d]">QUICK MENU</span>
+            <button className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-[#d8ebfb] text-[15px] font-black text-[#245d94]" onClick={() => setMenuOpen(false)} type="button">
+              ×
+            </button>
+          </div>
           {menuItems.map((item) => (
             <button
               key={item.label}
-              className="grid h-[48px] grid-cols-[150px_8px_62px] items-center bg-transparent p-0"
+              className="group mb-[6px] grid h-[48px] w-full grid-cols-[48px_1fr] items-center gap-[8px] rounded-[10px] border border-[#c7e1f7] bg-white/88 px-[7px] text-left shadow-[0_2px_7px_rgba(31,93,151,0.12)] transition-colors hover:bg-[#f5fbff]"
               onClick={() => handleMenuAction(item.action)}
               type="button"
             >
-              <span className="flex h-full items-center justify-center rounded-[4px] border border-[#75b4ee] bg-white text-[18px] font-bold text-[#303f9f] shadow-[1px_1px_1px_#c2c2c2]">
-                {item.label}
+              <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[9px] bg-[#e4f2ff] shadow-[inset_0_0_0_1px_#bfdbf5]">
+                <img src={item.icon} alt="" className="h-[29px] w-[29px] object-contain" />
               </span>
-              <span />
-              <span className="flex h-full items-center justify-center">
-                <img src={item.icon} alt="" className="h-[52px] w-[52px] object-contain" />
+              <span className="flex min-w-0 flex-col justify-center">
+                <span className="text-[18px] font-black leading-none text-[#163d69]">{item.label}</span>
+                <span className="mt-[4px] h-[2px] w-[32px] rounded-full bg-[#48a4e8] opacity-70 transition-all group-hover:w-[58px]" />
               </span>
             </button>
           ))}
-          <button className="grid h-[42px] grid-cols-[1fr_62px] items-center bg-transparent p-0" onClick={() => setMenuOpen(false)} type="button">
-            <span />
-            <span className="flex h-full items-center justify-center">
-              <img src="/close.png" alt="" className="h-[46px] w-[46px] object-contain" />
-            </span>
-          </button>
         </div>
       ) : null}
     </div>
