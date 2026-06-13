@@ -9,10 +9,12 @@ import re
 import serial
 
 from app.base import BaseCollector
-from app.models import AlarmEvent, CollectorBatch, MapValueUpdate, Metric, TelemetryFrame
+from app.models import AlarmEvent, CollectorBatch, ControlCommand, MapValueUpdate, Metric, TelemetryFrame
 
 
 FRAME_START = 0x65
+FRAME_MASTER_ID = 0xC9
+CMD_MAP_WRITE = 0x20
 CMD_FULL_READ = 0x13
 CMD_CHANGED_DATA = 0x15
 MEM_ADDR_COMP1 = 0x11
@@ -241,6 +243,26 @@ class RS485Collector(BaseCollector):
 
         raise Uart4ProtocolError(f"unsupported command 0x{command:02X}")
 
+    def execute_control_command(self, command: ControlCommand) -> None:
+        if command.command_type != "map_write_batch":
+            raise ValueError(f"unsupported control command: {command.command_type}")
+
+        writes = command.payload.get("writes", [])
+        if not isinstance(writes, list) or not writes:
+            raise ValueError("control command has no writes")
+
+        port = self._open_serial()
+        for write in writes:
+            address = int(write["address"])
+            value = int(write["value"])
+            length = int(write.get("length", 2))
+            request = build_map_write_request(address, value, length)
+            port.reset_input_buffer()
+            port.write(request)
+            port.flush()
+            self._debug("tx-control", request)
+            time.sleep(self.inter_request_delay)
+
     def _read_frame(self, port: serial.Serial) -> bytes:
         deadline = time.monotonic() + self.response_timeout
 
@@ -322,6 +344,28 @@ def build_full_read_request(mem_addr: int) -> bytes:
 
     device_id = mem_addr - 0x10
     payload = bytes([device_id, CMD_FULL_READ, mem_addr, 0x00, 0x00, 0x00])
+    return append_crc(payload)
+
+
+def build_map_write_request(address: int, value: int, length: int = 2) -> bytes:
+    if length != 2:
+        raise ValueError(f"unsupported map write length: {length}")
+    if not 0 <= address <= 0xFFFF:
+        raise ValueError(f"unsupported map write address: 0x{address:X}")
+
+    value &= 0xFFFF
+    payload = bytes(
+        [
+            FRAME_MASTER_ID,
+            CMD_MAP_WRITE,
+            (address >> 8) & 0xFF,
+            address & 0xFF,
+            0x00,
+            0x02,
+            (value >> 8) & 0xFF,
+            value & 0xFF,
+        ]
+    )
     return append_crc(payload)
 
 

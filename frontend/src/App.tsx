@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.17";
+const APP_VERSION = "0.1.18";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -877,6 +877,8 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
   const [sortMode, setSortMode] = useState<"setting" | "time">("setting");
   const [operationMode, setOperationMode] = useState<"local" | "remote">("remote");
   const [controlMode, setControlMode] = useState<"single" | "group">("group");
+  const [commandStatus, setCommandStatus] = useState("명령 대기 중");
+  const [commandBusy, setCommandBusy] = useState(false);
   const controls = [
     ["무부하 압력", dashboard.control.noLoadPressure.toFixed(1), "bar"],
     ["부하 압력", dashboard.control.loadPressure.toFixed(1), "bar"],
@@ -885,6 +887,55 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     ["교환 운전 시간", String(dashboard.control.changeHours), "hr"],
     ["가동 대수", String(dashboard.control.runUnits), "ea"],
   ];
+
+  const sendGroupOperation = async (action: "run" | "stop") => {
+    setCommandBusy(true);
+    setCommandStatus(action === "run" ? "통합운전 명령 전송 중..." : "통합정지 명령 전송 중...");
+    try {
+      const response = await fetch(`${apiBase()}/control/group-operation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      setCommandStatus(`명령 대기열 등록 #${result.id}`);
+    } catch (error) {
+      setCommandStatus(`명령 전송 실패: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCommandBusy(false);
+    }
+  };
+
+  const saveGroupSettings = async () => {
+    if (dashboard.control.noLoadPressure <= 0 && dashboard.control.loadPressure <= 0) {
+      setCommandStatus("통신 기준값이 없어 저장을 중단했습니다");
+      return;
+    }
+
+    setCommandBusy(true);
+    setCommandStatus("통합운전 설정 저장 중...");
+    try {
+      const response = await fetch(`${apiBase()}/control/group-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          no_load_pressure: dashboard.control.noLoadPressure,
+          load_pressure: dashboard.control.loadPressure,
+          pressure_gap: dashboard.control.pressureGap,
+          run_units: dashboard.control.runUnits,
+          change_hours: dashboard.control.changeHours,
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      setCommandStatus(`저장 명령 대기열 등록 #${result.id}`);
+    } catch (error) {
+      setCommandStatus(`저장 실패: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCommandBusy(false);
+    }
+  };
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-[24px]">
@@ -969,14 +1020,17 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
                 <div className="text-[13px] font-black text-[#6f879d]">현재 모드</div>
                 <div className="mt-[7px] text-[30px] font-black leading-none text-[#173f69]">{operationMode.toUpperCase()}</div>
               </div>
-              <button className="h-[72px] rounded-[9px] bg-[#d92525] text-[30px] font-black text-white shadow-[0_6px_13px_rgba(208,31,38,0.2)]" type="button">운전</button>
-              <button className="h-[72px] rounded-[9px] bg-[#667380] text-[30px] font-black text-white shadow-[0_6px_13px_rgba(70,82,94,0.16)]" type="button">정지</button>
+              <div className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-[12px] py-[10px] text-center text-[13px] font-black text-[#45657f]">
+                {commandStatus}
+              </div>
+              <button className="h-[72px] rounded-[9px] bg-[#d92525] text-[30px] font-black text-white shadow-[0_6px_13px_rgba(208,31,38,0.2)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("run")} type="button">운전</button>
+              <button className="h-[72px] rounded-[9px] bg-[#667380] text-[30px] font-black text-white shadow-[0_6px_13px_rgba(70,82,94,0.16)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("stop")} type="button">정지</button>
             </div>
           </aside>
         </div>
         <div className="grid h-[72px] grid-cols-[1fr_180px] border-t border-[#dbe7f1] bg-white px-[18px] py-[12px]">
           <span />
-          <button className="rounded-[8px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)]" type="button">저장</button>
+          <button className="rounded-[8px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)] disabled:opacity-55" disabled={commandBusy} onClick={saveGroupSettings} type="button">저장</button>
         </div>
       </section>
     </div>

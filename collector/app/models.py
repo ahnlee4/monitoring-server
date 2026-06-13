@@ -22,6 +22,13 @@ class MapValueUpdate:
 
 
 @dataclass
+class ControlCommand:
+    id: int
+    command_type: str
+    payload: dict
+
+
+@dataclass
 class TelemetryFrame:
     device_code: str
     device_name: str

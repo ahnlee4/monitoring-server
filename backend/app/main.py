@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -9,6 +10,7 @@ from app.config import get_settings
 from app.database import Base, engine, get_db, SessionLocal
 from app.models import (
     Alarm,
+    ControlCommand,
     CurrentValue,
     Device,
     TelemetryRecord,
@@ -18,7 +20,11 @@ from app.models import (
 )
 from app.schemas import (
     AlarmOut,
+    ControlCommandAckIn,
+    ControlCommandOut,
     DeviceOut,
+    GroupOperationIn,
+    GroupSettingsIn,
     OverviewOut,
     TelemetryIngestRequest,
     TelemetryRecordOut,
@@ -116,9 +122,152 @@ def health() -> dict:
     return {"status": "ok", "service": "backend", "timestamp": datetime.now(timezone.utc)}
 
 
+def command_out(command: ControlCommand) -> ControlCommandOut:
+    return ControlCommandOut(
+        id=command.id,
+        command_type=command.command_type,
+        status=command.status,
+        payload=json.loads(command.payload_json),
+        requested_by=command.requested_by,
+        error=command.error_text,
+        created_at=command.created_at,
+        updated_at=command.updated_at,
+    )
+
+
+def enqueue_control_command(
+    db: Session,
+    command_type: str,
+    payload: dict,
+    requested_by: str = "frontend",
+) -> ControlCommand:
+    command = ControlCommand(
+        command_type=command_type,
+        status="pending",
+        payload_json=json.dumps(payload, ensure_ascii=False),
+        requested_by=requested_by,
+    )
+    db.add(command)
+    db.commit()
+    db.refresh(command)
+    return command
+
+
+def current_map_int(db: Session, key: str, fallback: int = 0) -> int:
+    row = db.execute(
+        select(YujinMapValue.value_text)
+        .join(YujinMapDefinition, YujinMapValue.definition_id == YujinMapDefinition.id)
+        .where(YujinMapDefinition.key == key.upper())
+    ).first()
+    if not row:
+        return fallback
+    try:
+        return int(float(row[0]))
+    except (TypeError, ValueError):
+        return fallback
+
+
 @app.get("/api/yujin/map-schema")
 def yujin_map_schema() -> dict:
     return build_yujin_map_schema()
+
+
+@app.post("/api/control/group-operation", response_model=ControlCommandOut)
+async def create_group_operation_command(
+    payload: GroupOperationIn,
+    db: Session = Depends(get_db),
+) -> ControlCommandOut:
+    current = current_map_int(db, "0050", 0)
+    next_value = (current & 0xFF00) | (0x01 if payload.action == "run" else 0x00)
+    command = enqueue_control_command(
+        db,
+        "map_write_batch",
+        {
+            "source": "group_operation",
+            "action": payload.action,
+            "writes": [
+                {
+                    "key": "0050",
+                    "address": 0x50,
+                    "length": 2,
+                    "value": next_value,
+                }
+            ],
+        },
+    )
+    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    return command_out(command)
+
+
+@app.post("/api/control/group-settings", response_model=ControlCommandOut)
+async def create_group_settings_command(
+    payload: GroupSettingsIn,
+    db: Session = Depends(get_db),
+) -> ControlCommandOut:
+    writes = [
+        {"key": "0016", "address": 0x16, "length": 2, "value": round(payload.no_load_pressure * 10)},
+        {"key": "0018", "address": 0x18, "length": 2, "value": round(payload.load_pressure * 10)},
+        {"key": "001A", "address": 0x1A, "length": 2, "value": round(payload.pressure_gap * 10)},
+        {"key": "0026", "address": 0x26, "length": 2, "value": int(payload.run_units)},
+        {"key": "0046", "address": 0x46, "length": 2, "value": int(payload.change_hours)},
+    ]
+    command = enqueue_control_command(
+        db,
+        "map_write_batch",
+        {
+            "source": "group_settings",
+            "writes": writes,
+        },
+    )
+    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    return command_out(command)
+
+
+@app.get("/api/control/commands/next", response_model=list[ControlCommandOut])
+def next_control_commands(
+    limit: int = Query(default=5, ge=1, le=20),
+    db: Session = Depends(get_db),
+    x_collector_token: str | None = Header(default=None),
+) -> list[ControlCommandOut]:
+    if x_collector_token != settings.collector_token:
+        raise HTTPException(status_code=401, detail="Invalid collector token")
+
+    commands = db.scalars(
+        select(ControlCommand)
+        .where(ControlCommand.status == "pending")
+        .order_by(ControlCommand.created_at.asc(), ControlCommand.id.asc())
+        .limit(limit)
+    ).all()
+    now = datetime.now(timezone.utc)
+    for command in commands:
+        command.status = "in_progress"
+        command.updated_at = now
+    db.commit()
+    for command in commands:
+        db.refresh(command)
+    return [command_out(command) for command in commands]
+
+
+@app.post("/api/control/commands/{command_id}/ack", response_model=ControlCommandOut)
+async def ack_control_command(
+    command_id: int,
+    payload: ControlCommandAckIn,
+    db: Session = Depends(get_db),
+    x_collector_token: str | None = Header(default=None),
+) -> ControlCommandOut:
+    if x_collector_token != settings.collector_token:
+        raise HTTPException(status_code=401, detail="Invalid collector token")
+
+    command = db.get(ControlCommand, command_id)
+    if not command:
+        raise HTTPException(status_code=404, detail="Command not found")
+    command.status = payload.status
+    command.error_text = payload.error
+    command.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(command)
+    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    return command_out(command)
 
 
 @app.get("/api/yujin/map-definitions", response_model=list[YujinMapDefinitionOut])

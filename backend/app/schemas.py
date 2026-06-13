@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel
+from typing import Literal
 
 
 class MetricIn(BaseModel):
@@ -108,3 +109,31 @@ class YujinMapIngestRequest(BaseModel):
     source: str = "collector"
     recorded_at: datetime | None = None
     values: list[YujinMapValueUpdateIn]
+
+
+class GroupOperationIn(BaseModel):
+    action: Literal["run", "stop"]
+
+
+class GroupSettingsIn(BaseModel):
+    no_load_pressure: float
+    load_pressure: float
+    pressure_gap: float
+    run_units: int
+    change_hours: int
+
+
+class ControlCommandAckIn(BaseModel):
+    status: Literal["completed", "failed"]
+    error: str | None = None
+
+
+class ControlCommandOut(BaseModel):
+    id: int
+    command_type: str
+    status: str
+    payload: dict
+    requested_by: str
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None

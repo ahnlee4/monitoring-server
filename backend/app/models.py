@@ -115,3 +115,18 @@ class YujinMapValueHistory(Base):
     source: Mapped[str] = mapped_column(String(64), default="collector")
 
     definition: Mapped[YujinMapDefinition] = relationship(back_populates="history")
+
+
+class ControlCommand(Base):
+    __tablename__ = "control_commands"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    command_type: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    payload_json: Mapped[str] = mapped_column(Text)
+    requested_by: Mapped[str] = mapped_column(String(64), default="frontend")
+    error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

@@ -35,10 +35,16 @@ def build_collector() -> tuple[BaseCollector, int]:
 def main() -> None:
     api_url = get_env("COLLECTOR_API_URL", "http://backend:8000/api/ingest/telemetry")
     yujin_api_url = get_env("COLLECTOR_YUJIN_API_URL", "http://backend:8000/api/yujin/ingest-map")
+    control_api_url = get_env("COLLECTOR_CONTROL_API_URL", "http://backend:8000/api/control")
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
     collector, interval = build_collector()
-    client = BackendClient(api_url=api_url, token=token, yujin_api_url=yujin_api_url)
+    client = BackendClient(
+        api_url=api_url,
+        token=token,
+        yujin_api_url=yujin_api_url,
+        control_api_url=control_api_url,
+    )
 
     while True:
         batch = collector.poll()
@@ -54,6 +60,25 @@ def main() -> None:
                 print(f"sent yujin map batch with {len(batch.map_values)} values")
             except Exception as exc:
                 print(f"collector yujin map publish error: {exc}")
+
+        try:
+            commands = client.fetch_control_commands()
+        except Exception as exc:
+            print(f"collector control command fetch error: {exc}")
+            commands = []
+
+        for command in commands:
+            try:
+                collector.execute_control_command(command)
+                client.ack_control_command(command.id, "completed")
+                print(f"collector control command {command.id} completed")
+            except Exception as exc:
+                error = str(exc)
+                try:
+                    client.ack_control_command(command.id, "failed", error)
+                except Exception as ack_exc:
+                    print(f"collector control command {command.id} ack error: {ack_exc}")
+                print(f"collector control command {command.id} failed: {error}")
         time.sleep(interval)
 
 
