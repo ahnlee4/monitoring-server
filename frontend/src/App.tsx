@@ -41,7 +41,7 @@ type DashboardState = {
 };
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.1";
+const APP_VERSION = "0.1.2";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -556,13 +556,13 @@ function ControlPanel({ control }: { control: DashboardState["control"] }) {
   ];
 
   return (
-    <div className="grid min-h-0 grid-cols-3 grid-rows-2 gap-[4px] border border-[#9fc9fa] bg-[#eef7ff] p-[3px]">
+    <div className="grid min-h-0 grid-cols-3 grid-rows-2 gap-0 border border-[#75b4ee] bg-white">
       {items.map((item) => (
-        <div key={item.label} className="grid min-h-0 grid-rows-[32px_1fr] shadow-[1px_1px_1px_#c2c2c2]">
-          <div className="flex items-center justify-center border border-[#75b4ee] bg-[#8ec3f5] text-center text-[16px] font-bold text-white">
+        <div key={item.label} className="grid min-h-0 grid-rows-[32px_1fr] border border-[#75b4ee]">
+          <div className="flex items-center justify-center border-b border-[#75b4ee] bg-[#8ec3f5] text-center text-[16px] font-bold text-white">
             {item.label}
           </div>
-          <div className="flex items-center justify-end border border-[#75b4ee] bg-white px-[8px] text-right text-[22px] font-bold">
+          <div className="flex items-center justify-center bg-white px-[6px] text-center text-[22px] font-bold">
             {item.value}
           </div>
         </div>
@@ -594,12 +594,12 @@ function QuickButtons({
   setMenuOpen: (open: boolean) => void;
 }) {
   return (
-    <div className="relative grid min-h-0 grid-rows-2 gap-[4px] border border-[#9fc9fa] bg-[#eef7ff] p-[3px]">
-      <button className="flex items-center justify-center rounded-[6px] bg-white shadow-[1px_1px_1px_#c2c2c2]" type="button" aria-label="장비">
+    <div className="relative grid min-h-0 grid-rows-2 gap-[4px]">
+      <button className="flex items-center justify-center bg-transparent p-0" type="button" aria-label="장비">
         <img src="/device.png" alt="" className="h-[56px] w-[56px] object-contain" />
       </button>
       <button
-        className="flex items-center justify-center rounded-[6px] bg-white shadow-[1px_1px_1px_#c2c2c2]"
+        className="flex items-center justify-center bg-transparent p-0"
         onClick={() => setMenuOpen(!menuOpen)}
         type="button"
         aria-label="메뉴"
