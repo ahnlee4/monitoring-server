@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.15";
+const APP_VERSION = "0.1.16";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -650,11 +650,11 @@ function QuickButtons({
   onToggleDetail: () => void;
   setMenuOpen: (open: boolean) => void;
 }) {
-  const menuItems: Array<{ label: string; icon: string; action: () => void }> = [
-    { label: "공장 변경", icon: "/factory.png", action: () => onOpenDialog("factory") },
-    { label: "설정", icon: "/setting.png", action: () => onOpenDialog("settings") },
-    { label: "통합운전 설정", icon: "/control.png", action: () => onOpenDialog("control") },
-    { label: activeScreen === "detail" ? "메인 화면" : "상세 화면", icon: activeScreen === "detail" ? "/device_back.png" : "/device.png", action: onToggleDetail },
+  const menuItems: Array<{ label: string; description: string; icon: string; action: () => void }> = [
+    { label: "공장 변경", description: "사용 공장 선택", icon: "/factory.png", action: () => onOpenDialog("factory") },
+    { label: "설정", description: "통신 / 화면 설정", icon: "/setting.png", action: () => onOpenDialog("settings") },
+    { label: "통합운전", description: "운전 조건 제어", icon: "/control.png", action: () => onOpenDialog("control") },
+    { label: activeScreen === "detail" ? "메인 화면" : "상세 화면", description: "화면 전환", icon: activeScreen === "detail" ? "/device_back.png" : "/device.png", action: onToggleDetail },
   ];
   const handleMenuAction = (action: () => void) => {
     action();
@@ -675,28 +675,34 @@ function QuickButtons({
         <img src="/menu.png" alt="" className="h-[56px] w-[56px] object-contain" />
       </button>
       {menuOpen ? (
-        <div className="absolute bottom-[68px] right-0 z-20 w-[256px] overflow-hidden rounded-[14px] border border-[#9fc8ea] bg-[#f4f8fc] p-[8px] shadow-[0_12px_26px_rgba(9,45,88,0.28)]">
-          <div className="mb-[7px] flex h-[30px] items-center justify-between border-b border-[#c5dced] px-[4px] pb-[6px]">
-            <span className="text-[13px] font-black tracking-[0.18em] text-[#245d94]">QUICK MENU</span>
-            <button className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-[#dcebf7] text-[15px] font-black text-[#245d94]" onClick={() => setMenuOpen(false)} type="button">
+        <div className="absolute bottom-[68px] right-0 z-20 w-[344px] overflow-hidden rounded-[22px] border border-[#d3e0eb] bg-white p-[14px] shadow-[0_18px_42px_rgba(15,43,72,0.3)]">
+          <div className="mb-[12px] flex items-start justify-between">
+            <div>
+              <div className="text-[22px] font-black leading-none text-[#173f69]">메뉴</div>
+              <div className="mt-[5px] text-[13px] font-bold text-[#6f879d]">필요한 작업을 선택하세요</div>
+            </div>
+            <button className="flex h-[32px] w-[32px] items-center justify-center rounded-full bg-[#eef3f7] text-[18px] font-black text-[#45657f]" onClick={() => setMenuOpen(false)} type="button">
               ×
             </button>
           </div>
+          <div className="grid grid-cols-2 gap-[10px]">
           {menuItems.map((item) => (
             <button
               key={item.label}
-              className="group mb-[6px] grid h-[48px] w-full grid-cols-[48px_1fr] items-center gap-[8px] rounded-[10px] border border-[#c9dfef] bg-white px-[7px] text-left shadow-[0_2px_5px_rgba(31,93,151,0.08)] transition-colors hover:bg-[#eef7ff]"
+              className="group grid h-[106px] content-between rounded-[18px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px] text-left transition-colors hover:border-[#9cc7e8] hover:bg-[#eef7ff]"
               onClick={() => handleMenuAction(item.action)}
               type="button"
             >
-              <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[9px] bg-[#e4f0fa] shadow-[inset_0_0_0_1px_#c7dceb]">
-                <img src={item.icon} alt="" className="h-[29px] w-[29px] object-contain" />
+              <span className="flex h-[42px] w-[42px] items-center justify-center rounded-[14px] bg-white shadow-[0_3px_9px_rgba(38,94,140,0.12)]">
+                <img src={item.icon} alt="" className="h-[30px] w-[30px] object-contain" />
               </span>
-              <span className="flex min-w-0 items-center">
-                <span className="text-[18px] font-black leading-none text-[#163d69]">{item.label}</span>
+              <span className="min-w-0">
+                <span className="block text-[18px] font-black leading-none text-[#163d69]">{item.label}</span>
+                <span className="mt-[6px] block text-[12px] font-bold text-[#6f879d]">{item.description}</span>
               </span>
             </button>
           ))}
+          </div>
         </div>
       ) : null}
     </div>
@@ -792,10 +798,13 @@ function HeaderCell({ children }: { children: ReactNode }) {
 function DialogShell({ children, onClose, title, wide = false }: { children: ReactNode; onClose: () => void; title: string; wide?: boolean }) {
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-[24px]">
-      <section className={`${wide ? "w-[1040px]" : "w-[560px]"} overflow-hidden rounded-[16px] border border-[#9fc8ea] bg-[#f4f8fc] shadow-[0_16px_34px_rgba(4,31,69,0.34)]`}>
-        <div className="grid h-[56px] grid-cols-[1fr_112px] border-b border-[#b9d5ea] bg-[#256fb4]">
-          <div className="flex items-center justify-center text-[24px] font-bold text-white">{title}</div>
-          <button className="bg-[#1d5f9d] text-[20px] font-bold text-white" onClick={onClose} type="button">
+      <section className={`${wide ? "w-[1040px]" : "w-[560px]"} overflow-hidden rounded-[22px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_18px_42px_rgba(15,43,72,0.34)]`}>
+        <div className="flex h-[74px] items-center justify-between border-b border-[#dbe7f1] bg-white px-[22px]">
+          <div>
+            <div className="text-[26px] font-black leading-none text-[#173f69]">{title}</div>
+            <div className="mt-[7px] text-[13px] font-bold text-[#6f879d]">설정을 확인하고 필요한 항목을 조정하세요</div>
+          </div>
+          <button className="h-[42px] rounded-full border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
             닫기
           </button>
         </div>
@@ -811,51 +820,56 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-[24px]">
-      <section className="w-[620px] overflow-hidden rounded-[18px] border border-[#9fc8ea] bg-[#f4f8fc] shadow-[0_16px_34px_rgba(4,31,69,0.34)]">
-        <div className="grid h-[82px] grid-cols-[74px_1fr_84px] items-center border-b border-[#b7d8f4] bg-[#256fb4] px-[14px]">
-          <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[16px] bg-[#e8f2fb]">
-            <img src="/factory.png" alt="" className="h-[38px] w-[38px] object-contain" />
+      <section className="w-[760px] overflow-hidden rounded-[24px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_18px_42px_rgba(15,43,72,0.34)]">
+        <div className="flex h-[86px] items-center justify-between border-b border-[#dbe7f1] bg-white px-[22px]">
+          <div className="flex items-center gap-[14px]">
+            <span className="flex h-[54px] w-[54px] items-center justify-center rounded-[18px] bg-[#eaf4fc]">
+              <img src="/factory.png" alt="" className="h-[36px] w-[36px] object-contain" />
+            </span>
+            <span>
+              <span className="block text-[27px] font-black leading-none text-[#173f69]">공장 변경</span>
+              <span className="mt-[7px] block text-[14px] font-bold text-[#6f879d]">운영할 공장을 선택한 뒤 적용하세요</span>
+            </span>
           </div>
-          <div className="min-w-0">
-            <div className="text-[25px] font-black leading-none text-white">공장 변경</div>
-            <div className="mt-[7px] text-[14px] font-bold tracking-[0.08em] text-[#d7efff]">SELECT ACTIVE FACTORY</div>
-          </div>
-          <button className="h-[42px] rounded-[12px] bg-[#1d5f9d] text-[18px] font-black text-white" onClick={onClose} type="button">
+          <button className="h-[42px] rounded-full border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
             닫기
           </button>
         </div>
-        <div className="grid gap-[9px] p-[14px]">
-          <div className="flex h-[44px] items-center justify-between rounded-[12px] border border-[#c8e0f5] bg-white px-[16px]">
-            <span className="text-[16px] font-black text-[#1c4f82]">현재 선택</span>
-            <span className="text-[20px] font-black text-[#0d4da5]">{factories[selectedFactory]}</span>
-          </div>
+        <div className="grid grid-cols-[230px_1fr] gap-[16px] p-[18px]">
+          <aside className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+            <div className="text-[14px] font-black text-[#6f879d]">현재 선택</div>
+            <div className="mt-[10px] text-[34px] font-black leading-none text-[#173f69]">{factories[selectedFactory]}</div>
+            <div className="mt-[18px] rounded-[16px] bg-[#eef7ff] p-[12px] text-[14px] font-bold leading-relaxed text-[#45657f]">
+              선택한 공장 기준으로 화면 데이터와 설정 항목을 표시합니다.
+            </div>
+          </aside>
+          <div className="grid grid-cols-2 gap-[10px]">
         {factories.map((factory, index) => (
           <button
             key={factory}
-            className={`grid h-[58px] grid-cols-[54px_1fr_84px] items-center rounded-[13px] border px-[10px] text-left transition-colors ${
+            className={`grid h-[88px] grid-cols-[48px_1fr] items-center rounded-[18px] border p-[12px] text-left transition-colors ${
               selectedFactory === index
-                ? "border-[#2e86d3] bg-[#e5f4ff] shadow-[0_7px_16px_rgba(40,115,190,0.18)]"
-                : "border-[#cfe4f7] bg-white hover:bg-[#eef7ff]"
+                ? "border-[#237bd0] bg-[#eef7ff] shadow-[0_8px_18px_rgba(35,123,208,0.14)]"
+                : "border-[#d9e6f0] bg-white hover:border-[#9cc7e8]"
             }`}
             onClick={() => setSelectedFactory(index)}
             type="button"
           >
-            <span className={`flex h-[36px] w-[36px] items-center justify-center rounded-full text-[17px] font-black ${selectedFactory === index ? "bg-[#237bd0] text-white" : "bg-[#e4edf6] text-[#5d748c]"}`}>
+            <span className={`flex h-[40px] w-[40px] items-center justify-center rounded-[14px] text-[17px] font-black ${selectedFactory === index ? "bg-[#237bd0] text-white" : "bg-[#eef3f7] text-[#5d748c]"}`}>
               {index + 1}
             </span>
             <span className="flex min-w-0 flex-col justify-center">
-              <span className="text-[22px] font-black leading-none text-[#163d69]">{factory}</span>
-              <span className="mt-[5px] text-[12px] font-bold tracking-[0.12em] text-[#7c97b0]">FACTORY {String(index + 1).padStart(2, "0")}</span>
-            </span>
-            <span className={`flex h-[30px] items-center justify-center rounded-full text-[13px] font-black ${selectedFactory === index ? "bg-[#237bd0] text-white" : "bg-[#edf4fa] text-[#7590aa]"}`}>
-              {selectedFactory === index ? "선택됨" : "선택"}
+              <span className="text-[22px] font-black leading-none text-[#173f69]">{factory}</span>
+              <span className="mt-[7px] text-[13px] font-bold text-[#6f879d]">{selectedFactory === index ? "선택됨" : "선택 가능"}</span>
             </span>
           </button>
         ))}
-        <div className="mt-[3px] grid h-[54px] grid-cols-[1fr_1.3fr] gap-[9px]">
-          <button className="rounded-[13px] border border-[#b8d5ee] bg-white text-[20px] font-black text-[#315f8a]" onClick={onClose} type="button">취소</button>
-          <button className="rounded-[13px] bg-[#237bd0] text-[20px] font-black text-white shadow-[0_6px_14px_rgba(33,117,199,0.22)]" onClick={onClose} type="button">적용</button>
+          </div>
         </div>
+        <div className="grid h-[72px] grid-cols-[1fr_160px_180px] gap-[10px] border-t border-[#dbe7f1] bg-white px-[18px] py-[12px]">
+          <span />
+          <button className="rounded-[15px] border border-[#cfdde8] bg-[#f8fbfd] text-[19px] font-black text-[#45657f]" onClick={onClose} type="button">취소</button>
+          <button className="rounded-[15px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_6px_14px_rgba(35,123,208,0.22)]" onClick={onClose} type="button">적용</button>
         </div>
       </section>
     </div>
@@ -877,88 +891,109 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-[24px]">
-      <section className="w-[1040px] overflow-hidden rounded-[18px] border border-[#9fc8ea] bg-[#f4f8fc] shadow-[0_16px_34px_rgba(4,31,69,0.34)]">
-        <div className="grid h-[78px] grid-cols-[74px_1fr_92px] items-center border-b border-[#b7d8f4] bg-[#256fb4] px-[14px]">
-          <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[16px] bg-[#e8f2fb]">
-            <img src="/control.png" alt="" className="h-[38px] w-[38px] object-contain" />
+      <section className="w-[1080px] overflow-hidden rounded-[24px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_18px_42px_rgba(15,43,72,0.34)]">
+        <div className="flex h-[86px] items-center justify-between border-b border-[#dbe7f1] bg-white px-[22px]">
+          <div className="flex items-center gap-[14px]">
+            <span className="flex h-[54px] w-[54px] items-center justify-center rounded-[18px] bg-[#eaf4fc]">
+              <img src="/control.png" alt="" className="h-[36px] w-[36px] object-contain" />
+            </span>
+            <span>
+              <span className="block text-[27px] font-black leading-none text-[#173f69]">통합운전 설정</span>
+              <span className="mt-[7px] block text-[14px] font-bold text-[#6f879d]">운전 조건과 그룹 제어를 한 화면에서 관리합니다</span>
+            </span>
           </div>
-          <div className="min-w-0">
-            <div className="text-[25px] font-black leading-none text-white">통합운전 설정</div>
-            <div className="mt-[7px] text-[14px] font-bold tracking-[0.08em] text-[#d7efff]">GROUP OPERATION CONTROL</div>
-          </div>
-          <button className="h-[42px] rounded-[12px] bg-[#1d5f9d] text-[18px] font-black text-white" onClick={onClose} type="button">
+          <button className="h-[42px] rounded-full border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
             닫기
           </button>
         </div>
-        <div className="grid grid-cols-[430px_1fr_205px] gap-[12px] p-[14px]">
-          <div className="rounded-[15px] border border-[#c4ddf4] bg-white p-[12px] shadow-[0_4px_12px_rgba(30,93,151,0.08)]">
-            <PanelHeading eyebrow="PRESSURE / COUNT">제어 기준값</PanelHeading>
-            <div className="mt-[10px] grid gap-[8px]">
+        <div className="grid grid-cols-[1fr_280px] gap-[16px] p-[18px]">
+          <div className="grid gap-[14px]">
+            <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+              <PanelHeading eyebrow="CONTROL VALUES">제어 기준값</PanelHeading>
+              <div className="mt-[12px] grid grid-cols-3 gap-[10px]">
               {controls.map(([label, value, unit]) => (
-                <div key={label} className="grid h-[48px] grid-cols-[1fr_120px_48px] items-center rounded-[11px] border border-[#d3e7f8] bg-[#f8fcff] px-[10px]">
-                  <div className="text-[16px] font-black text-[#244c75]">{label}</div>
-                  <div className="flex items-center justify-center rounded-[8px] bg-white text-[22px] font-black text-[#0d4da5] shadow-[inset_0_0_0_1px_#d7e8f6]">{value}</div>
-                  <div className="text-center text-[15px] font-black text-[#5f7f9c]">{unit}</div>
+                <div key={label} className="rounded-[16px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px]">
+                  <div className="text-[14px] font-black text-[#6f879d]">{label}</div>
+                  <div className="mt-[8px] flex items-end justify-between">
+                    <span className="text-[27px] font-black leading-none text-[#173f69]">{value}</span>
+                    <span className="text-[14px] font-black text-[#6f879d]">{unit}</span>
+                  </div>
                 </div>
               ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-[14px]">
+              <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+                <PanelHeading eyebrow="SORT / SAVE">운전 조건</PanelHeading>
+                <div className="mt-[12px] grid gap-[10px]">
+                  <SegmentedOption
+                    items={[
+                      ["setting", "설정순"],
+                      ["time", "시간순"],
+                    ]}
+                    selected={sortMode}
+                    onSelect={(value) => setSortMode(value as "setting" | "time")}
+                  />
+                  <label className="flex h-[54px] items-center justify-between rounded-[16px] border border-[#d9e6f0] bg-[#f8fbfd] px-[16px] text-[17px] font-black text-[#244c75]">
+                    <span>절약모드</span>
+                    <input readOnly className="h-[24px] w-[24px] accent-[#237bd0]" type="checkbox" />
+                  </label>
+                </div>
+              </div>
+              <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+                <PanelHeading eyebrow="INVERTER">인버터 기준</PanelHeading>
+                <div className="mt-[12px] grid grid-cols-2 gap-[10px]">
+                  <InfoTile label="메인 호기" unit="호기" value="0" />
+                  <InfoTile label="제어압력" unit="bar" value="0.0" />
+                </div>
+              </div>
             </div>
           </div>
-          <div className="grid content-start gap-[12px] rounded-[15px] border border-[#c4ddf4] bg-white p-[12px] shadow-[0_4px_12px_rgba(30,93,151,0.08)]">
-            <PanelHeading eyebrow="MODE / INVERTER">운전 조건</PanelHeading>
-            <div className="grid gap-[8px]">
+          <aside className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+            <PanelHeading eyebrow="ACTION">통합운전</PanelHeading>
+            <div className="mt-[12px] grid gap-[10px]">
               <SegmentedOption
                 items={[
-                  ["setting", "설정순"],
-                  ["time", "시간순"],
+                  ["local", "LOCAL"],
+                  ["remote", "REMOTE"],
                 ]}
-                selected={sortMode}
-                onSelect={(value) => setSortMode(value as "setting" | "time")}
+                selected={operationMode}
+                onSelect={(value) => setOperationMode(value as "local" | "remote")}
               />
-              <label className="flex h-[46px] items-center justify-between rounded-[11px] border border-[#d3e7f8] bg-[#f8fcff] px-[14px] text-[16px] font-black text-[#244c75]">
-                <span>절약모드</span>
-                <input readOnly className="h-[22px] w-[22px] accent-[#237bd0]" type="checkbox" />
-              </label>
-              <div className="grid h-[48px] grid-cols-[1fr_92px_46px] items-center rounded-[11px] border border-[#d3e7f8] bg-[#f8fcff] px-[10px]">
-                <span className="text-[16px] font-black text-[#244c75]">인버터 메인 호기</span>
-                <span className="flex h-[32px] items-center justify-center rounded-[8px] bg-white text-[20px] font-black text-[#0d4da5] shadow-[inset_0_0_0_1px_#d7e8f6]">0</span>
-                <span className="text-center text-[14px] font-black text-[#5f7f9c]">호기</span>
+              <SegmentedOption
+                items={[
+                  ["single", "개별"],
+                  ["group", "통합"],
+                ]}
+                selected={controlMode}
+                onSelect={(value) => setControlMode(value as "single" | "group")}
+              />
+              <div className="rounded-[18px] bg-[#eef7ff] p-[14px] text-center">
+                <div className="text-[13px] font-black text-[#6f879d]">현재 모드</div>
+                <div className="mt-[7px] text-[30px] font-black leading-none text-[#173f69]">{operationMode.toUpperCase()}</div>
               </div>
-              <div className="grid h-[48px] grid-cols-[1fr_92px_46px] items-center rounded-[11px] border border-[#d3e7f8] bg-[#f8fcff] px-[10px]">
-                <span className="text-[16px] font-black text-[#244c75]">인버터 제어압력 설정</span>
-                <span className="flex h-[32px] items-center justify-center rounded-[8px] bg-white text-[20px] font-black text-[#0d4da5] shadow-[inset_0_0_0_1px_#d7e8f6]">0.0</span>
-                <span className="text-center text-[14px] font-black text-[#5f7f9c]">bar</span>
-              </div>
+              <button className="h-[72px] rounded-[18px] bg-[#d92525] text-[30px] font-black text-white shadow-[0_7px_15px_rgba(208,31,38,0.22)]" type="button">운전</button>
+              <button className="h-[72px] rounded-[18px] bg-[#667380] text-[30px] font-black text-white shadow-[0_7px_15px_rgba(70,82,94,0.18)]" type="button">정지</button>
             </div>
-            <PanelHeading eyebrow="OPERATION MODE">운전 모드</PanelHeading>
-            <SegmentedOption
-              items={[
-                ["local", "LOCAL"],
-                ["remote", "REMOTE"],
-              ]}
-              selected={operationMode}
-              onSelect={(value) => setOperationMode(value as "local" | "remote")}
-            />
-            <SegmentedOption
-              items={[
-                ["single", "개별 운전"],
-                ["group", "통합 운전"],
-              ]}
-              selected={controlMode}
-              onSelect={(value) => setControlMode(value as "single" | "group")}
-            />
-          </div>
-          <div className="grid content-start gap-[12px] rounded-[15px] border border-[#c4ddf4] bg-white p-[12px] shadow-[0_4px_12px_rgba(30,93,151,0.08)]">
-            <PanelHeading eyebrow="ACTION">통합운전</PanelHeading>
-            <div className="rounded-[14px] border border-[#d3e7f8] bg-[#f8fcff] p-[10px] text-center">
-              <div className="text-[13px] font-black tracking-[0.12em] text-[#7c97b0]">CURRENT MODE</div>
-              <div className="mt-[6px] text-[24px] font-black text-[#0d4da5]">{operationMode.toUpperCase()}</div>
-            </div>
-            <button className="h-[82px] rounded-[16px] bg-[#d92525] text-[32px] font-black text-white shadow-[0_7px_15px_rgba(208,31,38,0.22)]" type="button">운전</button>
-            <button className="h-[82px] rounded-[16px] bg-[#667380] text-[32px] font-black text-white shadow-[0_7px_15px_rgba(70,82,94,0.18)]" type="button">정지</button>
-            <button className="h-[52px] rounded-[14px] bg-[#237bd0] text-[20px] font-black text-white shadow-[0_6px_14px_rgba(33,117,199,0.22)]" type="button">저장</button>
-          </div>
+          </aside>
+        </div>
+        <div className="grid h-[72px] grid-cols-[1fr_180px] border-t border-[#dbe7f1] bg-white px-[18px] py-[12px]">
+          <span />
+          <button className="rounded-[15px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_6px_14px_rgba(35,123,208,0.22)]" type="button">저장</button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function InfoTile({ label, unit, value }: { label: string; unit: string; value: string }) {
+  return (
+    <div className="rounded-[16px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px]">
+      <div className="text-[13px] font-black text-[#6f879d]">{label}</div>
+      <div className="mt-[8px] flex items-end justify-between">
+        <span className="text-[25px] font-black leading-none text-[#173f69]">{value}</span>
+        <span className="text-[13px] font-black text-[#6f879d]">{unit}</span>
+      </div>
     </div>
   );
 }
@@ -1005,45 +1040,56 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <DialogShell onClose={onClose} title="설정" wide>
-      <div className="grid max-h-[690px] gap-[8px] overflow-y-auto bg-[#f4f8fc] p-[10px]">
-        <div className="grid grid-cols-2 gap-[6px] rounded-[13px] border border-[#c4ddf4] bg-white p-[8px] shadow-[0_3px_10px_rgba(30,93,151,0.07)]">
-          <PlainSettingRow label="Connect IP Setting" value="121.164.120.200" />
-          <PlainSettingRow label="Port Setting" value="1502" />
-          <PlainSettingRow label="Login Pw Setting" value="1234" />
-          <PlainSettingRow label="Setting Pw Setting" value="471112" />
-        </div>
-        <div className="grid gap-[5px] rounded-[13px] border border-[#c4ddf4] bg-white p-[8px] shadow-[0_3px_10px_rgba(30,93,151,0.07)]">
-          <SectionTitle>사용모드 / 정렬 설정</SectionTitle>
-          {modes.map(([no, a, b, c, index]) => (
-            <div key={no} className="grid h-[32px] grid-cols-[44px_1fr_1fr_1fr_80px] gap-[3px]">
-              <div className="flex items-center justify-center rounded-[7px] border border-[#d2e8ff] bg-[#f8fcff] font-bold text-[#244c75]">{no}</div>
-              {[a, b, c, index].map((value, idx) => (
-                <div key={idx} className="flex items-center justify-center rounded-[7px] border border-[#d2e8ff] bg-[#fbfdff] text-[16px] font-bold">{value}</div>
+      <div className="grid max-h-[690px] grid-cols-[300px_1fr] gap-[14px] overflow-y-auto bg-[#f6f9fc] p-[16px]">
+        <aside className="grid content-start gap-[12px]">
+          <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+            <PanelHeading eyebrow="NETWORK">접속 정보</PanelHeading>
+            <div className="mt-[12px] grid gap-[8px]">
+              <SettingSummary label="Connect IP" value="121.164.120.200" />
+              <SettingSummary label="Port" value="1502" />
+              <SettingSummary label="Login PW" value="1234" />
+              <SettingSummary label="Setting PW" value="471112" />
+            </div>
+          </div>
+          <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+            <PanelHeading eyebrow="DIO">DIO BIT</PanelHeading>
+            <div className="mt-[12px] grid gap-[8px]">
+              <SettingSummary label="BIT0" value="운전" />
+              <SettingSummary label="BIT4" value="고장" />
+            </div>
+          </div>
+        </aside>
+        <div className="grid content-start gap-[14px]">
+          <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+            <PanelHeading eyebrow="MODE TABLE">사용모드 / 정렬 설정</PanelHeading>
+            <div className="mt-[12px] grid gap-[6px]">
+              {modes.map(([no, a, b, c, index]) => (
+                <div key={no} className="grid h-[38px] grid-cols-[54px_1fr_1fr_1fr_92px] gap-[5px]">
+                  <div className="flex items-center justify-center rounded-[10px] bg-[#eef3f7] font-black text-[#45657f]">{no}</div>
+                  {[a, b, c, index].map((value, idx) => (
+                    <div key={idx} className="flex items-center justify-center rounded-[10px] border border-[#d9e6f0] bg-[#f8fbfd] text-[16px] font-bold">{value}</div>
+                  ))}
+                </div>
               ))}
             </div>
-          ))}
-          <div className="grid h-[38px] grid-cols-[1fr_56px_70px_56px_110px] gap-[4px]">
-            <div className="flex items-center justify-center text-[17px] font-bold text-[#0d4da5]">사용모드 개수 설정</div>
-            <ChoiceButton>-</ChoiceButton>
-            <div className="flex items-center justify-center rounded-[8px] border border-[#9fc8ea] bg-white text-[20px] font-bold">1</div>
-            <ChoiceButton>+</ChoiceButton>
-            <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-bold text-white" type="button">저장</button>
+            <div className="mt-[12px] grid h-[46px] grid-cols-[1fr_58px_78px_58px_120px] gap-[8px]">
+              <div className="flex items-center text-[17px] font-black text-[#173f69]">사용모드 개수 설정</div>
+              <ChoiceButton>-</ChoiceButton>
+              <div className="flex items-center justify-center rounded-[12px] border border-[#d9e6f0] bg-[#f8fbfd] text-[22px] font-black text-[#173f69]">1</div>
+              <ChoiceButton>+</ChoiceButton>
+              <button className="rounded-[12px] bg-[#237bd0] text-[18px] font-bold text-white" type="button">저장</button>
+            </div>
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-[8px]">
-          <div className="grid gap-[5px] rounded-[13px] border border-[#c4ddf4] bg-white p-[8px] shadow-[0_3px_10px_rgba(30,93,151,0.07)]">
-            <SectionTitle>공장 정보</SectionTitle>
-            {factories.map((factory) => (
-              <div key={factory} className="grid h-[32px] grid-cols-[120px_1fr] gap-[3px]">
-                <div className="flex items-center justify-center rounded-[7px] border border-[#d2e8ff] bg-[#f8fcff] font-bold text-[#244c75]">{factory}</div>
-                <div className="flex items-center rounded-[7px] border border-[#d2e8ff] px-[8px]">192.168.0.10</div>
-              </div>
-            ))}
-          </div>
-          <div className="grid content-start gap-[6px] rounded-[13px] border border-[#c4ddf4] bg-white p-[8px] shadow-[0_3px_10px_rgba(30,93,151,0.07)]">
-            <SectionTitle>DIO BIT 설정</SectionTitle>
-            <PlainSettingRow label="BIT0" value="운전" />
-            <PlainSettingRow label="BIT4" value="고장" />
+          <div className="rounded-[20px] border border-[#d9e6f0] bg-white p-[16px]">
+            <PanelHeading eyebrow="FACTORY">공장 정보</PanelHeading>
+            <div className="mt-[12px] grid grid-cols-5 gap-[8px]">
+              {factories.map((factory, index) => (
+                <div key={factory} className="rounded-[16px] border border-[#d9e6f0] bg-[#f8fbfd] p-[10px] text-center">
+                  <div className="text-[16px] font-black text-[#173f69]">{factory}</div>
+                  <div className="mt-[7px] text-[13px] font-bold text-[#6f879d]">192.168.0.{10 + index}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -1051,27 +1097,13 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function SettingRow({ label, unit = "", value }: { label: string; unit?: string; value: string }) {
+function SettingSummary({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid min-h-[42px] grid-cols-[1fr_170px_54px] overflow-hidden rounded-[9px] border border-[#d2e8ff] bg-white">
-      <div className="flex items-center justify-center bg-[#f8fcff] px-[6px] text-center text-[16px] font-bold">{label}</div>
-      <div className="flex items-center justify-center border-x border-[#d2e8ff] text-[20px] font-bold text-[#0d4da5]">{value}</div>
-      <div className="flex items-center justify-center text-[16px] font-bold text-[#0d4da5]">{unit}</div>
+    <div className="rounded-[15px] border border-[#d9e6f0] bg-[#f8fbfd] p-[11px]">
+      <div className="text-[12px] font-black text-[#6f879d]">{label}</div>
+      <div className="mt-[6px] text-[18px] font-black leading-none text-[#173f69]">{value}</div>
     </div>
   );
-}
-
-function PlainSettingRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid min-h-[36px] grid-cols-[1fr_210px] overflow-hidden rounded-[9px] border border-[#d2e8ff] bg-white">
-      <div className="flex items-center justify-center bg-[#f8fcff] px-[6px] text-center text-[15px] font-bold text-[#244c75]">{label}</div>
-      <div className="flex items-center justify-center border-l border-[#d2e8ff] px-[8px] text-center text-[18px] font-bold text-[#0d4da5]">{value}</div>
-    </div>
-  );
-}
-
-function SectionTitle({ children }: { children: ReactNode }) {
-  return <div className="flex h-[32px] items-center justify-center rounded-[8px] bg-[#dcecf9] text-[17px] font-bold text-[#245d94]">{children}</div>;
 }
 
 function ChoiceButton({ active = false, children }: { active?: boolean; children: ReactNode }) {
