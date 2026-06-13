@@ -48,7 +48,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.29";
+const APP_VERSION = "0.1.30";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -481,11 +481,15 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
     ? `${compressor.controlPressure?.toFixed(1) ?? "0.0"} bar`
     : `${compressor.noLoadPressure.toFixed(1)} bar`;
   const thirdValue = compressor.inverter ? `${compressor.rpm ?? 0} rpm` : `${compressor.loadPressure.toFixed(1)} bar`;
+  const titleTone = compressorTitleTone(compressor.id);
 
   return (
     <article className="relative min-h-0 overflow-hidden bg-white">
       <div className="grid h-full grid-rows-[42px_1fr_1fr_1fr_1fr_1fr] gap-[2px] border border-[#75b4ee] bg-[#d8ecff] p-[2px] shadow-[inset_0_0_0_1px_#ffffff]">
-        <div className="flex items-center justify-center overflow-hidden border border-[#75b4ee] bg-[#b3d4ff] px-[6px] text-center text-[20px] font-bold leading-none text-[#0d4da5] shadow-[2px_2px_1px_#ababab]">
+        <div
+          className="flex items-center justify-center overflow-hidden border border-[#75b4ee] px-[6px] text-center text-[20px] font-bold leading-none shadow-[2px_2px_1px_#ababab]"
+          style={{ backgroundColor: titleTone.background, color: titleTone.color }}
+        >
           {compressor.name} ({compressor.model})
         </div>
         <MetricRow label="압력" value={`${compressor.pressure.toFixed(1)} bar`} />
@@ -503,6 +507,20 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
       ) : null}
     </article>
   );
+}
+
+function compressorTitleTone(id: number) {
+  const tones = [
+    { background: "#b9dcff", color: "#0d4da5" },
+    { background: "#9fcbf7", color: "#083f7d" },
+    { background: "#82b8ec", color: "#063a74" },
+    { background: "#66a4df", color: "#ffffff" },
+    { background: "#4f91d2", color: "#ffffff" },
+    { background: "#3c7fc5", color: "#ffffff" },
+    { background: "#2c6bb0", color: "#ffffff" },
+    { background: "#205895", color: "#ffffff" },
+  ];
+  return tones[(Math.max(1, id) - 1) % tones.length];
 }
 
 function DisconnectedOverlay() {
