@@ -44,7 +44,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.10";
+const APP_VERSION = "0.1.11";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -771,22 +771,58 @@ function DialogShell({ children, onClose, title, wide = false }: { children: Rea
 
 function FactoryDialog({ onClose }: { onClose: () => void }) {
   const factories = ["공장 1", "공장 2", "공장 3", "공장 4", "공장 5"];
+  const [selectedFactory, setSelectedFactory] = useState(0);
 
   return (
-    <DialogShell onClose={onClose} title="공장 변경">
-      <div className="grid gap-[2px] p-[8px]">
-        {factories.map((factory, index) => (
-          <label key={factory} className="grid h-[52px] grid-cols-[58px_1fr] border border-[#d2e8ff] bg-[#fbfdff]">
-            <input checked={index === 0} className="m-auto h-[22px] w-[22px] accent-[#3374ce]" readOnly type="radio" />
-            <span className="flex items-center border-l border-[#d2e8ff] px-[14px] text-[22px] font-bold">{factory}</span>
-          </label>
-        ))}
-        <div className="mt-[6px] grid h-[50px] grid-cols-2 gap-[2px]">
-          <button className="bg-[#3374ce] text-[22px] font-bold text-white" onClick={onClose} type="button">닫기</button>
-          <button className="bg-[#3374ce] text-[22px] font-bold text-white" type="button">저장</button>
+    <div className="absolute inset-0 z-50 flex items-start justify-center bg-black/55 pt-[92px]">
+      <section className="w-[620px] overflow-hidden rounded-[18px] border border-[#81b9ed] bg-[linear-gradient(150deg,#fafdff_0%,#e3f2ff_100%)] shadow-[0_20px_44px_rgba(4,31,69,0.42),inset_0_1px_0_rgba(255,255,255,0.92)]">
+        <div className="grid h-[82px] grid-cols-[74px_1fr_84px] items-center border-b border-[#b7d8f4] bg-[linear-gradient(90deg,#1b64b2_0%,#3995dd_100%)] px-[14px]">
+          <div className="flex h-[54px] w-[54px] items-center justify-center rounded-[16px] bg-white/18 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]">
+            <img src="/factory.png" alt="" className="h-[38px] w-[38px] object-contain" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[25px] font-black leading-none text-white">공장 변경</div>
+            <div className="mt-[7px] text-[14px] font-bold tracking-[0.08em] text-[#d7efff]">SELECT ACTIVE FACTORY</div>
+          </div>
+          <button className="h-[42px] rounded-[12px] bg-white/16 text-[18px] font-black text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]" onClick={onClose} type="button">
+            닫기
+          </button>
         </div>
-      </div>
-    </DialogShell>
+        <div className="grid gap-[9px] p-[14px]">
+          <div className="flex h-[44px] items-center justify-between rounded-[12px] border border-[#c8e0f5] bg-white/80 px-[16px]">
+            <span className="text-[16px] font-black text-[#1c4f82]">현재 선택</span>
+            <span className="text-[20px] font-black text-[#0d4da5]">{factories[selectedFactory]}</span>
+          </div>
+        {factories.map((factory, index) => (
+          <button
+            key={factory}
+            className={`grid h-[58px] grid-cols-[54px_1fr_84px] items-center rounded-[13px] border px-[10px] text-left transition-colors ${
+              selectedFactory === index
+                ? "border-[#2e86d3] bg-[#e5f4ff] shadow-[0_7px_16px_rgba(40,115,190,0.18)]"
+                : "border-[#cfe4f7] bg-white/86 hover:bg-[#f5fbff]"
+            }`}
+            onClick={() => setSelectedFactory(index)}
+            type="button"
+          >
+            <span className={`flex h-[36px] w-[36px] items-center justify-center rounded-full text-[17px] font-black ${selectedFactory === index ? "bg-[#237bd0] text-white" : "bg-[#e4edf6] text-[#5d748c]"}`}>
+              {index + 1}
+            </span>
+            <span className="flex min-w-0 flex-col justify-center">
+              <span className="text-[22px] font-black leading-none text-[#163d69]">{factory}</span>
+              <span className="mt-[5px] text-[12px] font-bold tracking-[0.12em] text-[#7c97b0]">FACTORY {String(index + 1).padStart(2, "0")}</span>
+            </span>
+            <span className={`flex h-[30px] items-center justify-center rounded-full text-[13px] font-black ${selectedFactory === index ? "bg-[#237bd0] text-white" : "bg-[#edf4fa] text-[#7590aa]"}`}>
+              {selectedFactory === index ? "선택됨" : "선택"}
+            </span>
+          </button>
+        ))}
+        <div className="mt-[3px] grid h-[54px] grid-cols-[1fr_1.3fr] gap-[9px]">
+          <button className="rounded-[13px] border border-[#b8d5ee] bg-white/78 text-[20px] font-black text-[#315f8a]" onClick={onClose} type="button">취소</button>
+          <button className="rounded-[13px] bg-[linear-gradient(90deg,#1d6fc4,#39a1e7)] text-[20px] font-black text-white shadow-[0_8px_18px_rgba(33,117,199,0.28)]" onClick={onClose} type="button">적용</button>
+        </div>
+        </div>
+      </section>
+    </div>
   );
 }
 
