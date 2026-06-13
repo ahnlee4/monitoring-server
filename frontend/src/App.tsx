@@ -48,7 +48,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.25";
+const APP_VERSION = "0.1.26";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -493,12 +493,7 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
         <div className="relative grid grid-cols-2 gap-[2px]">
           <StatusCell tone={compressor.local ? "local" : "remote"}>{compressor.local ? "로 컬" : "리모트"}</StatusCell>
           <StatusCell tone={compressor.running ? "running" : "stop"}>{compressor.running ? "부 하" : "정 지"}</StatusCell>
-          {compressor.alarm || compressor.fault ? (
-            <div className="absolute inset-0 grid grid-cols-2 gap-[2px]">
-              {compressor.alarm ? <FlagCell tone="alarm">알 림</FlagCell> : <span />}
-              {compressor.fault ? <FlagCell tone="fault">고 장</FlagCell> : <span />}
-            </div>
-          ) : null}
+          <StatusFlagOverlay alarm={compressor.alarm} fault={compressor.fault} />
         </div>
         <MetricRow label="총 운전시간" value={`${compressor.totalHours.toLocaleString("ko-KR")} hr`} />
       </div>
@@ -589,11 +584,29 @@ function StatusCell({ tone, children }: { tone: "local" | "remote" | "running" |
   );
 }
 
-function FlagCell({ tone, children }: { tone: "alarm" | "fault"; children: ReactNode }) {
-  const activeClass = tone === "alarm" ? "bg-[#ffff00] brightness-105 text-black" : "bg-[#ff4f4f] brightness-105 text-black";
+function StatusFlagOverlay({ alarm, fault }: { alarm: boolean; fault: boolean }) {
+  if (!alarm && !fault) return null;
+  if (alarm && fault) {
+    return (
+      <div className="absolute inset-0 z-20 grid grid-cols-2 gap-[2px] bg-[#d8ecff]">
+        <FlagCell tone="alarm">알 림</FlagCell>
+        <FlagCell tone="fault">고 장</FlagCell>
+      </div>
+    );
+  }
 
   return (
-    <div className={`flex min-h-0 animate-pulse items-center justify-center overflow-hidden border border-[#75b4ee] px-[2px] text-center text-[19px] font-black leading-none ${activeClass}`}>
+    <div className="absolute inset-0 z-20 grid bg-[#d8ecff]">
+      <FlagCell tone={alarm ? "alarm" : "fault"}>{alarm ? "알 림" : "고 장"}</FlagCell>
+    </div>
+  );
+}
+
+function FlagCell({ tone, children }: { tone: "alarm" | "fault"; children: ReactNode }) {
+  const activeClass = tone === "alarm" ? "bg-[#ffff00] text-black" : "bg-[#ff4f4f] text-black";
+
+  return (
+    <div className={`flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] px-[2px] text-center text-[20px] font-black leading-none ${activeClass}`}>
       {children}
     </div>
   );
