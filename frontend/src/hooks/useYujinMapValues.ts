@@ -38,7 +38,7 @@ export function useYujinMapValues() {
       try {
         const values = await fetchYujinMapValues(MAP_VALUES_LIMIT, MAP_REFRESH_TIMEOUT_MS);
         if (!cancelled) {
-          const nextValues = toMapRecord(values);
+          const nextValues = mergeFetchedMapValues(values, mapValuesRef.current);
           mapValuesRef.current = nextValues;
           startTransition(() => setMapValues(nextValues));
         }
@@ -141,4 +141,33 @@ function toMapRecord(values: YujinMapValue[]) {
     record[item.key.toUpperCase()] = item;
     return record;
   }, {});
+}
+
+function mergeFetchedMapValues(values: YujinMapValue[], currentValues: Record<string, YujinMapValue>) {
+  const fetched = toMapRecord(values);
+  const next = { ...fetched };
+
+  for (const [key, current] of Object.entries(currentValues)) {
+    const fetchedValue = next[key];
+    if (!fetchedValue) {
+      next[key] = current;
+      continue;
+    }
+
+    if (isNewerTimestamp(current.updated_at, fetchedValue.updated_at)) {
+      next[key] = {
+        ...fetchedValue,
+        updated_at: current.updated_at,
+        source: current.source ?? fetchedValue.source,
+      };
+    }
+  }
+
+  return next;
+}
+
+function isNewerTimestamp(candidate: string | null, baseline: string | null) {
+  if (!candidate) return false;
+  if (!baseline) return true;
+  return new Date(candidate).getTime() > new Date(baseline).getTime();
 }
