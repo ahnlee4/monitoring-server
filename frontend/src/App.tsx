@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.60";
+const APP_VERSION = "0.1.61";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -794,7 +794,7 @@ function Footer({
   setMenuOpen: (open: boolean) => void;
 }) {
   return (
-    <footer className="relative grid min-h-0 grid-cols-[45px_216px_45px_282px_45px_558px_66px] gap-[2px] bg-white p-[3px]">
+    <footer className="relative z-40 grid min-h-0 grid-cols-[45px_216px_45px_282px_45px_558px_66px] gap-[2px] overflow-visible bg-white p-[3px]">
       <VerticalTitle>모드</VerticalTitle>
       <ModePanel active={dashboard.sortMode} />
       <VerticalTitle>통합제어</VerticalTitle>
