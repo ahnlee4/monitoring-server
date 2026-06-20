@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, PointerEvent, ReactNode } from "react";
+import { DetailScreen } from "./components/DetailScreen";
 import { QuickButtons } from "./components/QuickButtons";
 import { useYujinMapValues } from "./hooks/useYujinMapValues";
 import {
@@ -62,7 +63,7 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.95";
+const APP_VERSION = "0.1.96";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -229,7 +230,7 @@ export default function App() {
                 ) : null}
               </>
             ) : (
-              <DetailScreen dashboard={dashboard} />
+              <DetailScreen dashboard={dashboard} mapValues={mapValues} />
             )}
           </section>
 
@@ -839,92 +840,6 @@ function OptionPanel({ options }: { options: DashboardState["options"] }) {
             <span className="line-clamp-2">{option.label}</span>
           </label>
         ))}
-    </div>
-  );
-}
-
-function DetailScreen({ dashboard }: { dashboard: DashboardState }) {
-  const connectedCount = dashboard.compressors.filter((compressor) => compressor.connected).length;
-
-  return (
-    <div className="grid h-full grid-rows-[46px_1fr] gap-[3px] bg-[#eef7ff] p-[3px]">
-      <div className="grid grid-cols-[220px_1fr_190px_190px] gap-[3px]">
-        <HeaderCell>상세 화면</HeaderCell>
-        <HeaderCell>컴프레샤 / DIO / AIO 상태 통합 보기</HeaderCell>
-        <HeaderCell>연결 {connectedCount} / {dashboard.compressors.length}</HeaderCell>
-        <HeaderCell>메인압력 {formatScaledValue(dashboard.mainPressure, "bar")}</HeaderCell>
-      </div>
-      <div className="grid min-h-0 grid-cols-4 grid-rows-2 gap-[3px]">
-        {dashboard.compressors.map((compressor) => (
-          <DetailDeviceCard key={compressor.id} compressor={compressor} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DetailDeviceCard({ compressor }: { compressor: CompressorState }) {
-  const imageSrc = getDetailDeviceImage(compressor);
-  const statusText = compressor.connected ? (compressor.fault ? "FAULT" : compressor.running ? "RUN" : "RDY") : "FAIL";
-  const statusImage = !compressor.connected ? "/failure.png" : compressor.fault ? "/fault.png" : null;
-  const rows = [
-    ["압력", formatScaledValue(compressor.pressure, "bar")],
-    ["온도", formatScaledValue(compressor.temperature, "℃")],
-    ["무부하", formatScaledValue(compressor.noLoadPressure, "bar")],
-    ["부하", formatScaledValue(compressor.loadPressure, "bar")],
-    ["제어압력", formatScaledValue(compressor.controlPressure, "bar")],
-    ["RPM", formatIntegerValue(compressor.rpm)],
-    ["운전시간", formatIntegerValue(compressor.totalHours, "hr")],
-  ];
-
-  return (
-    <article className="grid min-h-0 grid-rows-[38px_1fr_40px] overflow-hidden border border-[#75b4ee] bg-white">
-      <div className="flex items-center justify-center bg-[#b3d4ff] px-[6px] text-center text-[19px] font-bold leading-none text-[#0d4da5]">
-        {compressor.name} ({compressor.model})
-      </div>
-      <div className="grid min-h-0 grid-cols-[152px_1fr] gap-[3px] bg-[#f5fbff] p-[3px]">
-        <div className="grid min-h-0 grid-rows-[1fr_28px] overflow-hidden border border-[#d2e8ff] bg-white">
-          <div className="relative flex min-h-0 items-center justify-center p-[4px]">
-            <img src={imageSrc} alt={compressor.model} className="max-h-full max-w-full object-contain" />
-            {statusImage ? <img src={statusImage} alt={statusText} className="absolute inset-x-[6px] top-[50%] h-[34px] -translate-y-1/2 object-fill" /> : null}
-          </div>
-          <div className="flex items-center justify-center bg-[#eef7ff] text-[15px] font-black text-[#0d4da5]">{compressor.inverter ? "INVERTER" : "STANDARD"}</div>
-        </div>
-        <div className="grid min-h-0 grid-cols-2 content-start gap-[2px]">
-          {rows.map(([label, value]) => (
-            <div key={label} className="grid min-h-[30px] grid-cols-[76px_1fr] overflow-hidden border border-[#d2e8ff] bg-white">
-              <div className="flex items-center justify-center bg-[#eef7ff] text-[13px] font-bold">{label}</div>
-              <div className="flex items-center justify-center text-[15px] font-bold">{value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="grid grid-cols-4 gap-[2px] p-[2px]">
-        <MiniLamp active={compressor.connected} danger={!compressor.connected} label={compressor.connected ? "통신" : "끊김"} />
-        <MiniLamp active={compressor.local} label={compressor.local ? "LOCAL" : "REMOTE"} />
-        <MiniLamp active={compressor.running} label={compressor.running ? "운전" : "정지"} />
-        <MiniLamp active={compressor.fault || compressor.alarm} danger label={compressor.fault ? "고장" : compressor.alarm ? "알람" : "정상"} />
-      </div>
-    </article>
-  );
-}
-
-function getDetailDeviceImage(compressor: CompressorState) {
-  if (compressor.model !== "-" && !compressor.model.includes("Micos")) {
-    return compressor.inverter ? "/injection_v_mini.png" : "/injection_mini.png";
-  }
-  return compressor.inverter ? "/equip_mini.png" : "/equip_n_mini.png";
-}
-
-function MiniLamp({ active, danger = false, label }: { active: boolean; danger?: boolean; label: string }) {
-  const className = active ? (danger ? "bg-[#ff6565] text-black" : "bg-[#4caa70] text-white") : "bg-[#d5d5d5] text-black";
-  return <div className={`flex items-center justify-center text-[13px] font-bold ${className}`}>{label}</div>;
-}
-
-function HeaderCell({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex items-center justify-center border border-[#75b4ee] bg-[#3374ce] px-[6px] text-center text-[20px] font-bold text-white">
-      {children}
     </div>
   );
 }
