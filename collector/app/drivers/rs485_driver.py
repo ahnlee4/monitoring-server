@@ -24,9 +24,6 @@ CRC_POLY = 0xA001
 SYSTEM_OILFREE_SELECTOR_OFFSET = 0x06
 INJECTION_SIGNED_OFFSETS = {0x00, 0x02, 0x04, 0x06, 0x08}
 OILFREE_SIGNED_OFFSETS = set(range(0x00, 0x28, 2))
-MULTI_FRAME_REQUEST_ADDR = 0x00
-MULTI_FRAME_IDLE_TIMEOUT_SECONDS = 0.04
-MULTI_FRAME_TOTAL_TIMEOUT_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -174,19 +171,31 @@ class RS485Collector(BaseCollector):
             if self._control_priority.is_set():
                 return CollectorBatch(source="collector-uart4", recorded_at=recorded_at, frames=frames, map_values=map_values)
             port = self._open_serial()
-            responses = self._poll_multi_frame_cycle(port)
-            system_words = responses.get(0x00)
+            system_words = self._poll_address(port, 0x00)
             if system_words is not None:
+                self._word_cache[0x00] = system_words
                 self._update_equipment_types(system_words)
                 map_values.extend(words_to_generic_map_values(0x00, system_words))
+                time.sleep(self.inter_request_delay)
+            else:
+                return CollectorBatch(
+                    source="collector-uart4",
+                    recorded_at=recorded_at,
+                    frames=frames,
+                    map_values=map_values,
+                )
 
             for comp_index in range(self.comp_qty):
+                if self._control_priority.is_set():
+                    break
                 mem_addr = MEM_ADDR_COMP1 + comp_index
-                words = responses.get(mem_addr)
+                words = self._poll_address(port, mem_addr)
                 if words is None:
                     continue
+                self._word_cache[mem_addr] = words
                 frames.append(self._to_frame(comp_index, words, recorded_at))
                 map_values.extend(words_to_map_values(comp_index, words, self._is_injection[comp_index]))
+                time.sleep(self.inter_request_delay)
         except Exception as exc:
             self._close_serial()
             print(f"collector-rs485 error on {self.serial_port}: {exc}")
@@ -260,50 +269,6 @@ class RS485Collector(BaseCollector):
             existing = self._word_cache.get(mem_addr, [])
             updates = decode_changed_data_response(frame)
             return apply_word_updates(existing, updates)
-
-        raise Uart4ProtocolError(f"unsupported command 0x{command:02X}")
-
-    def _poll_multi_frame_cycle(self, port: serial.Serial) -> dict[int, list[int]]:
-        responses: dict[int, list[int]] = {}
-        with self._serial_lock:
-            request = build_full_read_request(MULTI_FRAME_REQUEST_ADDR)
-            port.reset_input_buffer()
-            port.write(request)
-            port.flush()
-            self._debug("tx", request)
-
-            total_deadline = time.monotonic() + MULTI_FRAME_TOTAL_TIMEOUT_SECONDS
-            while time.monotonic() < total_deadline:
-                try:
-                    frame = self._read_frame(port, MULTI_FRAME_IDLE_TIMEOUT_SECONDS)
-                except Uart4ProtocolError:
-                    if responses:
-                        break
-                    raise
-
-                self._debug("rx", frame)
-                mem_addr, words = self._decode_cycle_frame(frame)
-                if mem_addr == 0x00 or MEM_ADDR_COMP1 <= mem_addr <= MEM_ADDR_COMP8:
-                    responses[mem_addr] = words
-                    self._word_cache[mem_addr] = words
-
-                expected_count = min(self.comp_qty, MEM_ADDR_COMP8 - MEM_ADDR_COMP1 + 1) + 1
-                if len(responses) >= expected_count:
-                    break
-
-        if not responses:
-            print("collector-uart4 no valid response: timeout waiting for UART4 multi-frame cycle")
-        return responses
-
-    def _decode_cycle_frame(self, frame: bytes) -> tuple[int, list[int]]:
-        command = frame[1]
-        if command == CMD_FULL_READ:
-            response_mem_addr, start_offset, words = decode_full_read_response(frame)
-            return response_mem_addr, merge_words([], start_offset, words)
-
-        if command == CMD_CHANGED_DATA:
-            updates = decode_changed_data_response(frame)
-            return MULTI_FRAME_REQUEST_ADDR, apply_word_updates(self._word_cache.get(MULTI_FRAME_REQUEST_ADDR, []), updates)
 
         raise Uart4ProtocolError(f"unsupported command 0x{command:02X}")
 
