@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.46";
+const APP_VERSION = "0.1.47";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -1480,7 +1480,7 @@ function SettingsDialog({ level, onClose }: { level: UserLevel; onClose: () => v
             <div className="mt-[12px] grid h-[46px] grid-cols-[1fr_58px_78px_58px_120px] gap-[8px]">
               <div className="flex items-center text-[17px] font-black text-[#173f69]">사용모드 개수 설정</div>
               <ChoiceButton onClick={() => setUseModeCount((value) => String(Math.max(1, Number(value) - 1)))}>-</ChoiceButton>
-              <input className="min-w-0 rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] text-center text-[22px] font-black text-[#173f69]" disabled={saving} min={1} max={16} onChange={(event) => setUseModeCount(event.target.value)} type="number" value={useModeCount} />
+	              <input className="min-w-0 rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-0 text-center text-[22px] font-black leading-none text-[#173f69]" disabled={saving} inputMode="numeric" onChange={(event) => setUseModeCount(event.target.value)} type="text" value={useModeCount} />
               <ChoiceButton onClick={() => setUseModeCount((value) => String(Math.min(16, Number(value) + 1)))}>+</ChoiceButton>
               <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-bold text-white disabled:opacity-55" disabled={saving} onClick={saveUseModeCount} type="button">저장</button>
             </div>
