@@ -433,8 +433,13 @@ class RS485Collector(BaseCollector):
             alarms=alarms,
         )
 
-    def _debug(self, label: str, data: bytes) -> None:
+    def _debug(self, label: str, data: bytes, max_bytes: int = 32) -> None:
         if self.debug_hex:
+            if label.startswith("rx") and len(data) > max_bytes:
+                head = data[:max_bytes].hex(" ").upper()
+                tail = data[-2:].hex(" ").upper()
+                print(f"collector-uart4 {label}: len={len(data)} {head} ... crc={tail}")
+                return
             print(f"collector-uart4 {label}: {data.hex(' ').upper()}")
 
 
