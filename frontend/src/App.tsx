@@ -49,7 +49,8 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.32";
+const APP_VERSION = "0.1.33";
+const INVALID_DISPLAY_RAW_VALUE = 32767;
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -353,7 +354,23 @@ function maskFromCompressors(compressors: CompressorState[]) {
 }
 
 function scale10(value: number) {
+  if (value === INVALID_DISPLAY_RAW_VALUE) return Number.NaN;
   return Math.round((value / 10) * 10) / 10;
+}
+
+function formatScaledValue(value: number | undefined, unit: string) {
+  if (value === undefined || !Number.isFinite(value)) return "---";
+  return `${value.toFixed(1)} ${unit}`;
+}
+
+function formatIntegerValue(value: number | undefined, unit = "") {
+  if (value === undefined || !Number.isFinite(value) || value === INVALID_DISPLAY_RAW_VALUE) return "---";
+  const formatted = Math.trunc(value).toLocaleString("ko-KR");
+  return unit ? `${formatted} ${unit}` : formatted;
+}
+
+function formatEditableScaledValue(value: number) {
+  return Number.isFinite(value) ? value.toFixed(1) : "";
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -444,13 +461,15 @@ function TopRunPanel({ running }: { running: boolean }) {
 }
 
 function TopPressurePanel({ value }: { value: number }) {
+  const hasValue = Number.isFinite(value);
+
   return (
     <TopPanel tone="pressure" emphasis>
       <span className="block w-full text-center text-[13px] font-black leading-none tracking-[0.14em] text-[#1b5c96]">메인 압력</span>
       <span className="mt-[3px] grid w-full grid-cols-[42px_1fr_42px] items-end leading-none text-[#083f73] drop-shadow-[0_1px_0_rgba(255,255,255,0.45)]">
         <span />
-        <strong className="text-center font-black tabular-nums tracking-[-0.07em] text-[38px]">{value.toFixed(1)}</strong>
-        <small className="pb-[5px] text-left text-[17px] font-black tracking-[-0.03em]">bar</small>
+        <strong className="text-center font-black tabular-nums tracking-[-0.07em] text-[38px]">{hasValue ? value.toFixed(1) : "---"}</strong>
+        <small className="pb-[5px] text-left text-[17px] font-black tracking-[-0.03em]">{hasValue ? "bar" : ""}</small>
       </span>
     </TopPanel>
   );
@@ -486,9 +505,9 @@ function TopPanel({
 function CompressorCard({ compressor }: { compressor: CompressorState }) {
   const pressureLabel = compressor.inverter ? "설정압력" : "무부하/부하";
   const secondValue = compressor.inverter
-    ? `${compressor.controlPressure?.toFixed(1) ?? "0.0"} bar`
-    : `${compressor.noLoadPressure.toFixed(1)} bar`;
-  const thirdValue = compressor.inverter ? `${compressor.rpm ?? 0} rpm` : `${compressor.loadPressure.toFixed(1)} bar`;
+    ? formatScaledValue(compressor.controlPressure, "bar")
+    : formatScaledValue(compressor.noLoadPressure, "bar");
+  const thirdValue = compressor.inverter ? formatIntegerValue(compressor.rpm, "rpm") : formatScaledValue(compressor.loadPressure, "bar");
   const titleTone = compressorTitleTone(compressor.id);
 
   return (
@@ -500,15 +519,15 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
         >
           {compressor.name} ({compressor.model})
         </div>
-        <MetricRow label="압력" value={`${compressor.pressure.toFixed(1)} bar`} />
+        <MetricRow label="압력" value={formatScaledValue(compressor.pressure, "bar")} />
         <TripleRow label={pressureLabel} valueA={secondValue} valueB={thirdValue} />
-        <MetricRow label="온도" value={`${compressor.temperature.toFixed(1)} ℃`} />
+        <MetricRow label="온도" value={formatScaledValue(compressor.temperature, "℃")} />
         <div className="relative grid grid-cols-2 gap-[2px]">
           <StatusCell tone={compressor.local ? "local" : "remote"}>{compressor.local ? "로 컬" : "리모트"}</StatusCell>
           <StatusCell tone={compressor.running ? "running" : "stop"}>{compressor.running ? "부 하" : "정 지"}</StatusCell>
           <StatusFlagOverlay alarm={compressor.alarm} fault={compressor.fault} />
         </div>
-        <MetricRow label="총 운전시간" value={`${compressor.totalHours.toLocaleString("ko-KR")} hr`} />
+        <MetricRow label="총 운전시간" value={formatIntegerValue(compressor.totalHours, "hr")} />
       </div>
       {!compressor.connected ? (
         <DisconnectedOverlay />
@@ -722,9 +741,9 @@ function IconButton({ label, src }: { label: string; src: string }) {
 
 function ControlPanel({ control }: { control: DashboardState["control"] }) {
   const items = [
-    { label: "무부하", value: `${control.noLoadPressure.toFixed(1)} bar` },
-    { label: "부하", value: `${control.loadPressure.toFixed(1)} bar` },
-    { label: "압력차", value: `${control.pressureGap.toFixed(1)} bar` },
+    { label: "무부하", value: formatScaledValue(control.noLoadPressure, "bar") },
+    { label: "부하", value: formatScaledValue(control.loadPressure, "bar") },
+    { label: "압력차", value: formatScaledValue(control.pressureGap, "bar") },
     { label: "가동대수", value: `${control.runUnits} ea` },
     { label: "교환운전", value: `${control.changeHours} hr` },
     { label: "남은시간", value: `${control.remainMinutes} min` },
@@ -770,7 +789,7 @@ function DetailScreen({ dashboard }: { dashboard: DashboardState }) {
         <HeaderCell>상세 화면</HeaderCell>
         <HeaderCell>컴프레샤 / DIO / AIO 상태 통합 보기</HeaderCell>
         <HeaderCell>연결 {connectedCount} / {dashboard.compressors.length}</HeaderCell>
-        <HeaderCell>메인압력 {dashboard.mainPressure.toFixed(1)} bar</HeaderCell>
+        <HeaderCell>메인압력 {formatScaledValue(dashboard.mainPressure, "bar")}</HeaderCell>
       </div>
       <div className="grid min-h-0 grid-cols-4 grid-rows-2 gap-[3px]">
         {dashboard.compressors.map((compressor) => (
@@ -786,13 +805,13 @@ function DetailDeviceCard({ compressor }: { compressor: CompressorState }) {
   const statusText = compressor.connected ? (compressor.fault ? "FAULT" : compressor.running ? "RUN" : "RDY") : "FAIL";
   const statusImage = !compressor.connected ? "/failure.png" : compressor.fault ? "/fault.png" : null;
   const rows = [
-    ["압력", `${compressor.pressure.toFixed(1)} bar`],
-    ["온도", `${compressor.temperature.toFixed(1)} ℃`],
-    ["무부하", `${compressor.noLoadPressure.toFixed(1)} bar`],
-    ["부하", `${compressor.loadPressure.toFixed(1)} bar`],
-    ["제어압력", `${compressor.controlPressure?.toFixed(1) ?? "0.0"} bar`],
-    ["RPM", `${compressor.rpm ?? 0}`],
-    ["운전시간", `${compressor.totalHours.toLocaleString("ko-KR")} hr`],
+    ["압력", formatScaledValue(compressor.pressure, "bar")],
+    ["온도", formatScaledValue(compressor.temperature, "℃")],
+    ["무부하", formatScaledValue(compressor.noLoadPressure, "bar")],
+    ["부하", formatScaledValue(compressor.loadPressure, "bar")],
+    ["제어압력", formatScaledValue(compressor.controlPressure, "bar")],
+    ["RPM", formatIntegerValue(compressor.rpm)],
+    ["운전시간", formatIntegerValue(compressor.totalHours, "hr")],
   ];
 
   return (
@@ -937,10 +956,10 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
   const [operationMode, setOperationMode] = useState<"local" | "remote">(((dashboard.control.operationModeWord >> 8) & 0xff) === 0 ? "local" : "remote");
   const [controlMode, setControlMode] = useState<"single" | "group">(dashboard.control.controlModeWord === 1 ? "group" : "single");
   const [settings, setSettings] = useState({
-    noLoadPressure: dashboard.control.noLoadPressure.toFixed(1),
-    loadPressure: dashboard.control.loadPressure.toFixed(1),
-    pressureGap: dashboard.control.pressureGap.toFixed(1),
-    lowAlarmPressure: dashboard.control.lowAlarmPressure.toFixed(1),
+    noLoadPressure: formatEditableScaledValue(dashboard.control.noLoadPressure),
+    loadPressure: formatEditableScaledValue(dashboard.control.loadPressure),
+    pressureGap: formatEditableScaledValue(dashboard.control.pressureGap),
+    lowAlarmPressure: formatEditableScaledValue(dashboard.control.lowAlarmPressure),
     changeHours: String(dashboard.control.changeHours),
     runUnits: String(dashboard.control.runUnits),
   });
@@ -958,6 +977,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     setSettings((current) => ({ ...current, [key]: value }));
   };
   const numberValue = (key: keyof typeof settings) => {
+    if (settings[key].trim() === "") throw new Error(`${key} 값이 비어 있습니다`);
     const value = Number(settings[key]);
     if (!Number.isFinite(value)) throw new Error(`${key} 값이 올바르지 않습니다`);
     return value;
