@@ -40,7 +40,7 @@ export function QuickButtons({
 
   return (
     <div className="flex min-h-0 items-center justify-center">
-      <div className="relative grid h-[116px] grid-rows-[56px_56px] gap-[4px]">
+      <div className="relative grid h-[122px] grid-rows-[56px_56px] gap-[10px]">
         <button aria-label="상세 화면" className="flex h-[56px] w-[56px] items-center justify-center bg-transparent p-0" onClick={onToggleDetail} type="button">
           <img src={activeScreen === "detail" ? "/device_back.png" : "/device.png"} alt="" className="h-[56px] w-[56px] object-contain" />
         </button>
@@ -53,7 +53,7 @@ export function QuickButtons({
           <img src="/menu.png" alt="" className="h-[56px] w-[56px] object-contain" />
         </button>
         {menuOpen ? (
-          <div className="absolute bottom-[60px] right-0 z-20 flex flex-col gap-[12px]">
+          <div className="absolute bottom-[66px] right-0 z-20 flex flex-col gap-[12px]">
             {menuItems.map((item) => (
               <button
                 key={item.label}
