@@ -158,6 +158,7 @@ class RS485Collector(BaseCollector):
         self._serial_lock = threading.RLock()
         self._control_priority = threading.Event()
         self._word_cache: dict[int, list[int]] = {}
+        self._last_debug_at: float | None = None
         self._is_injection = [True] * self.comp_qty
 
     def request_control_priority(self) -> None:
@@ -445,12 +446,18 @@ class RS485Collector(BaseCollector):
 
     def _debug(self, label: str, data: bytes, max_bytes: int = 32) -> None:
         if self.debug_hex:
+            now = time.monotonic()
+            delta_text = ""
+            if self._last_debug_at is not None:
+                delta_text = f" +{(now - self._last_debug_at) * 1000:.0f}ms"
+            self._last_debug_at = now
+
             if label.startswith("rx") and len(data) > max_bytes:
                 head = data[:max_bytes].hex(" ").upper()
                 tail = data[-2:].hex(" ").upper()
-                print(f"collector-uart4 {label}: len={len(data)} {head} ... crc={tail}")
+                print(f"collector-uart4 {label}:{delta_text} len={len(data)} {head} ... crc={tail}")
                 return
-            print(f"collector-uart4 {label}: {data.hex(' ').upper()}")
+            print(f"collector-uart4 {label}:{delta_text} {data.hex(' ').upper()}")
 
     def _log_address_elapsed(self, mem_addr: int, started: float) -> None:
         elapsed_ms = (time.monotonic() - started) * 1000
