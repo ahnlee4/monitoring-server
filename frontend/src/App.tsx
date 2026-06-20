@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.59";
+const APP_VERSION = "0.1.60";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -214,18 +214,24 @@ export default function App() {
           <section className="relative min-h-0">
             {showMainScreen ? (
               <>
-                <div
-                  className="grid h-full gap-0"
-                  style={{
-                    gridTemplateColumns: `repeat(${mainColumnCount}, minmax(0, 1fr))`,
-                    gridTemplateRows: "repeat(2, minmax(0, 1fr))",
-                  }}
-                >
-                  {visibleCompressors.map((compressor) => (
-                    <CompressorCard key={compressor.id} compressor={compressor} />
-                  ))}
-                </div>
-                {lowPressureText ? <AlarmStrip tone={dashboard.lowPressureAlarm} text={lowPressureText} /> : null}
+                {visibleCompressors.length > 0 ? (
+                  <div
+                    className="grid h-full gap-0"
+                    style={{
+                      gridTemplateColumns: `repeat(${mainColumnCount}, minmax(0, 1fr))`,
+                      gridTemplateRows: "repeat(2, minmax(0, 1fr))",
+                    }}
+                  >
+                    {visibleCompressors.map((compressor) => (
+                      <CompressorCard key={compressor.id} compressor={compressor} />
+                    ))}
+                  </div>
+                ) : (
+                  <DisconnectBanner />
+                )}
+                {visibleCompressors.length > 0 && lowPressureText ? (
+                  <AlarmStrip tone={dashboard.lowPressureAlarm} text={lowPressureText} />
+                ) : null}
               </>
             ) : (
               <DetailScreen dashboard={dashboard} />
@@ -628,6 +634,16 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
         <MetricRow label="총 운전시간" value={formatIntegerValue(compressor.totalHours, "hr")} />
       </div>
     </article>
+  );
+}
+
+function DisconnectBanner() {
+  return (
+    <div className="flex h-full items-center justify-center bg-[#f1f3f5]">
+      <div className="flex h-[76px] w-full items-center justify-center border-y border-[#b8c0c7] bg-[#9aa2aa] text-[38px] font-black leading-none tracking-[0.28em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+        DISCONNECT
+      </div>
+    </div>
   );
 }
 
