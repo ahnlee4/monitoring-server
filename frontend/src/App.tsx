@@ -62,7 +62,7 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.83";
+const APP_VERSION = "0.1.84";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -1187,6 +1187,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     ]);
     if (!success) setControlMode(previous);
   };
+  const showCommandStatus = commandBusy || commandStatus !== "명령 대기 중";
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-[24px]">
@@ -1203,49 +1204,49 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
           </div>
           <DialogCloseButton onClick={onClose} />
         </div>
-        <div className="grid grid-cols-[1fr_280px] gap-[16px] p-[18px]">
-          <div className="grid gap-[14px]">
-            <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
+        <div className="grid grid-cols-[1fr_300px] gap-[14px] p-[16px]">
+          <div className="grid gap-[12px]">
+            <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[12px]">
               <PanelHeading eyebrow="CONTROL VALUES">제어 기준값</PanelHeading>
-              <div className="mt-[12px] grid grid-cols-3 gap-[10px]">
+              <div className="mt-[10px] grid grid-cols-3 gap-[9px]">
                 {controls.map(({ key, label, unit }) => (
-                  <div key={label} className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px]">
+                  <div key={label} className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[10px]">
                     <div className="text-[14px] font-black text-[#6f879d]">{label}</div>
-                    <label className="mt-[8px] flex items-end justify-between gap-[8px]">
-	                      <input
-	                        className="min-w-0 flex-1 rounded-[6px] border border-[#c9deef] bg-white px-[8px] py-[5px] text-right text-[25px] font-black leading-none text-[#173f69] outline-none focus:border-[#237bd0]"
-	                        autoComplete="off"
-	                        disabled={commandBusy}
-	                        enterKeyHint="done"
-	                        inputMode={key === "changeHours" || key === "runUnits" ? "numeric" : "decimal"}
-	                        onBlur={() => {
-	                          void applySetting(key);
-	                          window.setTimeout(() => {
-	                            setActiveControlKey((current) => (current === key ? null : current));
-	                          }, 120);
-	                        }}
-	                        onChange={(event) => updateSetting(key, event.target.value)}
-	                        onFocus={(event) => {
-	                          setActiveControlKey(key);
-	                          event.currentTarget.select();
-	                        }}
-	                        onKeyDown={(event) => {
-	                          if (event.key === "Enter") event.currentTarget.blur();
-	                        }}
-	                        pattern={key === "changeHours" || key === "runUnits" ? "[0-9]*" : "[0-9.]*"}
-	                        type="text"
-	                        value={settings[key]}
-	                      />
+                    <label className="mt-[7px] flex items-end justify-between gap-[8px]">
+                      <input
+                        className="min-w-0 flex-1 rounded-[6px] border border-[#c9deef] bg-white px-[8px] py-[5px] text-right text-[24px] font-black leading-none text-[#173f69] outline-none focus:border-[#237bd0]"
+                        autoComplete="off"
+                        disabled={commandBusy}
+                        enterKeyHint="done"
+                        inputMode={key === "changeHours" || key === "runUnits" ? "numeric" : "decimal"}
+                        onBlur={() => {
+                          void applySetting(key);
+                          window.setTimeout(() => {
+                            setActiveControlKey((current) => (current === key ? null : current));
+                          }, 120);
+                        }}
+                        onChange={(event) => updateSetting(key, event.target.value)}
+                        onFocus={(event) => {
+                          setActiveControlKey(key);
+                          event.currentTarget.select();
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") event.currentTarget.blur();
+                        }}
+                        pattern={key === "changeHours" || key === "runUnits" ? "[0-9]*" : "[0-9.]*"}
+                        type="text"
+                        value={settings[key]}
+                      />
                       <span className="text-[14px] font-black text-[#6f879d]">{unit}</span>
                     </label>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-[14px]">
-              <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
+            <div className="grid grid-cols-2 gap-[12px]">
+              <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[12px]">
                 <PanelHeading eyebrow="SORT MODE">운전 조건</PanelHeading>
-                <div className="mt-[12px] grid gap-[10px]">
+                <div className="mt-[10px] grid gap-[9px]">
                   <SegmentedOption
                     items={[
                       ["setting", "설정순"],
@@ -1255,25 +1256,26 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
                     selected={sortMode}
                     onSelect={(value) => selectSortMode(value as "setting" | "time")}
                   />
-                  <label className="flex h-[54px] items-center justify-between rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-[16px] text-[17px] font-black text-[#244c75]">
+                  <label className="flex h-[50px] items-center justify-between rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-[14px] text-[17px] font-black text-[#244c75]">
                     <span>절약모드</span>
                     <input readOnly className="h-[24px] w-[24px] accent-[#237bd0]" type="checkbox" />
                   </label>
                 </div>
               </div>
-              <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
+              <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[12px]">
                 <PanelHeading eyebrow="INVERTER">인버터 기준</PanelHeading>
-                <div className="mt-[12px] grid grid-cols-2 gap-[10px]">
+                <div className="mt-[10px] grid grid-cols-2 gap-[9px]">
                   <InfoTile label="메인 호기" unit="호기" value="0" />
                   <InfoTile label="제어압력" unit="bar" value="0.0" />
                 </div>
               </div>
             </div>
           </div>
-          <aside className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
+          <aside className="flex flex-col rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <PanelHeading eyebrow="ACTION">통합운전</PanelHeading>
-            <div className="mt-[12px] grid gap-[10px]">
-              <div className="grid">
+            <div className="mt-[12px] grid gap-[12px]">
+              <div className="grid gap-[7px]">
+                <span className="text-[13px] font-black text-[#6f879d]">운전 위치</span>
                 <SegmentedOption
                   items={[
                     ["local", "LOCAL"],
@@ -1284,7 +1286,8 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
                   onSelect={(value) => selectOperationMode(value as "local" | "remote")}
                 />
               </div>
-              <div className="grid">
+              <div className="grid gap-[7px]">
+                <span className="text-[13px] font-black text-[#6f879d]">제어 모드</span>
                 <SegmentedOption
                   items={[
                     ["single", "개별"],
@@ -1295,16 +1298,16 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
                   onSelect={(value) => selectControlMode(value as "single" | "group")}
                 />
               </div>
-              <div className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-[12px] py-[10px] text-center text-[13px] font-black text-[#45657f]">
-                {commandStatus}
-              </div>
-              <button className="h-[72px] rounded-[9px] bg-[#d92525] text-[30px] font-black text-white shadow-[0_6px_13px_rgba(208,31,38,0.2)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("run")} type="button">운전</button>
-              <button className="h-[72px] rounded-[9px] bg-[#667380] text-[30px] font-black text-white shadow-[0_6px_13px_rgba(70,82,94,0.16)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("stop")} type="button">정지</button>
+            </div>
+            <div className="mt-auto grid gap-[10px] pt-[18px]">
+              <button className="h-[86px] rounded-[9px] bg-[#d92525] text-[34px] font-black text-white shadow-[0_6px_13px_rgba(208,31,38,0.2)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("run")} type="button">운전</button>
+              <button className="h-[86px] rounded-[9px] bg-[#667380] text-[34px] font-black text-white shadow-[0_6px_13px_rgba(70,82,94,0.16)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("stop")} type="button">정지</button>
             </div>
           </aside>
         </div>
-        <div className="flex h-[62px] items-center justify-end border-t border-[#dbe7f1] bg-white px-[18px] text-[14px] font-black text-[#6f879d]">
-          입력칸 선택 시 숫자 키패드가 표시되며, 확인 또는 포커스 해제 시 즉시 장비로 전송됩니다
+        <div className="flex h-[62px] items-center justify-between border-t border-[#dbe7f1] bg-white px-[18px] text-[14px] font-black text-[#6f879d]">
+          <span className="max-w-[520px] truncate text-[#237bd0]">{showCommandStatus ? commandStatus : ""}</span>
+          <span>입력칸 선택 시 숫자 키패드가 표시되며, 확인 또는 포커스 해제 시 즉시 장비로 전송됩니다</span>
         </div>
       </section>
       {activeControl ? (
