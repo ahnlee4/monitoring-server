@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,6 +43,7 @@ from app.yujin_map import build_yujin_map_schema
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
+CONTROL_COMMAND_STALE_SECONDS = 30
 
 app.add_middleware(
     CORSMiddleware,
@@ -340,15 +341,27 @@ def next_control_commands(
     if x_collector_token != settings.collector_token:
         raise HTTPException(status_code=401, detail="Invalid collector token")
 
+    now = datetime.now(timezone.utc)
+    stale_before = now - timedelta(seconds=CONTROL_COMMAND_STALE_SECONDS)
+    stale_commands = db.scalars(
+        select(ControlCommand)
+        .where(ControlCommand.status == "in_progress")
+        .where(ControlCommand.updated_at < stale_before)
+    ).all()
+    for command in stale_commands:
+        command.status = "pending"
+        command.error_text = "stale in_progress command requeued"
+        command.updated_at = now
+
     commands = db.scalars(
         select(ControlCommand)
         .where(ControlCommand.status == "pending")
         .order_by(ControlCommand.created_at.asc(), ControlCommand.id.asc())
         .limit(limit)
     ).all()
-    now = datetime.now(timezone.utc)
     for command in commands:
         command.status = "in_progress"
+        command.error_text = None
         command.updated_at = now
     db.commit()
     for command in commands:

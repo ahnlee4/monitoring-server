@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.54";
+const APP_VERSION = "0.1.55";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -498,14 +498,20 @@ class ControlStatusUnsupportedError extends Error {
 }
 
 async function waitForControlCommand(commandId: number, onStatus: (status: ControlCommandStatus) => void) {
-  for (let attempt = 0; attempt < 80; attempt++) {
-    const response = await fetch(`${apiBase()}/control/commands/${commandId}`);
-    if (response.status === 404) throw new ControlStatusUnsupportedError();
-    if (!response.ok) throw new Error(`status HTTP ${response.status}`);
-    const status = (await response.json()) as ControlCommandStatus;
-    onStatus(status);
-    if (status.status === "completed") return status;
-    if (status.status === "failed") throw new Error(status.error || "collector command failed");
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 4000);
+    try {
+      const response = await fetch(`${apiBase()}/control/commands/${commandId}`, { signal: controller.signal });
+      if (response.status === 404) throw new ControlStatusUnsupportedError();
+      if (!response.ok) throw new Error(`status HTTP ${response.status}`);
+      const status = (await response.json()) as ControlCommandStatus;
+      onStatus(status);
+      if (status.status === "completed") return status;
+      if (status.status === "failed") throw new Error(status.error || "collector command failed");
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
     await new Promise((resolve) => window.setTimeout(resolve, 150));
   }
   throw new Error("명령 응답 시간 초과");
