@@ -39,6 +39,7 @@ export type UpdateEvent = {
   keys?: string[];
   values?: YujinMapValuePatch[];
   recorded_at?: string;
+  source?: string | null;
 };
 
 export type YujinMapValuePatch = {

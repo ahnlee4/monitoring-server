@@ -48,6 +48,7 @@ app = FastAPI(title=settings.app_name)
 CONTROL_COMMAND_STALE_SECONDS = 10
 DATABASE_STARTUP_TIMEOUT_SECONDS = 120
 DATABASE_STARTUP_RETRY_SECONDS = 2
+YUJIN_INGEST_SLOW_LOG_MS = 500
 
 CONTROL_COMMAND_SOURCE_PRIORITY = {
     "group_operation": 0,
@@ -598,6 +599,7 @@ async def ingest_yujin_map_values(
     db: Session = Depends(get_db),
     x_collector_token: str | None = Header(default=None),
 ) -> dict:
+    ingest_started = time.monotonic()
     if x_collector_token != settings.collector_token:
         raise HTTPException(status_code=401, detail="Invalid collector token")
 
@@ -634,9 +636,10 @@ async def ingest_yujin_map_values(
         changed = True
         if current:
             changed = current.value_text != value_text
-            current.value_text = value_text
-            current.updated_at = recorded_at
-            current.source = payload.source
+            if changed:
+                current.value_text = value_text
+                current.updated_at = recorded_at
+                current.source = payload.source
         else:
             current = YujinMapValue(
                 definition_id=definition.id,
@@ -656,26 +659,39 @@ async def ingest_yujin_map_values(
                     source=payload.source,
                 )
             )
-        updated_keys.append(key)
-        broadcast_values.append(
-            {
-                "key": key,
-                "value": value_text,
-                "updated_at": recorded_at.isoformat(),
-                "source": payload.source,
-            }
-        )
+            updated_keys.append(key)
+            broadcast_values.append(
+                {
+                    "key": key,
+                    "value": value_text,
+                    "updated_at": recorded_at.isoformat(),
+                    "source": payload.source,
+                }
+            )
 
-    db.commit()
+    if updated_keys:
+        db.commit()
     await manager.broadcast_json(
         {
             "type": "yujin_map_update",
-            "keys": updated_keys,
+            "keys": keys,
             "values": broadcast_values,
             "recorded_at": recorded_at.isoformat(),
+            "source": payload.source,
         }
     )
-    return {"status": "accepted", "updated_count": len(updated_keys), "keys": updated_keys}
+    elapsed_ms = (time.monotonic() - ingest_started) * 1000
+    if elapsed_ms >= YUJIN_INGEST_SLOW_LOG_MS:
+        print(
+            "yujin ingest-map slow: "
+            f"{elapsed_ms:.0f}ms received={len(normalized_values)} changed={len(updated_keys)}"
+        )
+    return {
+        "status": "accepted",
+        "received_count": len(normalized_values),
+        "updated_count": len(updated_keys),
+        "keys": updated_keys,
+    }
 
 
 @app.get("/api/devices", response_model=list[DeviceOut])

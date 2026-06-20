@@ -89,14 +89,39 @@ export function useYujinMapValues() {
       return true;
     };
 
+    const applyHeartbeat = (keys: string[] | undefined, recordedAt: string | undefined, source: string | null | undefined) => {
+      if (!keys?.length || !recordedAt) return false;
+      let changed = false;
+      const next = { ...mapValuesRef.current };
+      for (const rawKey of keys) {
+        const key = rawKey.toUpperCase();
+        const previous = next[key];
+        if (!previous) continue;
+        const nextSource = source ?? previous.source;
+        if (previous.updated_at === recordedAt && previous.source === nextSource) continue;
+        changed = true;
+        next[key] = {
+          ...previous,
+          updated_at: recordedAt,
+          source: nextSource,
+        };
+      }
+      if (changed) {
+        mapValuesRef.current = next;
+        startTransition(() => setMapValues(next));
+      }
+      return changed;
+    };
+
     loadMapValues();
     scheduleLoop();
     const socket = new WebSocket(wsUrl());
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data) as UpdateEvent;
       if (message.type !== "yujin_map_update") return;
-      if (message.values?.length && applyMapPatches(message.values)) return;
-      scheduleReload();
+      const patched = message.values?.length ? applyMapPatches(message.values) : false;
+      const heartbeat = applyHeartbeat(message.keys, message.recorded_at, message.source);
+      if (!patched && !heartbeat) scheduleReload();
     };
     socket.onerror = () => socket.close();
 
