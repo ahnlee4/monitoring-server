@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, PointerEvent, ReactNode } from "react";
 import { QuickButtons } from "./components/QuickButtons";
 import { useYujinMapValues } from "./hooks/useYujinMapValues";
@@ -62,11 +62,12 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.88";
+const APP_VERSION = "0.1.89";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
 const MODE_ALIGN_COLUMNS = 3;
+const SETTINGS_MAP_SYNC_PAUSE_MS = 8_000;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
 const USER_LEVELS = {
@@ -1622,10 +1623,12 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
   const [replaceNextModeInput, setReplaceNextModeInput] = useState(false);
   const [saveStatus, setSaveStatus] = useState("설정 저장 대기 중");
   const [saving, setSaving] = useState(false);
+  const mapSyncPausedUntilRef = useRef(0);
   const isAdmin = level === USER_LEVELS.admin;
 
   useEffect(() => {
     if (activeModeCell || saving) return;
+    if (Date.now() < mapSyncPausedUntilRef.current) return;
 
     setModeRows(readModeRowsFromMap(mapValues));
     const nextUseUnit = readUseUnitIndex(mapValues);
@@ -1634,6 +1637,7 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
     if (nextUseModeCount !== null) setUseModeCount(String(nextUseModeCount));
   }, [activeModeCell, mapValues, saving]);
   const submitRawSetting = async (label: string, source: string, payload: number[]) => {
+    mapSyncPausedUntilRef.current = Date.now() + SETTINGS_MAP_SYNC_PAUSE_MS;
     setSaving(true);
     setSaveStatus(`${label} 명령 전송 중...`);
     try {
@@ -1649,6 +1653,7 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
       if (error instanceof ControlStatusDelayedError) setSaveStatus(`${label} #${error.commandId} 등록됨 / 완료 확인 지연`);
       else setSaveStatus(`${label} 실패: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
+      mapSyncPausedUntilRef.current = Date.now() + SETTINGS_MAP_SYNC_PAUSE_MS;
       setSaving(false);
     }
   };
