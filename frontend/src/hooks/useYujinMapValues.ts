@@ -2,7 +2,7 @@ import { startTransition, useEffect, useRef, useState } from "react";
 import { fetchYujinMapValues, wsUrl } from "../services/api";
 import type { UpdateEvent, YujinMapValue, YujinMapValuePatch } from "../types";
 
-const MAP_VALUES_LIMIT = 300;
+const MAP_VALUES_LIMIT = 1000;
 const MAP_REFRESH_INTERVAL_MS = 1000;
 const MAP_REFRESH_MIN_INTERVAL_MS = 800;
 const MAP_REFRESH_TIMEOUT_MS = 1200;

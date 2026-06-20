@@ -61,7 +61,8 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.76";
+const DEVICE_LINK_GRACE_MS = 90_000;
+const APP_VERSION = "0.1.77";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -241,6 +242,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
   const oilfreeSelector = liveMapNumber(values, "0006", 0);
   const compressors = Array.from({ length: 8 }, (_, index) => buildCompressorFromMap(values, index, oilfreeSelector));
   const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
+  const systemOnline = hasRecentValue(values, "0000", DEVICE_LINK_GRACE_MS) || hasRecentValue(values, "0002", DEVICE_LINK_GRACE_MS);
   const compQty = clamp(Math.trunc(liveMapNumber(values, "004E", 0)), 0, 8);
   const mainPressure = scale10(liveMapNumber(values, "0000", 0));
   const optionDevice = liveMapNumber(values, "004A", 0);
@@ -268,7 +270,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
     options: buildOptions(optionDevice),
     compressors: compressors.map((compressor, index) => ({
       ...compressor,
-      connected: Boolean(connectedMask & (1 << index)),
+      connected: systemOnline && Boolean(connectedMask & (1 << index)),
       name: `${index + 1}호기`,
       model: compressor.model,
       pressure: index < compQty ? compressor.pressure : 0,
@@ -315,7 +317,7 @@ function buildCompressorFromMap(
   const version2 = Math.trunc(read("80", "80", 0));
   const runHoursLow = read("9A", "68", 0);
   const runHoursHigh = read("9C", "6A", 0);
-  const connected = hasRecentValue(values, `${primaryPrefix}00`) || hasRecentValue(values, `${fallbackPrefix}00`);
+  const connected = hasRecentValue(values, `${primaryPrefix}00`, DEVICE_LINK_GRACE_MS) || hasRecentValue(values, `${fallbackPrefix}00`, DEVICE_LINK_GRACE_MS);
   const modelName = connected ? getOilfreeModelName(model1, version1, version2) : "-";
   const isInverter = version1 === 3 || rpm > 0 || controlPressure > 0;
 
@@ -367,14 +369,14 @@ function liveMapNumber(values: Record<string, YujinMapValue>, key: string, fallb
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
-function hasRecentValue(values: Record<string, YujinMapValue>, key: string) {
+function hasRecentValue(values: Record<string, YujinMapValue>, key: string, maxAgeMs = LIVE_VALUE_MAX_AGE_MS) {
   const value = values[key.toUpperCase()];
-  return isLiveMapValue(value);
+  return isLiveMapValue(value, maxAgeMs);
 }
 
-function isLiveMapValue(value: YujinMapValue | undefined) {
+function isLiveMapValue(value: YujinMapValue | undefined, maxAgeMs = LIVE_VALUE_MAX_AGE_MS) {
   if (!value?.updated_at || value.source === "seed") return false;
-  return Date.now() - new Date(value.updated_at).getTime() <= LIVE_VALUE_MAX_AGE_MS;
+  return Date.now() - new Date(value.updated_at).getTime() <= maxAgeMs;
 }
 
 function maskFromCompressors(compressors: CompressorState[]) {
