@@ -15,6 +15,8 @@ type QuickMenuItem = {
   action: () => void;
 };
 
+const PRELOAD_ICONS = ["/factory.png", "/setting.png", "/control.png", "/device.png", "/device_back.png", "/menu.png"];
+
 export function QuickButtons({
   activeScreen,
   menuOpen,
@@ -40,6 +42,11 @@ export function QuickButtons({
 
   return (
     <div className="relative z-[80] flex min-h-0 items-center justify-center overflow-visible">
+      <div aria-hidden className="pointer-events-none absolute h-px w-px overflow-hidden opacity-0">
+        {PRELOAD_ICONS.map((icon) => (
+          <img key={icon} src={icon} alt="" decoding="sync" loading="eager" />
+        ))}
+      </div>
       <div className="relative isolate grid h-[122px] grid-rows-[56px_56px] gap-[10px] overflow-visible">
         <button aria-label="상세 화면" className="flex h-[56px] w-[56px] items-center justify-center bg-transparent p-0" onClick={onToggleDetail} type="button">
           <img src={activeScreen === "detail" ? "/device_back.png" : "/device.png"} alt="" className="h-[56px] w-[56px] object-contain" />
@@ -65,7 +72,13 @@ export function QuickButtons({
                   {item.label}
                 </span>
                 <span className="relative z-10 flex h-[56px] w-[56px] shrink-0 items-center justify-center">
-                  <img src={item.icon} alt="" className="block h-[56px] w-[56px] object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.22)]" />
+                  <img
+                    src={item.icon}
+                    alt=""
+                    className="block h-[56px] w-[56px] object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.22)]"
+                    decoding="sync"
+                    loading="eager"
+                  />
                 </span>
               </button>
             ))}
