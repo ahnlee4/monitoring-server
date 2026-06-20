@@ -49,7 +49,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.36";
+const APP_VERSION = "0.1.37";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
@@ -639,7 +639,7 @@ function StatusFlagOverlay({ alarm, fault }: { alarm: boolean; fault: boolean })
   if (!alarm && !fault) return null;
   if (alarm && fault) {
     return (
-      <div className="absolute inset-0 z-20 grid grid-cols-2 gap-[2px] bg-[#d8ecff]">
+      <div className="status-flag-blink absolute inset-0 z-20 grid grid-cols-2 gap-[2px] bg-[#d8ecff]">
         <FlagCell tone="alarm">알 림</FlagCell>
         <FlagCell tone="fault">고 장</FlagCell>
       </div>
@@ -647,7 +647,7 @@ function StatusFlagOverlay({ alarm, fault }: { alarm: boolean; fault: boolean })
   }
 
   return (
-    <div className="absolute inset-0 z-20 grid bg-[#d8ecff]">
+    <div className="status-flag-blink absolute inset-0 z-20 grid bg-[#d8ecff]">
       <FlagCell tone={alarm ? "alarm" : "fault"}>{alarm ? "알 림" : "고 장"}</FlagCell>
     </div>
   );
@@ -657,7 +657,7 @@ function FlagCell({ tone, children }: { tone: "alarm" | "fault"; children: React
   const activeClass = tone === "alarm" ? "bg-[#ffff00] text-black" : "bg-[#ff4f4f] text-black";
 
   return (
-    <div className={`status-flag-blink flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] px-[2px] text-center text-[23px] font-black leading-none tracking-[-0.04em] ${activeClass}`}>
+    <div className={`flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] px-[2px] text-center text-[23px] font-black leading-none tracking-[-0.04em] ${activeClass}`}>
       {children}
     </div>
   );
