@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, PointerEvent, ReactNode } from "react";
 import { QuickButtons } from "./components/QuickButtons";
-import type { UpdateEvent, YujinMapValue } from "./types";
+import { useYujinMapValues } from "./hooks/useYujinMapValues";
+import {
+  ControlStatusDelayedError,
+  ControlStatusUnsupportedError,
+  asciiBytes,
+  enqueueGroupOperation,
+  enqueueMapWriteBatch,
+  enqueueRawUart4Command,
+  waitForControlCommand,
+} from "./services/api";
+import type { MapWrite } from "./services/api";
+import type { YujinMapValue } from "./types";
 
 type CompressorState = {
   id: number;
@@ -50,14 +61,10 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.68";
+const APP_VERSION = "0.1.69";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
-const MAP_VALUES_LIMIT = 300;
-const MAP_REFRESH_INTERVAL_MS = 1000;
-const MAP_REFRESH_MIN_INTERVAL_MS = 800;
-const MAP_REFRESH_TIMEOUT_MS = 1200;
 const USER_LEVELS = {
   admin: 0,
   manager: 1,
@@ -141,82 +148,11 @@ export default function App() {
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>("main");
   const [settingsLevel, setSettingsLevel] = useState<UserLevel>(USER_LEVELS.user);
   const [adminLogoClicks, setAdminLogoClicks] = useState({ count: 0, lastAt: 0 });
-  const [mapValues, setMapValues] = useState<Record<string, YujinMapValue>>({});
+  const mapValues = useYujinMapValues();
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let reloadTimer: number | undefined;
-    let loopTimer: number | undefined;
-    let inFlight = false;
-    let dirty = false;
-    let lastLoadedAt = 0;
-
-    const loadMapValues = async () => {
-      if (cancelled) return;
-      if (inFlight) {
-        dirty = true;
-        return;
-      }
-
-      const elapsed = Date.now() - lastLoadedAt;
-      if (lastLoadedAt > 0 && elapsed < MAP_REFRESH_MIN_INTERVAL_MS) {
-        dirty = true;
-        scheduleReload(MAP_REFRESH_MIN_INTERVAL_MS - elapsed);
-        return;
-      }
-
-      inFlight = true;
-      dirty = false;
-      try {
-        const response = await fetchWithTimeout(
-          `${apiBase()}/yujin/map-values?limit=${MAP_VALUES_LIMIT}`,
-          { cache: "no-store" },
-          MAP_REFRESH_TIMEOUT_MS,
-        );
-        if (!response.ok) throw new Error(`map-values ${response.status}`);
-        const values = (await response.json()) as YujinMapValue[];
-        if (!cancelled) setMapValues(toMapRecord(values));
-      } catch (error) {
-        console.error("failed to load map values", error);
-      } finally {
-        lastLoadedAt = Date.now();
-        inFlight = false;
-        if (dirty && !cancelled) scheduleReload(MAP_REFRESH_MIN_INTERVAL_MS);
-      }
-    };
-
-    function scheduleReload(delay = MAP_REFRESH_MIN_INTERVAL_MS) {
-      window.clearTimeout(reloadTimer);
-      reloadTimer = window.setTimeout(loadMapValues, delay);
-    }
-
-    const scheduleLoop = () => {
-      loopTimer = window.setTimeout(async () => {
-        await loadMapValues();
-        if (!cancelled) scheduleLoop();
-      }, MAP_REFRESH_INTERVAL_MS);
-    };
-
-    loadMapValues();
-    scheduleLoop();
-    const socket = new WebSocket(wsUrl());
-    socket.onmessage = (event) => {
-      const message = JSON.parse(event.data) as UpdateEvent;
-      if (message.type === "yujin_map_update") scheduleReload();
-    };
-    socket.onerror = () => socket.close();
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(reloadTimer);
-      window.clearTimeout(loopTimer);
-      socket.close();
-    };
   }, []);
 
   const dashboard = useMemo(() => buildDashboardFromMap(mapValues), [mapValues]);
@@ -422,13 +358,6 @@ function buildOptions(optionDevice: number) {
   });
 }
 
-function toMapRecord(values: YujinMapValue[]) {
-  return values.reduce<Record<string, YujinMapValue>>((record, item) => {
-    record[item.key.toUpperCase()] = item;
-    return record;
-  }, {});
-}
-
 function liveMapNumber(values: Record<string, YujinMapValue>, key: string, fallback = 0) {
   const item = values[key.toUpperCase()];
   if (!isLiveMapValue(item)) return fallback;
@@ -482,133 +411,6 @@ function setWordLowByte(word: number, lowByte: number) {
 
 function setWordHighByte(word: number, highByte: number) {
   return ((highByte & 0xff) << 8) | (Math.trunc(word) & 0x00ff);
-}
-
-type ControlCommandStatus = {
-  id: number;
-  status: "pending" | "in_progress" | "completed" | "failed";
-  error?: string | null;
-};
-
-class ControlStatusUnsupportedError extends Error {
-  constructor() {
-    super("명령 상태 조회 API가 없습니다. backend 이미지를 최신으로 갱신해주세요.");
-  }
-}
-
-class ControlStatusDelayedError extends Error {
-  constructor(public commandId: number) {
-    super("명령은 등록됐지만 완료 상태 확인이 지연되고 있습니다");
-  }
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function apiBase() {
-  return import.meta.env.VITE_API_BASE || "/api";
-}
-
-function wsUrl() {
-  const configuredPath = import.meta.env.VITE_WS_PATH || "/ws/dashboard";
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}${configuredPath}`;
-}
-
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 3000) {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } catch (error) {
-    if (isAbortError(error)) throw new Error("backend 응답 시간 초과");
-    throw error;
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-}
-
-async function postJson<TResponse>(url: string, body: unknown, timeoutMs = 3000): Promise<TResponse> {
-  const response = await fetchWithTimeout(
-    url,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-    timeoutMs,
-  );
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return (await response.json()) as TResponse;
-}
-
-async function enqueueMapWriteBatch(
-  source: string,
-  writes: Array<{ key?: string; address?: number; high_addr?: number; low_addr?: number; length?: number; value?: number; data_hex?: string }>,
-) {
-  return postJson<{ id: number }>(`${apiBase()}/control/map-write-batch`, { source, writes });
-}
-
-async function enqueueRawUart4Command(source: string, payload: number[], waitResponse = false) {
-  return postJson<{ id: number }>(`${apiBase()}/control/raw-uart4`, {
-    source,
-    payload_hex: bytesToHex(payload),
-    append_crc: true,
-    wait_response: waitResponse,
-  });
-}
-
-function bytesToHex(bytes: number[]) {
-  return bytes.map((byte) => (byte & 0xff).toString(16).padStart(2, "0").toUpperCase()).join("");
-}
-
-function asciiBytes(value: string) {
-  return Array.from(value, (char) => char.charCodeAt(0) & 0xff);
-}
-
-async function fetchControlCommandStatus(commandId: number, timeoutMs = 1200): Promise<ControlCommandStatus | null> {
-  const controller = new AbortController();
-  let timeoutId: number | undefined;
-  const timeoutPromise = new Promise<null>((resolve) => {
-    timeoutId = window.setTimeout(() => {
-      controller.abort();
-      resolve(null);
-    }, timeoutMs);
-  });
-  const requestPromise = fetch(`${apiBase()}/control/commands/${commandId}`, { signal: controller.signal })
-    .then(async (response) => {
-      if (response.status === 404) throw new ControlStatusUnsupportedError();
-      if (!response.ok) throw new Error(`status HTTP ${response.status}`);
-      return (await response.json()) as ControlCommandStatus;
-    })
-    .catch((error) => {
-      if (isAbortError(error)) return null;
-      throw error;
-    })
-    .finally(() => {
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-    });
-
-  return Promise.race([requestPromise, timeoutPromise]);
-}
-
-async function waitForControlCommand(commandId: number, onStatus: (status: ControlCommandStatus) => void) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    const status = await fetchControlCommandStatus(commandId);
-    if (status) {
-      onStatus(status);
-      if (status.status === "completed") return status;
-      if (status.status === "failed") throw new Error(status.error || "collector command failed");
-    }
-    await sleep(250);
-  }
-  throw new ControlStatusDelayedError(commandId);
 }
 
 function TopBar({ dashboard, now, onLogoClick }: { dashboard: DashboardState; now: Date; onLogoClick: () => void }) {
@@ -1251,7 +1053,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
   const sendControlWrites = async (
     label: string,
     source: string,
-    writes: Array<{ key?: string; address?: number; length?: number; value?: number; data_hex?: string }>,
+    writes: MapWrite[],
   ) => {
     let commandId: number | null = null;
     setCommandBusy(true);
@@ -1287,7 +1089,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     setCommandBusy(true);
     setCommandStatus(action === "run" ? "통합운전 명령 전송 중..." : "통합정지 명령 전송 중...");
     try {
-      const result = await postJson<{ id: number }>(`${apiBase()}/control/group-operation`, { action });
+      const result = await enqueueGroupOperation(action);
       commandId = Number(result.id);
       setCommandStatus(`명령 #${commandId} 전송 대기...`);
       await waitForControlCommand(commandId, (status) => {
