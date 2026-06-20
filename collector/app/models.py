@@ -64,10 +64,12 @@ class CollectorBatch:
     recorded_at: str
     frames: list[TelemetryFrame] = field(default_factory=list)
     map_values: list[MapValueUpdate] = field(default_factory=list)
+    heartbeat_keys: list[str] = field(default_factory=list)
 
     def map_payload(self) -> dict:
         return {
             "source": self.source,
             "recorded_at": self.recorded_at,
             "values": [{"key": item.key, "value": item.value} for item in self.map_values],
+            "heartbeat_keys": self.heartbeat_keys,
         }

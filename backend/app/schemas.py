@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Literal
 
 
@@ -109,6 +109,7 @@ class YujinMapIngestRequest(BaseModel):
     source: str = "collector"
     recorded_at: datetime | None = None
     values: list[YujinMapValueUpdateIn]
+    heartbeat_keys: list[str] = Field(default_factory=list)
 
 
 class GroupOperationIn(BaseModel):

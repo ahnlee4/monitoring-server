@@ -121,12 +121,15 @@ def run_publish_loop(client: BackendClient, queue: Queue[CollectorBatch], publis
                     print(f"sent telemetry for {frame.device_code} via {frame.source}")
                 except Exception as exc:
                     print(f"collector publish error for {frame.device_code}: {exc}")
-        if batch.map_values:
+        if batch.map_values or batch.heartbeat_keys:
             try:
                 start = time.monotonic()
                 client.publish_map_batch(batch)
                 elapsed_ms = (time.monotonic() - start) * 1000
-                print(f"sent yujin map batch with {len(batch.map_values)} values in {elapsed_ms:.0f}ms")
+                print(
+                    "sent yujin map batch "
+                    f"changed={len(batch.map_values)} heartbeat={len(batch.heartbeat_keys)} in {elapsed_ms:.0f}ms"
+                )
             except Exception as exc:
                 print(f"collector yujin map publish error: {exc}")
         queue.task_done()
@@ -181,7 +184,7 @@ def main() -> None:
                 "collector poll cycle slow: "
                 f"{poll_elapsed_ms:.0f}ms frames={len(batch.frames)} map_values={len(batch.map_values)}"
             )
-        if batch.map_values or (publish_telemetry and batch.frames):
+        if batch.map_values or batch.heartbeat_keys or (publish_telemetry and batch.frames):
             enqueue_latest_batch(publish_queue, batch)
         if interval > 0:
             time.sleep(interval)

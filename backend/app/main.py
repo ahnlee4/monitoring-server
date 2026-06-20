@@ -607,70 +607,73 @@ async def ingest_yujin_map_values(
     updated_keys: list[str] = []
     broadcast_values: list[dict] = []
     normalized_values = [(item.key.upper(), str(item.value)) for item in payload.values]
-    if not normalized_values:
-        return {"status": "accepted", "updated_count": 0, "keys": []}
+    heartbeat_keys = [key.upper() for key in payload.heartbeat_keys]
+    keys = list(dict.fromkeys([key for key, _ in normalized_values] + heartbeat_keys))
+    if not keys:
+        return {"status": "accepted", "received_count": 0, "updated_count": 0, "keys": []}
 
-    keys = list(dict.fromkeys(key for key, _ in normalized_values))
-    definitions = {
-        definition.key: definition
-        for definition in db.scalars(
-            select(YujinMapDefinition).where(YujinMapDefinition.key.in_(keys))
-        ).all()
-    }
-    missing_keys = [key for key in keys if key not in definitions]
-    if missing_keys:
-        raise HTTPException(status_code=404, detail=f"Map key not found: {missing_keys[0]}")
+    if normalized_values:
+        value_keys = list(dict.fromkeys(key for key, _ in normalized_values))
+        definitions = {
+            definition.key: definition
+            for definition in db.scalars(
+                select(YujinMapDefinition).where(YujinMapDefinition.key.in_(value_keys))
+            ).all()
+        }
+        missing_keys = [key for key in value_keys if key not in definitions]
+        if missing_keys:
+            raise HTTPException(status_code=404, detail=f"Map key not found: {missing_keys[0]}")
 
-    current_values = {
-        current.definition_id: current
-        for current in db.scalars(
-            select(YujinMapValue).where(
-                YujinMapValue.definition_id.in_([definition.id for definition in definitions.values()])
-            )
-        ).all()
-    }
+        current_values = {
+            current.definition_id: current
+            for current in db.scalars(
+                select(YujinMapValue).where(
+                    YujinMapValue.definition_id.in_([definition.id for definition in definitions.values()])
+                )
+            ).all()
+        }
 
-    for key, value_text in normalized_values:
-        definition = definitions[key]
-        current = current_values.get(definition.id)
-        changed = True
-        if current:
-            changed = current.value_text != value_text
-            if changed:
-                current.value_text = value_text
-                current.updated_at = recorded_at
-                current.source = payload.source
-        else:
-            current = YujinMapValue(
-                definition_id=definition.id,
-                value_text=value_text,
-                updated_at=recorded_at,
-                source=payload.source,
-            )
-            db.add(current)
-            current_values[definition.id] = current
-
-        if changed:
-            db.add(
-                YujinMapValueHistory(
+        for key, value_text in normalized_values:
+            definition = definitions[key]
+            current = current_values.get(definition.id)
+            changed = True
+            if current:
+                changed = current.value_text != value_text
+                if changed:
+                    current.value_text = value_text
+                    current.updated_at = recorded_at
+                    current.source = payload.source
+            else:
+                current = YujinMapValue(
                     definition_id=definition.id,
                     value_text=value_text,
-                    recorded_at=recorded_at,
+                    updated_at=recorded_at,
                     source=payload.source,
                 )
-            )
-            updated_keys.append(key)
-            broadcast_values.append(
-                {
-                    "key": key,
-                    "value": value_text,
-                    "updated_at": recorded_at.isoformat(),
-                    "source": payload.source,
-                }
-            )
+                db.add(current)
+                current_values[definition.id] = current
 
-    if updated_keys:
-        db.commit()
+            if changed:
+                db.add(
+                    YujinMapValueHistory(
+                        definition_id=definition.id,
+                        value_text=value_text,
+                        recorded_at=recorded_at,
+                        source=payload.source,
+                    )
+                )
+                updated_keys.append(key)
+                broadcast_values.append(
+                    {
+                        "key": key,
+                        "value": value_text,
+                        "updated_at": recorded_at.isoformat(),
+                        "source": payload.source,
+                    }
+                )
+
+        if updated_keys:
+            db.commit()
     await manager.broadcast_json(
         {
             "type": "yujin_map_update",

@@ -158,6 +158,7 @@ class RS485Collector(BaseCollector):
         self._serial_lock = threading.RLock()
         self._control_priority = threading.Event()
         self._word_cache: dict[int, list[int]] = {}
+        self._published_map_cache: dict[str, str] = {}
         self._is_injection = [True] * self.comp_qty
 
     def request_control_priority(self) -> None:
@@ -170,10 +171,11 @@ class RS485Collector(BaseCollector):
         recorded_at = datetime.now(timezone.utc).isoformat()
         frames: list[TelemetryFrame] = []
         map_values: list[MapValueUpdate] = []
+        heartbeat_keys: list[str] = []
 
         try:
             if self._control_priority.is_set():
-                return CollectorBatch(source="collector-uart4", recorded_at=recorded_at, frames=frames, map_values=map_values)
+                return CollectorBatch(source="collector-uart4", recorded_at=recorded_at)
             port = self._open_serial()
             system_words = self._poll_address(port, 0x00)
             if system_words is not None:
@@ -185,8 +187,6 @@ class RS485Collector(BaseCollector):
                 return CollectorBatch(
                     source="collector-uart4",
                     recorded_at=recorded_at,
-                    frames=frames,
-                    map_values=map_values,
                 )
 
             for comp_index in range(self.comp_qty):
@@ -206,11 +206,14 @@ class RS485Collector(BaseCollector):
             self._close_serial()
             print(f"collector-rs485 error on {self.serial_port}: {exc}")
 
+        changed_map_values = self._filter_changed_map_values(map_values)
+        heartbeat_keys = [item.key for item in map_values]
         return CollectorBatch(
             source="collector-uart4",
             recorded_at=recorded_at,
             frames=frames,
-            map_values=map_values,
+            map_values=changed_map_values,
+            heartbeat_keys=heartbeat_keys,
         )
 
     def _open_serial(self) -> serial.Serial:
@@ -455,6 +458,16 @@ class RS485Collector(BaseCollector):
         elapsed_ms = (time.monotonic() - started) * 1000
         if self.slow_address_log_ms >= 0 and elapsed_ms >= self.slow_address_log_ms:
             print(f"collector-uart4 addr 0x{mem_addr:02X} slow: {elapsed_ms:.0f}ms")
+
+    def _filter_changed_map_values(self, values: list[MapValueUpdate]) -> list[MapValueUpdate]:
+        changed: list[MapValueUpdate] = []
+        for item in values:
+            current_value = str(item.value)
+            if self._published_map_cache.get(item.key) == current_value:
+                continue
+            self._published_map_cache[item.key] = current_value
+            changed.append(item)
+        return changed
 
 
 def build_full_read_request(mem_addr: int) -> bytes:
