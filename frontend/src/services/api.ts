@@ -74,8 +74,8 @@ export async function postJson<TResponse>(url: string, body: unknown, timeoutMs 
 }
 
 export async function fetchYujinMapValues(limit: number, timeoutMs: number) {
-  const response = await fetchWithTimeout(`${apiBase()}/yujin/map-values?limit=${limit}`, { cache: "no-store" }, timeoutMs);
-  if (!response.ok) throw new Error(`map-values ${response.status}`);
+  const response = await fetchWithTimeout(`${apiBase()}/yujin/live-map?limit=${limit}`, { cache: "no-store" }, timeoutMs);
+  if (!response.ok) throw new Error(`live-map ${response.status}`);
   return (await response.json()) as YujinMapValue[];
 }
 

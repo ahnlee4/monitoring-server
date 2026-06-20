@@ -2,6 +2,8 @@ import json
 import re
 import time
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+from threading import RLock
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,6 +52,8 @@ DATABASE_STARTUP_TIMEOUT_SECONDS = 120
 DATABASE_STARTUP_RETRY_SECONDS = 2
 YUJIN_INGEST_SLOW_LOG_MS = 500
 YUJIN_MAP_HEARTBEATS: dict[str, tuple[datetime, str]] = {}
+YUJIN_LIVE_MAP: dict[str, tuple[str, datetime, str]] = {}
+YUJIN_LIVE_MAP_LOCK = RLock()
 
 CONTROL_COMMAND_SOURCE_PRIORITY = {
     "group_operation": 0,
@@ -172,6 +176,40 @@ def seed_yujin_map() -> None:
         db.commit()
 
 
+@lru_cache(maxsize=1)
+def yujin_schema_entries() -> tuple[dict, ...]:
+    schema = build_yujin_map_schema()
+    return (
+        *schema["system_entries"],
+        *schema["network_entries"],
+        *schema["expanded_examples"]["injection"],
+        *schema["expanded_examples"]["oilfree"],
+        *schema["expanded_examples"]["dio"],
+        *schema["expanded_examples"]["module"],
+    )
+
+
+@lru_cache(maxsize=1)
+def yujin_schema_index() -> dict[str, dict]:
+    return {str(item["key"]).upper(): item for item in yujin_schema_entries()}
+
+
+def yujin_live_value_out(definition: dict, live: tuple[str, datetime, str]) -> YujinMapValueOut:
+    value, updated_at, source = live
+    return YujinMapValueOut(
+        key=str(definition["key"]).upper(),
+        data_type=int(definition["data_type"]),
+        data_length=int(definition["length"]),
+        signed=bool(definition["signed"]),
+        default_value=str(definition["default_value"]),
+        name=definition.get("name"),
+        section=str(definition["section"]),
+        value=value,
+        updated_at=updated_at,
+        source=source,
+    )
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "service": "backend", "timestamp": datetime.now(timezone.utc)}
@@ -249,6 +287,14 @@ def enqueue_control_command(
 
 
 def current_map_int(db: Session, key: str, fallback: int = 0) -> int:
+    with YUJIN_LIVE_MAP_LOCK:
+        live = YUJIN_LIVE_MAP.get(key.upper())
+    if live:
+        try:
+            return int(float(live[0]))
+        except (TypeError, ValueError):
+            return fallback
+
     row = db.execute(
         select(YujinMapValue.value_text)
         .join(YujinMapDefinition, YujinMapValue.definition_id == YujinMapDefinition.id)
@@ -534,6 +580,30 @@ def yujin_map_definitions(
     ]
 
 
+@app.get("/api/yujin/live-map", response_model=list[YujinMapValueOut])
+def yujin_live_map_values(
+    section: str | None = Query(default=None),
+    key_prefix: str | None = Query(default=None),
+    limit: int = Query(default=1000, le=2000),
+) -> list[YujinMapValueOut]:
+    definitions = yujin_schema_index()
+    rows: list[YujinMapValueOut] = []
+    with YUJIN_LIVE_MAP_LOCK:
+        live_items = [(key, YUJIN_LIVE_MAP[key]) for key in sorted(YUJIN_LIVE_MAP.keys())]
+    for key, live in live_items:
+        definition = definitions.get(key)
+        if not definition:
+            continue
+        if section and definition["section"] != section:
+            continue
+        if key_prefix and not key.startswith(key_prefix.upper()):
+            continue
+        rows.append(yujin_live_value_out(definition, live))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
 @app.get("/api/yujin/map-values", response_model=list[YujinMapValueOut])
 def yujin_map_values(
     section: str | None = Query(default=None),
@@ -622,7 +692,6 @@ def yujin_map_value_history(
 @app.post("/api/yujin/ingest-map")
 async def ingest_yujin_map_values(
     payload: YujinMapIngestRequest,
-    db: Session = Depends(get_db),
     x_collector_token: str | None = Header(default=None),
 ) -> dict:
     ingest_started = time.monotonic()
@@ -630,8 +699,6 @@ async def ingest_yujin_map_values(
         raise HTTPException(status_code=401, detail="Invalid collector token")
 
     recorded_at = payload.recorded_at or datetime.now(timezone.utc)
-    updated_keys: list[str] = []
-    broadcast_values: list[dict] = []
     normalized_values = [(item.key.upper(), str(item.value)) for item in payload.values]
     heartbeat_keys = [key.upper() for key in payload.heartbeat_keys]
     keys = list(dict.fromkeys([key for key, _ in normalized_values] + heartbeat_keys))
@@ -639,68 +706,25 @@ async def ingest_yujin_map_values(
         return {"status": "accepted", "received_count": 0, "updated_count": 0, "keys": []}
     remember_yujin_heartbeats(keys, recorded_at, payload.source)
 
-    if normalized_values:
-        value_keys = list(dict.fromkeys(key for key, _ in normalized_values))
-        definitions = {
-            definition.key: definition
-            for definition in db.scalars(
-                select(YujinMapDefinition).where(YujinMapDefinition.key.in_(value_keys))
-            ).all()
-        }
-        missing_keys = [key for key in value_keys if key not in definitions]
-        if missing_keys:
-            raise HTTPException(status_code=404, detail=f"Map key not found: {missing_keys[0]}")
-
-        current_values = {
-            current.definition_id: current
-            for current in db.scalars(
-                select(YujinMapValue).where(
-                    YujinMapValue.definition_id.in_([definition.id for definition in definitions.values()])
-                )
-            ).all()
-        }
-
+    with YUJIN_LIVE_MAP_LOCK:
         for key, value_text in normalized_values:
-            definition = definitions[key]
-            current = current_values.get(definition.id)
-            changed = True
-            if current:
-                changed = current.value_text != value_text
-                if changed:
-                    current.value_text = value_text
-                    current.updated_at = recorded_at
-                    current.source = payload.source
-            else:
-                current = YujinMapValue(
-                    definition_id=definition.id,
-                    value_text=value_text,
-                    updated_at=recorded_at,
-                    source=payload.source,
-                )
-                db.add(current)
-                current_values[definition.id] = current
+            YUJIN_LIVE_MAP[key] = (value_text, recorded_at, payload.source)
 
-            if changed:
-                db.add(
-                    YujinMapValueHistory(
-                        definition_id=definition.id,
-                        value_text=value_text,
-                        recorded_at=recorded_at,
-                        source=payload.source,
-                    )
-                )
-                updated_keys.append(key)
-                broadcast_values.append(
-                    {
-                        "key": key,
-                        "value": value_text,
-                        "updated_at": recorded_at.isoformat(),
-                        "source": payload.source,
-                    }
-                )
+        for key in heartbeat_keys:
+            if key not in YUJIN_LIVE_MAP:
+                continue
+            value_text, _, _ = YUJIN_LIVE_MAP[key]
+            YUJIN_LIVE_MAP[key] = (value_text, recorded_at, payload.source)
 
-        if updated_keys:
-            db.commit()
+    broadcast_values = [
+        {
+            "key": key,
+            "value": value_text,
+            "updated_at": recorded_at.isoformat(),
+            "source": payload.source,
+        }
+        for key, value_text in normalized_values
+    ]
     await manager.broadcast_json(
         {
             "type": "yujin_map_update",
@@ -714,13 +738,13 @@ async def ingest_yujin_map_values(
     if elapsed_ms >= YUJIN_INGEST_SLOW_LOG_MS:
         print(
             "yujin ingest-map slow: "
-            f"{elapsed_ms:.0f}ms received={len(normalized_values)} changed={len(updated_keys)}"
+            f"{elapsed_ms:.0f}ms received={len(normalized_values)} heartbeat={len(heartbeat_keys)}"
         )
     return {
         "status": "accepted",
         "received_count": len(normalized_values),
-        "updated_count": len(updated_keys),
-        "keys": updated_keys,
+        "updated_count": len(normalized_values),
+        "keys": keys,
     }
 
 

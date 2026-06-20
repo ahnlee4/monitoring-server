@@ -59,7 +59,7 @@ class BackendClient:
         response.raise_for_status()
 
     def publish_map_batch(self, batch: CollectorBatch) -> None:
-        if not self.yujin_api_url or not batch.map_values:
+        if not self.yujin_api_url or (not batch.map_values and not batch.heartbeat_keys):
             return
         response = self.session.post(
             self.yujin_api_url,
