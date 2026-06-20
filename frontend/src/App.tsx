@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { QuickButtons } from "./components/QuickButtons";
 import type { UpdateEvent, YujinMapValue } from "./types";
 
@@ -45,12 +45,30 @@ type DashboardState = {
   compressors: CompressorState[];
 };
 
-type ActiveDialog = "factory" | "settings" | "control" | null;
+type ActiveDialog = "factory" | "settings" | "control" | "password" | null;
 type ActiveScreen = "main" | "detail";
+type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.41";
+const APP_VERSION = "0.1.42";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
+const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
+const ADMIN_LOGO_CLICK_COUNT = 5;
+const USER_LEVELS = {
+  admin: 0,
+  manager: 1,
+  user: 2,
+} as const;
+const USER_PASSWORDS: Record<UserLevel, string> = {
+  [USER_LEVELS.admin]: "btfss0510",
+  [USER_LEVELS.manager]: "471112",
+  [USER_LEVELS.user]: "1234",
+};
+const USER_LEVEL_LABELS: Record<UserLevel, string> = {
+  [USER_LEVELS.admin]: "관리자",
+  [USER_LEVELS.manager]: "매니저",
+  [USER_LEVELS.user]: "일반",
+};
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -117,6 +135,8 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeDialog, setActiveDialog] = useState<ActiveDialog>(null);
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>("main");
+  const [settingsLevel, setSettingsLevel] = useState<UserLevel>(USER_LEVELS.user);
+  const [adminLogoClicks, setAdminLogoClicks] = useState({ count: 0, lastAt: 0 });
   const [mapValues, setMapValues] = useState<Record<string, YujinMapValue>>({});
 
   useEffect(() => {
@@ -165,12 +185,29 @@ export default function App() {
   const dashboard = useMemo(() => buildDashboardFromMap(mapValues), [mapValues]);
   const lowPressureText = getLowPressureText(dashboard.lowPressureAlarm);
   const showMainScreen = activeScreen === "main";
+  const openDialog = (dialog: ActiveDialog) => {
+    if (dialog === "settings") setSettingsLevel(USER_LEVELS.user);
+    setActiveDialog(dialog);
+  };
+  const handleLogoClick = () => {
+    const nowMs = Date.now();
+    const nextCount = nowMs - adminLogoClicks.lastAt > ADMIN_LOGO_CLICK_WINDOW_MS ? 1 : adminLogoClicks.count + 1;
+
+    if (nextCount >= ADMIN_LOGO_CLICK_COUNT) {
+      setAdminLogoClicks({ count: 0, lastAt: 0 });
+      setMenuOpen(false);
+      setActiveDialog("password");
+      return;
+    }
+
+    setAdminLogoClicks({ count: nextCount, lastAt: nowMs });
+  };
 
   return (
     <main className="flex min-h-screen items-center justify-center overflow-hidden bg-black text-black">
       <section className="relative h-[800px] w-[1280px] overflow-hidden bg-white">
         <div className="grid h-full grid-rows-[74px_578px_148px]">
-          <TopBar dashboard={dashboard} now={now} />
+          <TopBar dashboard={dashboard} now={now} onLogoClick={handleLogoClick} />
 
           <section className="relative min-h-0">
             {showMainScreen ? (
@@ -191,14 +228,23 @@ export default function App() {
             activeScreen={activeScreen}
             dashboard={dashboard}
             menuOpen={menuOpen}
-            onOpenDialog={setActiveDialog}
+            onOpenDialog={openDialog}
             onToggleDetail={() => setActiveScreen((screen) => (screen === "detail" ? "main" : "detail"))}
             setMenuOpen={setMenuOpen}
           />
         </div>
         {activeDialog === "factory" ? <FactoryDialog onClose={() => setActiveDialog(null)} /> : null}
-        {activeDialog === "settings" ? <SettingsDialog onClose={() => setActiveDialog(null)} /> : null}
+        {activeDialog === "settings" ? <SettingsDialog level={settingsLevel} onClose={() => setActiveDialog(null)} /> : null}
         {activeDialog === "control" ? <ControlDialog dashboard={dashboard} onClose={() => setActiveDialog(null)} /> : null}
+        {activeDialog === "password" ? (
+          <PasswordDialog
+            onClose={() => setActiveDialog(null)}
+            onSuccess={(level) => {
+              setSettingsLevel(level);
+              setActiveDialog("settings");
+            }}
+          />
+        ) : null}
       </section>
     </main>
   );
@@ -434,7 +480,7 @@ async function waitForControlCommand(commandId: number, onStatus: (status: Contr
   throw new Error("명령 응답 시간 초과");
 }
 
-function TopBar({ dashboard, now }: { dashboard: DashboardState; now: Date }) {
+function TopBar({ dashboard, now, onLogoClick }: { dashboard: DashboardState; now: Date; onLogoClick: () => void }) {
   return (
     <header className="grid min-h-0 grid-cols-[241px_241px_241px_65px_241px_241px] gap-[2px]">
       <TopRunPanel running={dashboard.integratedRun} />
@@ -450,9 +496,14 @@ function TopBar({ dashboard, now }: { dashboard: DashboardState; now: Date }) {
         <span>컴프레샤</span>
         <span>통합제어 시스템</span>
       </TopPanel>
-      <div className="flex min-h-0 items-center justify-center overflow-hidden px-[3px]">
+      <button
+        aria-label="관리자 비밀번호 화면"
+        className="flex min-h-0 items-center justify-center overflow-hidden bg-white px-[3px]"
+        onClick={onLogoClick}
+        type="button"
+      >
         <img src="/grid_logo3.png" alt="GRID" className="h-[72px] w-full object-contain" />
-      </div>
+      </button>
     </header>
   );
 }
@@ -891,14 +942,26 @@ function HeaderCell({ children }: { children: ReactNode }) {
   );
 }
 
-function DialogShell({ children, onClose, title, wide = false }: { children: ReactNode; onClose: () => void; title: string; wide?: boolean }) {
+function DialogShell({
+  children,
+  onClose,
+  subtitle = "설정을 확인하고 필요한 항목을 조정하세요",
+  title,
+  wide = false,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  subtitle?: string;
+  title: string;
+  wide?: boolean;
+}) {
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-[24px]">
       <section className={`${wide ? "w-[1040px]" : "w-[560px]"} overflow-hidden rounded-[12px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_14px_34px_rgba(15,43,72,0.32)]`}>
         <div className="flex h-[74px] items-center justify-between border-b border-[#dbe7f1] bg-white px-[22px]">
           <div>
             <div className="text-[26px] font-black leading-none text-[#173f69]">{title}</div>
-            <div className="mt-[7px] text-[13px] font-bold text-[#6f879d]">설정을 확인하고 필요한 항목을 조정하세요</div>
+            <div className="mt-[7px] text-[13px] font-bold text-[#6f879d]">{subtitle}</div>
           </div>
           <DialogCloseButton onClick={onClose} />
         </div>
@@ -1314,12 +1377,54 @@ function SegmentedOption({
   );
 }
 
-function SettingsDialog({ onClose }: { onClose: () => void }) {
+function PasswordDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess: (level: UserLevel) => void }) {
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("상단 로고 관리자 진입 비밀번호를 입력하세요");
+  const submitPassword = (event: FormEvent) => {
+    event.preventDefault();
+    const matchedLevel = (Object.entries(USER_PASSWORDS).find(([, expected]) => expected === password)?.[0] ?? "") as `${UserLevel}` | "";
+
+    if (matchedLevel === "") {
+      setMessage("비밀번호가 올바르지 않습니다");
+      setPassword("");
+      return;
+    }
+
+    onSuccess(Number(matchedLevel) as UserLevel);
+  };
+
+  return (
+    <DialogShell onClose={onClose} subtitle="원본 프로그램과 동일하게 권한별 설정 화면을 엽니다" title="비밀번호 입력">
+      <form className="grid gap-[14px] bg-[#f6f9fc] p-[18px]" onSubmit={submitPassword}>
+        <label className="grid gap-[8px]">
+          <span className="text-[16px] font-black text-[#45657f]">관리자 / 매니저 / 일반 비밀번호</span>
+          <input
+            autoFocus
+            className="h-[58px] rounded-[8px] border border-[#c9deef] bg-white px-[16px] text-center text-[28px] font-black tracking-[0.16em] text-[#173f69] outline-none focus:border-[#237bd0]"
+            onChange={(event) => setPassword(event.target.value)}
+            type="password"
+            value={password}
+          />
+        </label>
+        <div className={`rounded-[8px] px-[12px] py-[10px] text-center text-[14px] font-black ${message.includes("올바르지") ? "bg-[#fff0f0] text-[#d92525]" : "bg-[#eef7ff] text-[#45657f]"}`}>
+          {message}
+        </div>
+        <div className="grid h-[54px] grid-cols-2 gap-[10px]">
+          <button className="rounded-[8px] border border-[#cfdde8] bg-[#f8fbfd] text-[18px] font-black text-[#45657f]" onClick={onClose} type="button">취소</button>
+          <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)]" type="submit">확인</button>
+        </div>
+      </form>
+    </DialogShell>
+  );
+}
+
+function SettingsDialog({ level, onClose }: { level: UserLevel; onClose: () => void }) {
   const modes = Array.from({ length: 7 }, (_, index) => [`${index + 1}`, "3", "2", "0", "0"]);
   const factories = ["공장 1", "공장 2", "공장 3", "공장 4", "공장 5"];
   const [useModeCount, setUseModeCount] = useState("1");
   const [saveStatus, setSaveStatus] = useState("설정 저장 대기 중");
   const [saving, setSaving] = useState(false);
+  const isAdmin = level === USER_LEVELS.admin;
   const saveUseModeCount = async () => {
     setSaving(true);
     setSaveStatus("설정 저장 명령 전송 중...");
@@ -1338,26 +1443,28 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <DialogShell onClose={onClose} title="설정" wide>
-      <div className="grid max-h-[690px] grid-cols-[300px_1fr] gap-[14px] overflow-y-auto bg-[#f6f9fc] p-[16px]">
-        <aside className="grid content-start gap-[12px]">
-          <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-            <PanelHeading eyebrow="NETWORK">접속 정보</PanelHeading>
-            <div className="mt-[12px] grid gap-[8px]">
-              <SettingSummary label="Connect IP" value="121.164.120.200" />
-              <SettingSummary label="Port" value="1502" />
-              <SettingSummary label="Login PW" value="1234" />
-              <SettingSummary label="Setting PW" value="471112" />
+    <DialogShell onClose={onClose} subtitle={`${USER_LEVEL_LABELS[level]} 권한으로 표시 가능한 항목만 보여줍니다`} title={`설정 - ${USER_LEVEL_LABELS[level]}`} wide>
+      <div className={`grid max-h-[690px] ${isAdmin ? "grid-cols-[300px_1fr]" : "grid-cols-1"} gap-[14px] overflow-y-auto bg-[#f6f9fc] p-[16px]`}>
+        {isAdmin ? (
+          <aside className="grid content-start gap-[12px]">
+            <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
+              <PanelHeading eyebrow="NETWORK">접속 정보</PanelHeading>
+              <div className="mt-[12px] grid gap-[8px]">
+                <SettingSummary label="Connect IP" value="121.164.120.200" />
+                <SettingSummary label="Port" value="1502" />
+                <SettingSummary label="Login PW" value="1234" />
+                <SettingSummary label="Setting PW" value="471112" />
+              </div>
             </div>
-          </div>
-          <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-            <PanelHeading eyebrow="DIO">DIO BIT</PanelHeading>
-            <div className="mt-[12px] grid gap-[8px]">
-              <SettingSummary label="BIT0" value="운전" />
-              <SettingSummary label="BIT4" value="고장" />
+            <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
+              <PanelHeading eyebrow="DIO">DIO BIT</PanelHeading>
+              <div className="mt-[12px] grid gap-[8px]">
+                <SettingSummary label="BIT0" value="운전" />
+                <SettingSummary label="BIT4" value="고장" />
+              </div>
             </div>
-          </div>
-        </aside>
+          </aside>
+        ) : null}
         <div className="grid content-start gap-[14px]">
           <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <PanelHeading eyebrow="MODE TABLE">사용모드 / 정렬 설정</PanelHeading>
@@ -1380,17 +1487,19 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             </div>
             <div className="mt-[8px] rounded-[8px] bg-[#eef7ff] px-[10px] py-[8px] text-[13px] font-black text-[#45657f]">{saveStatus}</div>
           </div>
-          <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-            <PanelHeading eyebrow="FACTORY">공장 정보</PanelHeading>
-            <div className="mt-[12px] grid grid-cols-5 gap-[8px]">
-              {factories.map((factory, index) => (
-                <div key={factory} className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[10px] text-center">
-                  <div className="text-[16px] font-black text-[#173f69]">{factory}</div>
-                  <div className="mt-[7px] text-[13px] font-bold text-[#6f879d]">192.168.0.{10 + index}</div>
-                </div>
-              ))}
+          {isAdmin ? (
+            <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
+              <PanelHeading eyebrow="FACTORY">공장 정보</PanelHeading>
+              <div className="mt-[12px] grid grid-cols-5 gap-[8px]">
+                {factories.map((factory, index) => (
+                  <div key={factory} className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[10px] text-center">
+                    <div className="text-[16px] font-black text-[#173f69]">{factory}</div>
+                    <div className="mt-[7px] text-[13px] font-bold text-[#6f879d]">192.168.0.{10 + index}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
     </DialogShell>
