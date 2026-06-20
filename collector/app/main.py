@@ -145,7 +145,7 @@ def main() -> None:
     control_command_limit = get_int_env("COLLECTOR_CONTROL_COMMAND_LIMIT", 1)
     control_command_delay = float(get_env("COLLECTOR_CONTROL_COMMAND_DELAY_SECONDS", "0.05"))
     control_poll_seconds = float(get_env("COLLECTOR_CONTROL_POLL_SECONDS", "0.1"))
-    slow_poll_log_ms = float(get_env("COLLECTOR_SLOW_POLL_LOG_MS", "1000"))
+    slow_poll_log_ms = float(get_env("COLLECTOR_SLOW_POLL_LOG_MS", "0"))
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
     collector, interval = build_collector()
@@ -181,8 +181,9 @@ def main() -> None:
         poll_elapsed_ms = (time.monotonic() - poll_started) * 1000
         if slow_poll_log_ms >= 0 and poll_elapsed_ms >= slow_poll_log_ms:
             print(
-                "collector poll cycle slow: "
-                f"{poll_elapsed_ms:.0f}ms frames={len(batch.frames)} map_values={len(batch.map_values)}"
+                "collector poll cycle: "
+                f"{poll_elapsed_ms:.0f}ms frames={len(batch.frames)} "
+                f"changed={len(batch.map_values)} heartbeat={len(batch.heartbeat_keys)}"
             )
         if batch.map_values or batch.heartbeat_keys or (publish_telemetry and batch.frames):
             enqueue_latest_batch(publish_queue, batch)
