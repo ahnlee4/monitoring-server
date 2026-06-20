@@ -1,10 +1,15 @@
 import time
 import threading
+from queue import Full, Queue
 
 from app.base import BaseCollector
 from app.client import BackendClient
 from app.config import get_env, get_int_env
 from app.drivers.rs485_driver import RS485Collector
+from app.models import CollectorBatch
+
+
+SENTINEL_BATCH = CollectorBatch(source="collector-stop", recorded_at="")
 
 
 def build_collector() -> tuple[BaseCollector, int]:
@@ -80,6 +85,47 @@ def run_control_loop(
         time.sleep(poll_seconds)
 
 
+def enqueue_latest_batch(queue: Queue[CollectorBatch], batch: CollectorBatch) -> None:
+    try:
+        queue.put_nowait(batch)
+        return
+    except Full:
+        pass
+
+    try:
+        queue.get_nowait()
+    except Exception:
+        pass
+    try:
+        queue.put_nowait(batch)
+    except Full:
+        pass
+
+
+def run_publish_loop(client: BackendClient, queue: Queue[CollectorBatch], publish_telemetry: bool) -> None:
+    while True:
+        batch = queue.get()
+        if batch is SENTINEL_BATCH:
+            return
+
+        if publish_telemetry:
+            for frame in batch.frames:
+                try:
+                    client.publish(frame)
+                    print(f"sent telemetry for {frame.device_code} via {frame.source}")
+                except Exception as exc:
+                    print(f"collector publish error for {frame.device_code}: {exc}")
+        if batch.map_values:
+            try:
+                start = time.monotonic()
+                client.publish_map_batch(batch)
+                elapsed_ms = (time.monotonic() - start) * 1000
+                print(f"sent yujin map batch with {len(batch.map_values)} values in {elapsed_ms:.0f}ms")
+            except Exception as exc:
+                print(f"collector yujin map publish error: {exc}")
+        queue.task_done()
+
+
 def main() -> None:
     api_url = get_env("COLLECTOR_API_URL", "http://backend:8000/api/ingest/telemetry")
     yujin_api_url = get_env("COLLECTOR_YUJIN_API_URL", "http://backend:8000/api/yujin/ingest-map")
@@ -111,22 +157,17 @@ def main() -> None:
         args=(collector, control_client, control_command_limit, control_command_delay, control_poll_seconds),
         daemon=True,
     ).start()
+    publish_queue: Queue[CollectorBatch] = Queue(maxsize=1)
+    threading.Thread(
+        target=run_publish_loop,
+        args=(data_client, publish_queue, publish_telemetry),
+        daemon=True,
+    ).start()
 
     while True:
         batch = collector.poll()
-        if publish_telemetry:
-            for frame in batch.frames:
-                try:
-                    data_client.publish(frame)
-                    print(f"sent telemetry for {frame.device_code} via {frame.source}")
-                except Exception as exc:
-                    print(f"collector publish error for {frame.device_code}: {exc}")
-        if batch.map_values:
-            try:
-                data_client.publish_map_batch(batch)
-                print(f"sent yujin map batch with {len(batch.map_values)} values")
-            except Exception as exc:
-                print(f"collector yujin map publish error: {exc}")
+        if batch.map_values or (publish_telemetry and batch.frames):
+            enqueue_latest_batch(publish_queue, batch)
         time.sleep(interval)
 
 
