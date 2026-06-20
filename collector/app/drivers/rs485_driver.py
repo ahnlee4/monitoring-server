@@ -142,6 +142,7 @@ class RS485Collector(BaseCollector):
         write_response_timeout: float = 0.25,
         debug_hex: bool = False,
         slow_address_log_ms: float = 200.0,
+        publish_telemetry_frames: bool = False,
     ) -> None:
         self.serial_port = serial_port
         self.baudrate = baudrate
@@ -152,6 +153,7 @@ class RS485Collector(BaseCollector):
         self.write_response_timeout = write_response_timeout
         self.debug_hex = debug_hex
         self.slow_address_log_ms = slow_address_log_ms
+        self.publish_telemetry_frames = publish_telemetry_frames
         self._serial: serial.Serial | None = None
         self._serial_lock = threading.RLock()
         self._control_priority = threading.Event()
@@ -195,9 +197,11 @@ class RS485Collector(BaseCollector):
                 if words is None:
                     continue
                 self._word_cache[mem_addr] = words
-                frames.append(self._to_frame(comp_index, words, recorded_at))
+                if self.publish_telemetry_frames:
+                    frames.append(self._to_frame(comp_index, words, recorded_at))
                 map_values.extend(words_to_map_values(comp_index, words, self._is_injection[comp_index]))
-                time.sleep(self.inter_request_delay)
+                if comp_index < self.comp_qty - 1:
+                    time.sleep(self.inter_request_delay)
         except Exception as exc:
             self._close_serial()
             print(f"collector-rs485 error on {self.serial_port}: {exc}")

@@ -26,6 +26,9 @@ def build_collector() -> tuple[BaseCollector, int]:
         write_response_timeout = float(get_env("RS485_WRITE_RESPONSE_TIMEOUT_SECONDS", "0"))
         debug_hex = get_env("RS485_DEBUG_HEX", "true").strip().lower() in ("1", "true", "yes", "on")
         slow_address_log_ms = float(get_env("RS485_SLOW_ADDRESS_LOG_MS", "200"))
+        publish_telemetry_frames = (
+            get_env("COLLECTOR_PUBLISH_TELEMETRY", "false").strip().lower() in ("1", "true", "yes", "on")
+        )
         return (
             RS485Collector(
                 serial_port=serial_port,
@@ -37,6 +40,7 @@ def build_collector() -> tuple[BaseCollector, int]:
                 write_response_timeout=write_response_timeout,
                 debug_hex=debug_hex,
                 slow_address_log_ms=slow_address_log_ms,
+                publish_telemetry_frames=publish_telemetry_frames,
             ),
             interval,
         )
