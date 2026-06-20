@@ -63,13 +63,12 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.92";
+const APP_VERSION = "0.1.93";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
 const MODE_ALIGN_COLUMNS = 3;
 const SETTINGS_MAP_SYNC_PAUSE_MS = 8_000;
-const SETTINGS_MODE_ROWS_STORAGE_KEY = "monitoring.settings.modeRows";
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
 const USER_LEVELS = {
@@ -1558,33 +1557,6 @@ function createDefaultModeRows(): ModeRow[] {
   }));
 }
 
-function cloneModeRows(rows: ModeRow[]) {
-  return rows.map((row) => ({ ...row, values: [...row.values] }));
-}
-
-function loadStoredModeRows() {
-  try {
-    const stored = window.localStorage.getItem(SETTINGS_MODE_ROWS_STORAGE_KEY);
-    if (!stored) return null;
-    const rows = JSON.parse(stored) as ModeRow[];
-    if (!Array.isArray(rows) || rows.length !== MODE_ALIGN_ROWS) return null;
-    return rows.map((row, index) => ({
-      no: `${index + 1}`,
-      values: Array.from({ length: 4 }, (_, valueIndex) => sanitizeNumericInput(String(row.values?.[valueIndex] ?? "0"), true) || "0"),
-    }));
-  } catch {
-    return null;
-  }
-}
-
-function storeModeRows(rows: ModeRow[]) {
-  try {
-    window.localStorage.setItem(SETTINGS_MODE_ROWS_STORAGE_KEY, JSON.stringify(rows));
-  } catch {
-    // The board UI can keep working even if browser storage is unavailable.
-  }
-}
-
 function readLiveWord(values: Record<string, YujinMapValue>, key: string) {
   const item = values[key.toUpperCase()];
   if (!isLiveMapValue(item)) return null;
@@ -1605,10 +1577,9 @@ function readAsciiMap(values: Record<string, YujinMapValue>, highAddr: string) {
   return String.fromCharCode(...asciiBytesOnly.filter((byte) => byte >= 0x20 && byte <= 0x7e));
 }
 
-function mergeModeRowsFromMap(values: Record<string, YujinMapValue>, currentRows: ModeRow[]): ModeRow[] | null {
-  const rows = cloneModeRows(currentRows);
+function readModeRowsFromMap(values: Record<string, YujinMapValue>): ModeRow[] {
+  const rows = createDefaultModeRows();
   const alignList = readAsciiMap(values, "03").split("=")[0];
-  let hasMapData = false;
 
   alignList
     .split("/")
@@ -1618,19 +1589,15 @@ function mergeModeRowsFromMap(values: Record<string, YujinMapValue>, currentRows
       const cells = rowText.split(",").slice(0, MODE_ALIGN_COLUMNS);
       cells.forEach((cell, colIndex) => {
         rows[rowIndex].values[colIndex] = sanitizeNumericInput(cell, true) || "0";
-        hasMapData = true;
       });
     });
 
   for (let rowIndex = 0; rowIndex < MODE_ALIGN_ROWS; rowIndex += 1) {
     const runUnit = readLiveWord(values, `04${(0x12 + rowIndex * 2).toString(16).padStart(2, "0")}`);
-    if (runUnit !== null) {
-      rows[rowIndex].values[3] = String(runUnit);
-      hasMapData = true;
-    }
+    if (runUnit !== null) rows[rowIndex].values[3] = String(runUnit);
   }
 
-  return hasMapData ? rows : null;
+  return rows;
 }
 
 function readUseUnitIndex(values: Record<string, YujinMapValue>) {
@@ -1650,10 +1617,7 @@ function readUseUnitCount(values: Record<string, YujinMapValue>) {
 function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapValues: Record<string, YujinMapValue>; onClose: () => void }) {
   type ModeCellTarget = { rowIndex: number; colIndex: number; kind: "align" | "index" } | { kind: "count" };
   const factories = ["공장 1", "공장 2", "공장 3", "공장 4", "공장 5"];
-  const [modeRows, setModeRows] = useState(() => {
-    const initialRows = loadStoredModeRows() ?? createDefaultModeRows();
-    return mergeModeRowsFromMap(mapValues, initialRows) ?? initialRows;
-  });
+  const [modeRows, setModeRows] = useState(() => readModeRowsFromMap(mapValues));
   const [selectedModeIndex, setSelectedModeIndex] = useState(0);
   const [useModeCount, setUseModeCount] = useState("1");
   const [activeModeCell, setActiveModeCell] = useState<ModeCellTarget | null>(null);
@@ -1667,10 +1631,7 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
     if (activeModeCell || saving) return;
     if (Date.now() < mapSyncPausedUntilRef.current) return;
 
-    setModeRows((current) => {
-      const nextRows = mergeModeRowsFromMap(mapValues, current);
-      return nextRows ?? current;
-    });
+    setModeRows(readModeRowsFromMap(mapValues));
     const nextUseUnit = readUseUnitIndex(mapValues);
     if (nextUseUnit !== null) setSelectedModeIndex(nextUseUnit);
     const nextUseModeCount = readUseUnitCount(mapValues);
@@ -1706,15 +1667,11 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
       ),
     );
   };
-  useEffect(() => {
-    storeModeRows(modeRows);
-  }, [modeRows]);
   const buildAlignListPayload = () => {
     const alignText = modeRows
       .map((row) => `${row.values[0] || "0"},${row.values[1] || "0"},${row.values[2] || "0"},0,0,0,0,0,0,0,0,0/`)
       .join("");
-    const data = asciiBytes(alignText);
-    return [0xc9, 0x20, 0x03, 0x00, (data.length >> 8) & 0xff, data.length & 0xff, ...data];
+    return [0xc9, 0x83, 0x00, ...asciiBytes(alignText)];
   };
   const saveModeAlign = async () => {
     await submitRawSetting("정렬표", "settings_mode_align_table", buildAlignListPayload());
