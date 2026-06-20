@@ -49,7 +49,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.38";
+const APP_VERSION = "0.1.39";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
@@ -892,13 +892,24 @@ function DialogShell({ children, onClose, title, wide = false }: { children: Rea
             <div className="text-[26px] font-black leading-none text-[#173f69]">{title}</div>
             <div className="mt-[7px] text-[13px] font-bold text-[#6f879d]">설정을 확인하고 필요한 항목을 조정하세요</div>
           </div>
-          <button className="h-[40px] rounded-[8px] border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
-            닫기
-          </button>
+          <DialogCloseButton onClick={onClose} />
         </div>
         {children}
       </section>
     </div>
+  );
+}
+
+function DialogCloseButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      aria-label="닫기"
+      className="flex h-[42px] w-[42px] items-center justify-center rounded-[8px] border border-[#cfdde8] bg-[#f3f7fa] text-[28px] font-black leading-none text-[#45657f] transition-colors hover:bg-[#e8f0f6]"
+      onClick={onClick}
+      type="button"
+    >
+      ×
+    </button>
   );
 }
 
@@ -925,9 +936,7 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
               <span className="mt-[7px] block text-[14px] font-bold text-[#6f879d]">운영할 공장을 선택한 뒤 적용하세요</span>
             </span>
           </div>
-          <button className="h-[40px] rounded-[8px] border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
-            닫기
-          </button>
+          <DialogCloseButton onClick={onClose} />
         </div>
         <div className="grid grid-cols-[190px_1fr] gap-[12px] p-[14px]">
           <aside className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
@@ -1082,9 +1091,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
               <span className="mt-[7px] block text-[14px] font-bold text-[#6f879d]">운전 조건과 그룹 제어를 한 화면에서 관리합니다</span>
             </span>
           </div>
-          <button className="h-[40px] rounded-[8px] border border-[#cfdde8] bg-[#f3f7fa] px-[18px] text-[17px] font-black text-[#45657f]" onClick={onClose} type="button">
-            닫기
-          </button>
+          <DialogCloseButton onClick={onClose} />
         </div>
         <div className="grid grid-cols-[1fr_280px] gap-[16px] p-[18px]">
           <div className="grid gap-[14px]">
