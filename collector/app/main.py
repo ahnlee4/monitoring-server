@@ -86,23 +86,29 @@ def main() -> None:
     control_api_url = get_env("COLLECTOR_CONTROL_API_URL", default_control_api_url(yujin_api_url))
     publish_telemetry = get_env("COLLECTOR_PUBLISH_TELEMETRY", "false").strip().lower() in ("1", "true", "yes", "on")
     request_timeout = float(get_env("COLLECTOR_REQUEST_TIMEOUT_SECONDS", "15"))
+    control_request_timeout = float(get_env("COLLECTOR_CONTROL_REQUEST_TIMEOUT_SECONDS", "2"))
     control_command_limit = get_int_env("COLLECTOR_CONTROL_COMMAND_LIMIT", 1)
     control_command_delay = float(get_env("COLLECTOR_CONTROL_COMMAND_DELAY_SECONDS", "0.05"))
     control_poll_seconds = float(get_env("COLLECTOR_CONTROL_POLL_SECONDS", "0.1"))
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
     collector, interval = build_collector()
-    client = BackendClient(
+    data_client = BackendClient(
         api_url=api_url,
         token=token,
         yujin_api_url=yujin_api_url,
-        control_api_url=control_api_url,
         request_timeout=request_timeout,
+    )
+    control_client = BackendClient(
+        api_url=api_url,
+        token=token,
+        control_api_url=control_api_url,
+        request_timeout=control_request_timeout,
     )
 
     threading.Thread(
         target=run_control_loop,
-        args=(collector, client, control_command_limit, control_command_delay, control_poll_seconds),
+        args=(collector, control_client, control_command_limit, control_command_delay, control_poll_seconds),
         daemon=True,
     ).start()
 
@@ -111,13 +117,13 @@ def main() -> None:
         if publish_telemetry:
             for frame in batch.frames:
                 try:
-                    client.publish(frame)
+                    data_client.publish(frame)
                     print(f"sent telemetry for {frame.device_code} via {frame.source}")
                 except Exception as exc:
                     print(f"collector publish error for {frame.device_code}: {exc}")
         if batch.map_values:
             try:
-                client.publish_map_batch(batch)
+                data_client.publish_map_batch(batch)
                 print(f"sent yujin map batch with {len(batch.map_values)} values")
             except Exception as exc:
                 print(f"collector yujin map publish error: {exc}")
