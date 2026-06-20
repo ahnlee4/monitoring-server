@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { QuickButtons } from "./components/QuickButtons";
 import type { UpdateEvent, YujinMapValue } from "./types";
 
 type CompressorState = {
@@ -48,7 +49,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.31";
+const APP_VERSION = "0.1.32";
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
   "인버터 주도 절약운전 기능",
@@ -756,78 +757,6 @@ function OptionPanel({ options }: { options: DashboardState["options"] }) {
             <span className="line-clamp-2">{option.label}</span>
           </label>
         ))}
-    </div>
-  );
-}
-
-function QuickButtons({
-  activeScreen,
-  menuOpen,
-  onOpenDialog,
-  onToggleDetail,
-  setMenuOpen,
-}: {
-  activeScreen: ActiveScreen;
-  menuOpen: boolean;
-  onOpenDialog: (dialog: ActiveDialog) => void;
-  onToggleDetail: () => void;
-  setMenuOpen: (open: boolean) => void;
-}) {
-  const menuItems: Array<{ label: string; description: string; icon: string; action: () => void }> = [
-    { label: "공장 변경", description: "사용 공장 선택", icon: "/factory.png", action: () => onOpenDialog("factory") },
-    { label: "설정", description: "통신 / 화면 설정", icon: "/setting.png", action: () => onOpenDialog("settings") },
-    { label: "통합운전", description: "운전 조건 제어", icon: "/control.png", action: () => onOpenDialog("control") },
-    { label: activeScreen === "detail" ? "메인 화면" : "상세 화면", description: "화면 전환", icon: activeScreen === "detail" ? "/device_back.png" : "/device.png", action: onToggleDetail },
-  ];
-  const handleMenuAction = (action: () => void) => {
-    action();
-    setMenuOpen(false);
-  };
-
-  return (
-    <div className="relative grid min-h-0 grid-rows-2 gap-[4px]">
-      <button className="flex items-center justify-center bg-transparent p-0" onClick={onToggleDetail} type="button" aria-label="상세 화면">
-        <img src={activeScreen === "detail" ? "/device_back.png" : "/device.png"} alt="" className="h-[56px] w-[56px] object-contain" />
-      </button>
-      <button
-        className="flex items-center justify-center bg-transparent p-0"
-        onClick={() => setMenuOpen(!menuOpen)}
-        type="button"
-        aria-label="메뉴"
-      >
-        <img src="/menu.png" alt="" className="h-[56px] w-[56px] object-contain" />
-      </button>
-      {menuOpen ? (
-        <div className="absolute bottom-[68px] right-0 z-20 w-[300px] overflow-hidden rounded-[10px] border border-[#cfdde8] bg-white p-[10px] shadow-[0_12px_28px_rgba(15,43,72,0.26)]">
-          <div className="mb-[8px] flex items-center justify-between border-b border-[#e2ebf2] pb-[8px]">
-            <div>
-              <div className="text-[19px] font-black leading-none text-[#173f69]">메뉴</div>
-              <div className="mt-[4px] text-[12px] font-bold text-[#6f879d]">작업 선택</div>
-            </div>
-            <button className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] bg-[#eef3f7] text-[17px] font-black text-[#45657f]" onClick={() => setMenuOpen(false)} type="button">
-              ×
-            </button>
-          </div>
-          <div className="grid gap-[6px]">
-          {menuItems.map((item) => (
-            <button
-              key={item.label}
-              className="group grid h-[58px] grid-cols-[44px_1fr] items-center gap-[10px] rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-[10px] text-left transition-colors hover:border-[#9cc7e8] hover:bg-[#eef7ff]"
-              onClick={() => handleMenuAction(item.action)}
-              type="button"
-            >
-              <span className="flex h-[36px] w-[36px] items-center justify-center rounded-[7px] bg-white shadow-[0_2px_6px_rgba(38,94,140,0.1)]">
-                <img src={item.icon} alt="" className="h-[27px] w-[27px] object-contain" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[18px] font-black leading-none text-[#163d69]">{item.label}</span>
-                <span className="mt-[4px] block text-[12px] font-bold text-[#6f879d]">{item.description}</span>
-              </span>
-            </button>
-          ))}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
