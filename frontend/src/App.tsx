@@ -49,7 +49,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.40";
+const APP_VERSION = "0.1.41";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
@@ -595,14 +595,14 @@ function MetricLabel({ children }: { children: string }) {
 
 function MetricLabelText({ label }: { label: string }) {
   const compactLabel = label.replace(/\s+/g, "");
-  const shouldDistribute = compactLabel.length <= 3 && !compactLabel.includes("/");
+  const shouldDistribute = compactLabel.length <= 5 && !compactLabel.includes("/");
 
   if (!shouldDistribute) {
     return <span className="text-[15px] tracking-[-0.04em]">{label}</span>;
   }
 
   return (
-    <span aria-label={label} className="flex w-[58px] items-center justify-between whitespace-pre">
+    <span aria-label={label} className="flex w-[72px] items-center justify-between whitespace-pre">
       {compactLabel.split("").map((char, index) => (
         <span key={`${char}-${index}`}>{char}</span>
       ))}
