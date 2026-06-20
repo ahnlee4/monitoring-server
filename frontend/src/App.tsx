@@ -62,7 +62,7 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.85";
+const APP_VERSION = "0.1.86";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -1050,6 +1050,10 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     setActiveControlKey(null);
     await applySetting(key);
   };
+  const closeKeypad = () => {
+    setActiveControlKey(null);
+    setReplaceNextKeypadInput(false);
+  };
   const numberValue = (key: keyof typeof settings) => {
     if (settings[key].trim() === "") throw new Error(`${key} 값이 비어 있습니다`);
     const value = Number(settings[key]);
@@ -1324,6 +1328,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
           onAppend={appendKeypadValue}
           onBackspace={backspaceKeypadValue}
           onClear={clearKeypadValue}
+          onClose={closeKeypad}
           onConfirm={confirmKeypadValue}
           unit={activeControl.unit}
           value={settings[activeControl.key]}
@@ -1347,6 +1352,7 @@ function NumericKeypad({
   onAppend,
   onBackspace,
   onClear,
+  onClose,
   onConfirm,
   unit,
   value,
@@ -1357,6 +1363,7 @@ function NumericKeypad({
   onAppend: (value: string) => void;
   onBackspace: () => void;
   onClear: () => void;
+  onClose: () => void;
   onConfirm: () => void;
   unit: string;
   value: string;
@@ -1367,56 +1374,61 @@ function NumericKeypad({
   };
 
   return (
-    <div className="fixed left-1/2 top-1/2 z-[60] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-[14px] border border-[#b8d2e8] bg-white p-[12px] shadow-[0_18px_36px_rgba(15,43,72,0.34)]">
-      <div className="mb-[10px] flex items-end justify-between rounded-[10px] bg-[#eef7ff] px-[12px] py-[9px]">
-        <span>
-          <span className="block text-[12px] font-black tracking-[0.08em] text-[#6f879d]">{label}</span>
-          <span className="mt-[3px] block text-[25px] font-black leading-none text-[#173f69]">{value || "0"}</span>
-        </span>
-        <span className="text-[14px] font-black text-[#6f879d]">{unit}</span>
-      </div>
-      <div className="grid grid-cols-3 gap-[8px]">
-        {keys.map((key) => (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/10" onPointerDown={onClose}>
+      <div
+        className="w-[360px] rounded-[14px] border border-[#b8d2e8] bg-white p-[12px] shadow-[0_18px_36px_rgba(15,43,72,0.34)]"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <div className="mb-[10px] flex items-end justify-between rounded-[10px] bg-[#eef7ff] px-[12px] py-[9px]">
+          <span>
+            <span className="block text-[12px] font-black tracking-[0.08em] text-[#6f879d]">{label}</span>
+            <span className="mt-[3px] block text-[25px] font-black leading-none text-[#173f69]">{value || "0"}</span>
+          </span>
+          <span className="text-[14px] font-black text-[#6f879d]">{unit}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-[8px]">
+          {keys.map((key) => (
+            <button
+              key={key}
+              className="h-[50px] rounded-[8px] border border-[#d3e4f2] bg-[#f8fbfd] text-[24px] font-black text-[#173f69] active:bg-[#e2f1ff] disabled:opacity-45"
+              disabled={disabled || (key === "." && !allowDecimal)}
+              onClick={() => onAppend(key)}
+              onPointerDown={preventFocusLoss}
+              type="button"
+            >
+              {key}
+            </button>
+          ))}
           <button
-            key={key}
-            className="h-[50px] rounded-[8px] border border-[#d3e4f2] bg-[#f8fbfd] text-[24px] font-black text-[#173f69] active:bg-[#e2f1ff] disabled:opacity-45"
-            disabled={disabled || (key === "." && !allowDecimal)}
-            onClick={() => onAppend(key)}
+            className="h-[50px] rounded-[8px] border border-[#d3e4f2] bg-[#f8fbfd] text-[18px] font-black text-[#173f69] active:bg-[#e2f1ff] disabled:opacity-45"
+            disabled={disabled}
+            onClick={onBackspace}
             onPointerDown={preventFocusLoss}
             type="button"
           >
-            {key}
+            지움
           </button>
-        ))}
-        <button
-          className="h-[50px] rounded-[8px] border border-[#d3e4f2] bg-[#f8fbfd] text-[18px] font-black text-[#173f69] active:bg-[#e2f1ff] disabled:opacity-45"
-          disabled={disabled}
-          onClick={onBackspace}
-          onPointerDown={preventFocusLoss}
-          type="button"
-        >
-          지움
-        </button>
-      </div>
-      <div className="mt-[8px] grid grid-cols-2 gap-[8px]">
-        <button
-          className="h-[48px] rounded-[8px] border border-[#d3e4f2] bg-white text-[17px] font-black text-[#45657f] active:bg-[#eef7ff] disabled:opacity-45"
-          disabled={disabled}
-          onClick={onClear}
-          onPointerDown={preventFocusLoss}
-          type="button"
-        >
-          초기화
-        </button>
-        <button
-          className="h-[48px] rounded-[8px] bg-[#237bd0] text-[18px] font-black text-white active:bg-[#1968b3] disabled:opacity-45"
-          disabled={disabled}
-          onClick={onConfirm}
-          onPointerDown={preventFocusLoss}
-          type="button"
-        >
-          확인
-        </button>
+        </div>
+        <div className="mt-[8px] grid grid-cols-2 gap-[8px]">
+          <button
+            className="h-[48px] rounded-[8px] border border-[#d3e4f2] bg-white text-[17px] font-black text-[#45657f] active:bg-[#eef7ff] disabled:opacity-45"
+            disabled={disabled}
+            onClick={onClear}
+            onPointerDown={preventFocusLoss}
+            type="button"
+          >
+            초기화
+          </button>
+          <button
+            className="h-[48px] rounded-[8px] bg-[#237bd0] text-[18px] font-black text-white active:bg-[#1968b3] disabled:opacity-45"
+            disabled={disabled}
+            onClick={onConfirm}
+            onPointerDown={preventFocusLoss}
+            type="button"
+          >
+            확인
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1626,6 +1638,10 @@ function SettingsDialog({ level, onClose }: { level: UserLevel; onClose: () => v
     if (target.kind === "index") await saveModeIndex(target.rowIndex);
     else await saveModeAlign();
   };
+  const closeActiveModeKeypad = () => {
+    setActiveModeCell(null);
+    setReplaceNextModeInput(false);
+  };
 
   return (
     <DialogShell onClose={onClose} subtitle={`${USER_LEVEL_LABELS[level]} 권한으로 표시 가능한 항목만 보여줍니다`} title={`설정 - ${USER_LEVEL_LABELS[level]}`} wide>
@@ -1743,6 +1759,7 @@ function SettingsDialog({ level, onClose }: { level: UserLevel; onClose: () => v
           onAppend={appendActiveModeValue}
           onBackspace={backspaceActiveModeValue}
           onClear={clearActiveModeValue}
+          onClose={closeActiveModeKeypad}
           onConfirm={confirmActiveModeValue}
           unit=""
           value={activeModeValue}
