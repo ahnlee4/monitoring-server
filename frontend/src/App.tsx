@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.66";
+const APP_VERSION = "0.1.67";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -447,52 +447,6 @@ function setWordHighByte(word: number, highByte: number) {
   return ((highByte & 0xff) << 8) | (Math.trunc(word) & 0x00ff);
 }
 
-function apiBase() {
-  return import.meta.env.VITE_API_BASE || "/api";
-}
-
-function wsUrl() {
-  const configuredPath = import.meta.env.VITE_WS_PATH || "/ws/dashboard";
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}${configuredPath}`;
-}
-
-async function enqueueMapWriteBatch(
-  source: string,
-  writes: Array<{ key?: string; address?: number; high_addr?: number; low_addr?: number; length?: number; value?: number; data_hex?: string }>,
-) {
-  const response = await fetch(`${apiBase()}/control/map-write-batch`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source, writes }),
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
-}
-
-async function enqueueRawUart4Command(source: string, payload: number[], waitResponse = false) {
-  const response = await fetch(`${apiBase()}/control/raw-uart4`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      source,
-      payload_hex: bytesToHex(payload),
-      append_crc: true,
-      wait_response: waitResponse,
-    }),
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
-}
-
-function bytesToHex(bytes: number[]) {
-  return bytes.map((byte) => (byte & 0xff).toString(16).padStart(2, "0").toUpperCase()).join("");
-}
-
-function asciiBytes(value: string) {
-  return Array.from(value, (char) => char.charCodeAt(0) & 0xff);
-}
-
 type ControlCommandStatus = {
   id: number;
   status: "pending" | "in_progress" | "completed" | "failed";
@@ -517,6 +471,67 @@ function isAbortError(error: unknown) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function apiBase() {
+  return import.meta.env.VITE_API_BASE || "/api";
+}
+
+function wsUrl() {
+  const configuredPath = import.meta.env.VITE_WS_PATH || "/ws/dashboard";
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}${configuredPath}`;
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 3000) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (isAbortError(error)) throw new Error("backend 응답 시간 초과");
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+async function postJson<TResponse>(url: string, body: unknown, timeoutMs = 3000): Promise<TResponse> {
+  const response = await fetchWithTimeout(
+    url,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    timeoutMs,
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return (await response.json()) as TResponse;
+}
+
+async function enqueueMapWriteBatch(
+  source: string,
+  writes: Array<{ key?: string; address?: number; high_addr?: number; low_addr?: number; length?: number; value?: number; data_hex?: string }>,
+) {
+  return postJson<{ id: number }>(`${apiBase()}/control/map-write-batch`, { source, writes });
+}
+
+async function enqueueRawUart4Command(source: string, payload: number[], waitResponse = false) {
+  return postJson<{ id: number }>(`${apiBase()}/control/raw-uart4`, {
+    source,
+    payload_hex: bytesToHex(payload),
+    append_crc: true,
+    wait_response: waitResponse,
+  });
+}
+
+function bytesToHex(bytes: number[]) {
+  return bytes.map((byte) => (byte & 0xff).toString(16).padStart(2, "0").toUpperCase()).join("");
+}
+
+function asciiBytes(value: string) {
+  return Array.from(value, (char) => char.charCodeAt(0) & 0xff);
 }
 
 async function fetchControlCommandStatus(commandId: number, timeoutMs = 1200): Promise<ControlCommandStatus | null> {
@@ -1235,13 +1250,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     setCommandBusy(true);
     setCommandStatus(action === "run" ? "통합운전 명령 전송 중..." : "통합정지 명령 전송 중...");
     try {
-      const response = await fetch(`${apiBase()}/control/group-operation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const result = await response.json();
+      const result = await postJson<{ id: number }>(`${apiBase()}/control/group-operation`, { action });
       commandId = Number(result.id);
       setCommandStatus(`명령 #${commandId} 전송 대기...`);
       await waitForControlCommand(commandId, (status) => {
