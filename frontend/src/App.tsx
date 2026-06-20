@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, PointerEvent, ReactNode } from "react";
 import { DetailScreen } from "./components/DetailScreen";
+import { EquipmentDetailDialog } from "./components/EquipmentDetailDialog";
 import { QuickButtons } from "./components/QuickButtons";
 import { useYujinMapValues } from "./hooks/useYujinMapValues";
 import {
@@ -31,6 +32,7 @@ type CompressorState = {
   alarm: boolean;
   fault: boolean;
   inverter: boolean;
+  isOilfree: boolean;
   totalHours: number;
 };
 
@@ -63,7 +65,7 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.96";
+const APP_VERSION = "0.1.97";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -143,6 +145,7 @@ function emptyCompressor(index: number): CompressorState {
     alarm: false,
     fault: false,
     inverter: false,
+    isOilfree: false,
     totalHours: 0,
   };
 }
@@ -152,6 +155,7 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeDialog, setActiveDialog] = useState<ActiveDialog>(null);
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>("main");
+  const [selectedCompressorId, setSelectedCompressorId] = useState<number | null>(null);
   const [settingsLevel, setSettingsLevel] = useState<UserLevel>(USER_LEVELS.user);
   const [adminLogoClicks, setAdminLogoClicks] = useState({ count: 0, lastAt: 0 });
   const [modeSequenceBusy, setModeSequenceBusy] = useState(false);
@@ -166,6 +170,9 @@ export default function App() {
   const lowPressureText = getLowPressureText(dashboard.lowPressureAlarm);
   const showMainScreen = activeScreen === "main";
   const visibleCompressors = dashboard.compressors.filter((compressor) => compressor.connected);
+  const selectedCompressor = selectedCompressorId
+    ? dashboard.compressors.find((compressor) => compressor.id === selectedCompressorId) ?? null
+    : null;
   const mainColumnCount = clamp(visibleCompressors.length, 2, 4);
   const handleModeSequenceAction = async (action: ModeSequenceAction) => {
     if (modeSequenceBusy) return;
@@ -219,7 +226,7 @@ export default function App() {
                     }}
                   >
                     {visibleCompressors.map((compressor) => (
-                      <CompressorCard key={compressor.id} compressor={compressor} />
+                      <CompressorCard key={compressor.id} compressor={compressor} onOpenDetail={setSelectedCompressorId} />
                     ))}
                   </div>
                 ) : (
@@ -230,7 +237,7 @@ export default function App() {
                 ) : null}
               </>
             ) : (
-              <DetailScreen dashboard={dashboard} mapValues={mapValues} />
+              <DetailScreen dashboard={dashboard} mapValues={mapValues} onOpenCompressorDetail={setSelectedCompressorId} />
             )}
           </section>
 
@@ -257,6 +264,14 @@ export default function App() {
               setSettingsLevel(level);
               setActiveDialog("settings");
             }}
+          />
+        ) : null}
+        {selectedCompressor ? (
+          <EquipmentDetailDialog
+            compressor={selectedCompressor}
+            integratedRun={dashboard.integratedRun}
+            mapValues={mapValues}
+            onClose={() => setSelectedCompressorId(null)}
           />
         ) : null}
       </section>
@@ -374,6 +389,7 @@ function buildCompressorFromMap(
     alarm: alarm !== 0,
     fault: faultLow !== 0 || faultHigh !== 0 || faultInv !== 0,
     inverter: isInverter,
+    isOilfree,
     totalHours: Math.trunc(runHoursHigh * 65536 + runHoursLow),
   };
 }
@@ -534,7 +550,7 @@ function TopPanel({
   );
 }
 
-function CompressorCard({ compressor }: { compressor: CompressorState }) {
+function CompressorCard({ compressor, onOpenDetail }: { compressor: CompressorState; onOpenDetail: (id: number) => void }) {
   const pressureLabel = compressor.inverter ? "설정압력" : "무부하/부하";
   const secondValue = compressor.inverter
     ? formatScaledValue(compressor.controlPressure, "bar")
@@ -543,7 +559,11 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
   const titleTone = compressorTitleTone(compressor.id);
 
   return (
-    <article className="relative min-h-0 overflow-hidden bg-white">
+    <button
+      className="relative min-h-0 overflow-hidden bg-white text-left"
+      onClick={() => onOpenDetail(compressor.id)}
+      type="button"
+    >
       <div className="grid h-full grid-rows-[42px_1fr_1fr_1fr_1fr_1fr] gap-[2px] border border-[#75b4ee] bg-[#d8ecff] p-[2px] shadow-[inset_0_0_0_1px_#ffffff]">
         <div
           className="flex items-center justify-center overflow-hidden border border-[#75b4ee] px-[6px] text-center text-[20px] font-bold leading-none shadow-[2px_2px_1px_#ababab]"
@@ -561,7 +581,7 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
         </div>
         <MetricRow label="총 운전시간" value={formatIntegerValue(compressor.totalHours, "hr")} />
       </div>
-    </article>
+    </button>
   );
 }
 

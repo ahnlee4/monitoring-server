@@ -20,6 +20,7 @@ type DetailCompressor = {
   alarm: boolean;
   fault: boolean;
   inverter: boolean;
+  isOilfree?: boolean;
   totalHours: number;
 };
 
@@ -59,7 +60,15 @@ const DIO_DEVICE_TYPES = [
 const DEFAULT_DIO_BIT0 = 0;
 const DEFAULT_DIO_BIT4 = 1;
 
-export function DetailScreen({ dashboard, mapValues }: { dashboard: DetailDashboard; mapValues: Record<string, YujinMapValue> }) {
+export function DetailScreen({
+  dashboard,
+  mapValues,
+  onOpenCompressorDetail,
+}: {
+  dashboard: DetailDashboard;
+  mapValues: Record<string, YujinMapValue>;
+  onOpenCompressorDetail: (id: number) => void;
+}) {
   const auxiliaryDevices = buildAuxiliaryDevices(mapValues);
   const devices = [
     ...dashboard.compressors.map((compressor) => ({ kind: "compressor" as const, compressor })),
@@ -80,7 +89,11 @@ export function DetailScreen({ dashboard, mapValues }: { dashboard: DetailDashbo
       <div className="grid min-h-0 grid-cols-4 auto-rows-[263px] gap-[3px] overflow-y-auto pr-[2px]">
         {devices.map((device) =>
           device.kind === "compressor" ? (
-            <DetailCompressorCard key={`comp-${device.compressor.id}`} compressor={device.compressor} />
+            <DetailCompressorCard
+              key={`comp-${device.compressor.id}`}
+              compressor={device.compressor}
+              onOpenDetail={onOpenCompressorDetail}
+            />
           ) : (
             <AuxiliaryDeviceCard key={device.device.id} device={device.device} />
           ),
@@ -90,14 +103,24 @@ export function DetailScreen({ dashboard, mapValues }: { dashboard: DetailDashbo
   );
 }
 
-function DetailCompressorCard({ compressor }: { compressor: DetailCompressor }) {
+function DetailCompressorCard({
+  compressor,
+  onOpenDetail,
+}: {
+  compressor: DetailCompressor;
+  onOpenDetail: (id: number) => void;
+}) {
   const imageSrc = getCompressorImage(compressor);
   const runText = getRunText(compressor);
   const modeText = compressor.local ? "LOC" : "REM";
   const pressureText = compressor.connected ? formatScaledValue(compressor.pressure, "bar") : "--- bar";
 
   return (
-    <article className="grid min-h-0 grid-rows-[82px_1fr] overflow-hidden border border-[#75b4ee] bg-white p-[4px]">
+    <button
+      className="grid min-h-0 grid-rows-[82px_1fr] overflow-hidden border border-[#75b4ee] bg-white p-[4px] text-left"
+      onClick={() => onOpenDetail(compressor.id)}
+      type="button"
+    >
       <div className="grid grid-cols-[70px_1fr] gap-[4px]">
         <StatusColumn modeText={modeText} runText={runText} loadText={getLoadText(compressor)} fault={compressor.fault} connected={compressor.connected} />
         <div className="grid grid-rows-[28px_1fr] gap-[4px]">
@@ -137,7 +160,7 @@ function DetailCompressorCard({ compressor }: { compressor: DetailCompressor }) 
           <AlarmBadge alarm={compressor.alarm} fault={compressor.fault} />
         </div>
       </div>
-    </article>
+    </button>
   );
 }
 
@@ -236,7 +259,7 @@ function AlarmBadge({ alarm, fault }: { alarm: boolean; fault: boolean }) {
 }
 
 function getCompressorImage(compressor: DetailCompressor) {
-  if (compressor.model !== "-" && !compressor.model.includes("Micos")) {
+  if (!compressor.isOilfree && compressor.model !== "-") {
     return compressor.inverter ? "/injection_v_mini.png" : "/injection_mini.png";
   }
   return compressor.inverter ? "/equip_mini.png" : "/equip_n_mini.png";
