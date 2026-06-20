@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.47";
+const APP_VERSION = "0.1.48";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -1183,34 +1183,48 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     if (!success) setSortMode(previous);
   };
 
-  const selectOperationMode = async (nextMode: "local" | "remote") => {
+  const selectOperationMode = (nextMode: "local" | "remote") => {
     if (nextMode === operationMode) return;
-    const previous = operationMode;
     setOperationMode(nextMode);
+  };
+
+  const saveOperationMode = async () => {
+    if (dashboard.integratedRun) {
+      setCommandStatus("통합 운전중에는 운전 위치를 변경할 수 없습니다");
+      return;
+    }
+
     const success = await sendControlWrites("운전 위치", "control_dialog_operation_mode", [
       {
         key: "0080",
         address: 0x80,
         length: 2,
-        value: setWordHighByte(dashboard.control.operationModeWord, nextMode === "local" ? 0 : 1),
+        value: setWordHighByte(dashboard.control.operationModeWord, operationMode === "local" ? 0 : 1),
       },
     ]);
-    if (!success) setOperationMode(previous);
+    if (!success) setOperationMode(((dashboard.control.operationModeWord >> 8) & 0xff) === 0 ? "local" : "remote");
   };
 
-  const selectControlMode = async (nextMode: "single" | "group") => {
+  const selectControlMode = (nextMode: "single" | "group") => {
     if (nextMode === controlMode) return;
-    const previous = controlMode;
     setControlMode(nextMode);
+  };
+
+  const saveControlMode = async () => {
+    if (dashboard.integratedRun) {
+      setCommandStatus("통합 운전중에는 제어 모드를 변경할 수 없습니다");
+      return;
+    }
+
     const success = await sendControlWrites("제어 모드", "control_dialog_control_mode", [
       {
         key: "0034",
         address: 0x34,
         length: 2,
-        value: nextMode === "group" ? 1 : 0,
+        value: controlMode === "group" ? 1 : 0,
       },
     ]);
-    if (!success) setControlMode(previous);
+    if (!success) setControlMode(dashboard.control.controlModeWord === 1 ? "group" : "single");
   };
 
   return (
@@ -1285,33 +1299,35 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
             </div>
           </div>
           <aside className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-            <PanelHeading eyebrow="ACTION">통합운전</PanelHeading>
-            <div className="mt-[12px] grid gap-[10px]">
-              <SegmentedOption
-                items={[
-                  ["local", "LOCAL"],
-                  ["remote", "REMOTE"],
-                ]}
-                disabled={commandBusy}
-                selected={operationMode}
-                onSelect={(value) => selectOperationMode(value as "local" | "remote")}
-              />
-              <SegmentedOption
-                items={[
-                  ["single", "개별"],
-                  ["group", "통합"],
-                ]}
-                disabled={commandBusy}
-                selected={controlMode}
-                onSelect={(value) => selectControlMode(value as "single" | "group")}
-              />
-              <div className="rounded-[8px] bg-[#eef7ff] p-[14px] text-center">
-                <div className="text-[13px] font-black text-[#6f879d]">현재 모드</div>
-                <div className="mt-[7px] text-[30px] font-black leading-none text-[#173f69]">{operationMode.toUpperCase()}</div>
-              </div>
-              <div className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-[12px] py-[10px] text-center text-[13px] font-black text-[#45657f]">
-                {commandStatus}
-              </div>
+	            <PanelHeading eyebrow="ACTION">통합운전</PanelHeading>
+	            <div className="mt-[12px] grid gap-[10px]">
+	              <div className="grid grid-cols-[1fr_68px] gap-[8px]">
+	                <SegmentedOption
+	                  items={[
+	                    ["local", "LOCAL"],
+	                    ["remote", "REMOTE"],
+	                  ]}
+	                  disabled={commandBusy}
+	                  selected={operationMode}
+	                  onSelect={(value) => selectOperationMode(value as "local" | "remote")}
+	                />
+	                <button className="rounded-[8px] bg-[#237bd0] text-[16px] font-black text-white disabled:opacity-55" disabled={commandBusy} onClick={saveOperationMode} type="button">저장</button>
+	              </div>
+	              <div className="grid grid-cols-[1fr_68px] gap-[8px]">
+	                <SegmentedOption
+	                  items={[
+	                    ["single", "개별"],
+	                    ["group", "통합"],
+	                  ]}
+	                  disabled={commandBusy}
+	                  selected={controlMode}
+	                  onSelect={(value) => selectControlMode(value as "single" | "group")}
+	                />
+	                <button className="rounded-[8px] bg-[#237bd0] text-[16px] font-black text-white disabled:opacity-55" disabled={commandBusy} onClick={saveControlMode} type="button">저장</button>
+	              </div>
+	              <div className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-[12px] py-[10px] text-center text-[13px] font-black text-[#45657f]">
+	                {commandStatus}
+	              </div>
               <button className="h-[72px] rounded-[9px] bg-[#d92525] text-[30px] font-black text-white shadow-[0_6px_13px_rgba(208,31,38,0.2)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("run")} type="button">운전</button>
               <button className="h-[72px] rounded-[9px] bg-[#667380] text-[30px] font-black text-white shadow-[0_6px_13px_rgba(70,82,94,0.16)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("stop")} type="button">정지</button>
             </div>
