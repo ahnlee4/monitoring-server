@@ -25,6 +25,7 @@ def build_collector() -> tuple[BaseCollector, int]:
         write_request_delay = float(get_env("RS485_WRITE_REQUEST_DELAY_SECONDS", "0.005"))
         write_response_timeout = float(get_env("RS485_WRITE_RESPONSE_TIMEOUT_SECONDS", "0"))
         debug_hex = get_env("RS485_DEBUG_HEX", "true").strip().lower() in ("1", "true", "yes", "on")
+        slow_address_log_ms = float(get_env("RS485_SLOW_ADDRESS_LOG_MS", "200"))
         return (
             RS485Collector(
                 serial_port=serial_port,
@@ -35,6 +36,7 @@ def build_collector() -> tuple[BaseCollector, int]:
                 write_request_delay=write_request_delay,
                 write_response_timeout=write_response_timeout,
                 debug_hex=debug_hex,
+                slow_address_log_ms=slow_address_log_ms,
             ),
             interval,
         )
@@ -136,9 +138,11 @@ def main() -> None:
     control_command_limit = get_int_env("COLLECTOR_CONTROL_COMMAND_LIMIT", 1)
     control_command_delay = float(get_env("COLLECTOR_CONTROL_COMMAND_DELAY_SECONDS", "0.05"))
     control_poll_seconds = float(get_env("COLLECTOR_CONTROL_POLL_SECONDS", "0.1"))
+    slow_poll_log_ms = float(get_env("COLLECTOR_SLOW_POLL_LOG_MS", "1000"))
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
     collector, interval = build_collector()
+    print(f"collector main loop interval={interval}s slow_poll_log_ms={slow_poll_log_ms:g}")
     data_client = BackendClient(
         api_url=api_url,
         token=token,
@@ -165,10 +169,18 @@ def main() -> None:
     ).start()
 
     while True:
+        poll_started = time.monotonic()
         batch = collector.poll()
+        poll_elapsed_ms = (time.monotonic() - poll_started) * 1000
+        if slow_poll_log_ms >= 0 and poll_elapsed_ms >= slow_poll_log_ms:
+            print(
+                "collector poll cycle slow: "
+                f"{poll_elapsed_ms:.0f}ms frames={len(batch.frames)} map_values={len(batch.map_values)}"
+            )
         if batch.map_values or (publish_telemetry and batch.frames):
             enqueue_latest_batch(publish_queue, batch)
-        time.sleep(interval)
+        if interval > 0:
+            time.sleep(interval)
 
 
 if __name__ == "__main__":

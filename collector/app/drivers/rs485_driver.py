@@ -141,6 +141,7 @@ class RS485Collector(BaseCollector):
         write_request_delay: float = 0.05,
         write_response_timeout: float = 0.25,
         debug_hex: bool = False,
+        slow_address_log_ms: float = 200.0,
     ) -> None:
         self.serial_port = serial_port
         self.baudrate = baudrate
@@ -150,6 +151,7 @@ class RS485Collector(BaseCollector):
         self.write_request_delay = write_request_delay
         self.write_response_timeout = write_response_timeout
         self.debug_hex = debug_hex
+        self.slow_address_log_ms = slow_address_log_ms
         self._serial: serial.Serial | None = None
         self._serial_lock = threading.RLock()
         self._control_priority = threading.Event()
@@ -242,6 +244,7 @@ class RS485Collector(BaseCollector):
             self._is_injection[index] = not bool(oilfree_selector & (1 << index))
 
     def _poll_address(self, port: serial.Serial, mem_addr: int) -> list[int] | None:
+        started = time.monotonic()
         with self._serial_lock:
             request = build_full_read_request(mem_addr)
             port.reset_input_buffer()
@@ -263,11 +266,13 @@ class RS485Collector(BaseCollector):
                 raise Uart4ProtocolError(
                     f"response address 0x{response_mem_addr:02X} did not match request 0x{mem_addr:02X}"
                 )
+            self._log_address_elapsed(mem_addr, started)
             return merge_words([], start_offset, words)
 
         if command == CMD_CHANGED_DATA:
             existing = self._word_cache.get(mem_addr, [])
             updates = decode_changed_data_response(frame)
+            self._log_address_elapsed(mem_addr, started)
             return apply_word_updates(existing, updates)
 
         raise Uart4ProtocolError(f"unsupported command 0x{command:02X}")
@@ -441,6 +446,11 @@ class RS485Collector(BaseCollector):
                 print(f"collector-uart4 {label}: len={len(data)} {head} ... crc={tail}")
                 return
             print(f"collector-uart4 {label}: {data.hex(' ').upper()}")
+
+    def _log_address_elapsed(self, mem_addr: int, started: float) -> None:
+        elapsed_ms = (time.monotonic() - started) * 1000
+        if self.slow_address_log_ms >= 0 and elapsed_ms >= self.slow_address_log_ms:
+            print(f"collector-uart4 addr 0x{mem_addr:02X} slow: {elapsed_ms:.0f}ms")
 
 
 def build_full_read_request(mem_addr: int) -> bytes:
