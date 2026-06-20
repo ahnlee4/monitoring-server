@@ -62,7 +62,7 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.87";
+const APP_VERSION = "0.1.88";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -248,8 +248,6 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
   const compressors = Array.from({ length: 8 }, (_, index) => buildCompressorFromMap(values, index, oilfreeSelector));
   const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
   const systemOnline = hasRecentValue(values, "0000", DEVICE_LINK_GRACE_MS) || hasRecentValue(values, "0002", DEVICE_LINK_GRACE_MS);
-  const compQty = clamp(Math.trunc(liveMapNumber(values, "004E", 0)), 0, 8);
-  const displayQty = compQty > 0 ? compQty : 8;
   const displayOrder = readRunSequence(values);
   const mainPressure = scale10(liveMapNumber(values, "0000", 0));
   const optionDevice = liveMapNumber(values, "004A", 0);
@@ -262,7 +260,6 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
     model: compressor.model,
   }));
   const orderedCompressors = displayOrder
-    .slice(0, displayQty)
     .flatMap((compNo) => (connectedCompressors[compNo - 1] ? [connectedCompressors[compNo - 1]] : []));
 
   return {
