@@ -57,7 +57,7 @@ export function QuickButtons({
             {menuItems.map((item) => (
               <button
                 key={item.label}
-                className="grid h-[56px] w-[176px] grid-cols-[1fr_56px] items-center bg-transparent p-0 text-left"
+                className="grid h-[56px] w-[190px] grid-cols-[1fr_56px] items-center gap-[12px] bg-transparent p-0 text-left"
                 onClick={() => handleMenuAction(item.action)}
                 type="button"
               >
