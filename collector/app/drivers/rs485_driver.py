@@ -152,8 +152,15 @@ class RS485Collector(BaseCollector):
         self.debug_hex = debug_hex
         self._serial: serial.Serial | None = None
         self._serial_lock = threading.RLock()
+        self._control_priority = threading.Event()
         self._word_cache: dict[int, list[int]] = {}
         self._is_injection = [True] * self.comp_qty
+
+    def request_control_priority(self) -> None:
+        self._control_priority.set()
+
+    def release_control_priority(self) -> None:
+        self._control_priority.clear()
 
     def poll(self) -> CollectorBatch:
         recorded_at = datetime.now(timezone.utc).isoformat()
@@ -161,6 +168,8 @@ class RS485Collector(BaseCollector):
         map_values: list[MapValueUpdate] = []
 
         try:
+            if self._control_priority.is_set():
+                return CollectorBatch(source="collector-uart4", recorded_at=recorded_at, frames=frames, map_values=map_values)
             port = self._open_serial()
             system_words = self._poll_address(port, 0x00)
             if system_words is not None:
@@ -177,6 +186,8 @@ class RS485Collector(BaseCollector):
                 )
 
             for comp_index in range(self.comp_qty):
+                if self._control_priority.is_set():
+                    break
                 mem_addr = MEM_ADDR_COMP1 + comp_index
                 words = self._poll_address(port, mem_addr)
                 if words is None:

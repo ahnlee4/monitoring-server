@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.55";
+const APP_VERSION = "0.1.56";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
