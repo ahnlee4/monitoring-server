@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.43";
+const APP_VERSION = "0.1.44";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -217,8 +217,8 @@ export default function App() {
                 <div
                   className="grid h-full gap-0"
                   style={{
-                    gridAutoRows: "minmax(0, 1fr)",
                     gridTemplateColumns: `repeat(${mainColumnCount}, minmax(0, 1fr))`,
+                    gridTemplateRows: "repeat(2, minmax(0, 1fr))",
                   }}
                 >
                   {visibleCompressors.map((compressor) => (
