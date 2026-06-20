@@ -1,10 +1,12 @@
 import json
 import re
+import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import desc, func, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
@@ -44,6 +46,8 @@ from app.yujin_map import build_yujin_map_schema
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
 CONTROL_COMMAND_STALE_SECONDS = 30
+DATABASE_STARTUP_TIMEOUT_SECONDS = 120
+DATABASE_STARTUP_RETRY_SECONDS = 2
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,10 +60,29 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup() -> None:
+    wait_for_database()
     Base.metadata.create_all(bind=engine)
     migrate_legacy_schema()
     seed_devices()
     seed_yujin_map()
+
+
+def wait_for_database() -> None:
+    deadline = time.monotonic() + DATABASE_STARTUP_TIMEOUT_SECONDS
+    attempt = 1
+    while True:
+        try:
+            with engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+            if attempt > 1:
+                print("backend database is ready")
+            return
+        except OperationalError as exc:
+            if time.monotonic() >= deadline:
+                raise
+            print(f"backend waiting for database recovery ({attempt}): {exc}")
+            attempt += 1
+            time.sleep(DATABASE_STARTUP_RETRY_SECONDS)
 
 
 def migrate_legacy_schema() -> None:
