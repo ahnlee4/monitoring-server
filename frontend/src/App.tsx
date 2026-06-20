@@ -49,7 +49,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.39";
+const APP_VERSION = "0.1.40";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
@@ -375,6 +375,14 @@ function formatEditableScaledValue(value: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function setWordLowByte(word: number, lowByte: number) {
+  return (Math.trunc(word) & 0xff00) | (lowByte & 0xff);
+}
+
+function setWordHighByte(word: number, highByte: number) {
+  return ((highByte & 0xff) << 8) | (Math.trunc(word) & 0x00ff);
 }
 
 function apiBase() {
@@ -981,23 +989,32 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
   const [sortMode, setSortMode] = useState<"setting" | "time">((dashboard.control.sortModeWord & 0x00ff) === 1 ? "time" : "setting");
   const [operationMode, setOperationMode] = useState<"local" | "remote">(((dashboard.control.operationModeWord >> 8) & 0xff) === 0 ? "local" : "remote");
   const [controlMode, setControlMode] = useState<"single" | "group">(dashboard.control.controlModeWord === 1 ? "group" : "single");
-  const [settings, setSettings] = useState({
+  const initialSettings = {
     noLoadPressure: formatEditableScaledValue(dashboard.control.noLoadPressure),
     loadPressure: formatEditableScaledValue(dashboard.control.loadPressure),
     pressureGap: formatEditableScaledValue(dashboard.control.pressureGap),
     lowAlarmPressure: formatEditableScaledValue(dashboard.control.lowAlarmPressure),
     changeHours: String(dashboard.control.changeHours),
     runUnits: String(dashboard.control.runUnits),
-  });
+  };
+  const [settings, setSettings] = useState(initialSettings);
+  const [appliedSettings, setAppliedSettings] = useState(initialSettings);
   const [commandStatus, setCommandStatus] = useState("명령 대기 중");
   const [commandBusy, setCommandBusy] = useState(false);
-  const controls: Array<[string, keyof typeof settings, string, string]> = [
-    ["무부하 압력", "noLoadPressure", "bar", "0.1"],
-    ["부하 압력", "loadPressure", "bar", "0.1"],
-    ["장비별 압력차", "pressureGap", "bar", "0.1"],
-    ["저압경보 압력 설정", "lowAlarmPressure", "bar", "0.1"],
-    ["교환 운전 시간", "changeHours", "hr", "1"],
-    ["가동 대수", "runUnits", "ea", "1"],
+  const controls: Array<{
+    address: number;
+    key: keyof typeof settings;
+    label: string;
+    scale: number;
+    step: string;
+    unit: string;
+  }> = [
+    { label: "무부하 압력", key: "noLoadPressure", unit: "bar", step: "0.1", address: 0x16, scale: 10 },
+    { label: "부하 압력", key: "loadPressure", unit: "bar", step: "0.1", address: 0x18, scale: 10 },
+    { label: "장비별 압력차", key: "pressureGap", unit: "bar", step: "0.1", address: 0x1a, scale: 10 },
+    { label: "저압경보 압력 설정", key: "lowAlarmPressure", unit: "bar", step: "0.1", address: 0x54, scale: 10 },
+    { label: "교환 운전 시간", key: "changeHours", unit: "hr", step: "1", address: 0x46, scale: 1 },
+    { label: "가동 대수", key: "runUnits", unit: "ea", step: "1", address: 0x26, scale: 1 },
   ];
   const updateSetting = (key: keyof typeof settings, value: string) => {
     setSettings((current) => ({ ...current, [key]: value }));
@@ -1009,7 +1026,38 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     return value;
   };
 
+  const sendControlWrites = async (
+    label: string,
+    source: string,
+    writes: Array<{ key?: string; address?: number; length?: number; value?: number; data_hex?: string }>,
+  ) => {
+    let commandId: number | null = null;
+    setCommandBusy(true);
+    setCommandStatus(`${label} 명령 전송 중...`);
+    try {
+      const result = await enqueueMapWriteBatch(source, writes);
+      commandId = Number(result.id);
+      setCommandStatus(`${label} #${commandId} 전송 대기...`);
+      await waitForControlCommand(commandId, (status) => {
+        if (status.status === "pending") setCommandStatus(`${label} #${commandId} 대기 중...`);
+        if (status.status === "in_progress") setCommandStatus(`${label} #${commandId} 장비 전송 중...`);
+        if (status.status === "completed") setCommandStatus(`${label} #${commandId} 전송 완료`);
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof ControlStatusUnsupportedError && commandId !== null) {
+        setCommandStatus(`${label} #${commandId} 등록됨 / backend 갱신 필요`);
+        return true;
+      }
+      setCommandStatus(`${label} 실패: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    } finally {
+      setCommandBusy(false);
+    }
+  };
+
   const sendGroupOperation = async (action: "run" | "stop") => {
+    let commandId: number | null = null;
     setCommandBusy(true);
     setCommandStatus(action === "run" ? "통합운전 명령 전송 중..." : "통합정지 명령 전송 중...");
     try {
@@ -1020,62 +1068,87 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
-      setCommandStatus(`명령 #${result.id} 전송 대기...`);
-      await waitForControlCommand(result.id, (status) => {
-        if (status.status === "pending") setCommandStatus(`명령 #${result.id} 대기 중...`);
-        if (status.status === "in_progress") setCommandStatus(`명령 #${result.id} 장비 전송 중...`);
-        if (status.status === "completed") setCommandStatus(`명령 #${result.id} 전송 완료`);
+      commandId = Number(result.id);
+      setCommandStatus(`명령 #${commandId} 전송 대기...`);
+      await waitForControlCommand(commandId, (status) => {
+        if (status.status === "pending") setCommandStatus(`명령 #${commandId} 대기 중...`);
+        if (status.status === "in_progress") setCommandStatus(`명령 #${commandId} 장비 전송 중...`);
+        if (status.status === "completed") setCommandStatus(`명령 #${commandId} 전송 완료`);
       });
     } catch (error) {
-      if (error instanceof ControlStatusUnsupportedError) setCommandStatus(`명령 #${result.id} 등록됨 / backend 갱신 필요`);
+      if (error instanceof ControlStatusUnsupportedError && commandId !== null) setCommandStatus(`명령 #${commandId} 등록됨 / backend 갱신 필요`);
       else setCommandStatus(`명령 전송 실패: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setCommandBusy(false);
     }
   };
 
-  const saveGroupSettings = async () => {
-    setCommandBusy(true);
-    setCommandStatus("통합운전 설정 저장 중...");
+  const applySetting = async (key: keyof typeof settings) => {
+    const control = controls.find((item) => item.key === key);
+    if (!control) return;
+    if (settings[key] === appliedSettings[key]) return;
     try {
-      const noLoadPressure = numberValue("noLoadPressure");
-      const loadPressure = numberValue("loadPressure");
-      const pressureGap = numberValue("pressureGap");
-      const lowAlarmPressure = numberValue("lowAlarmPressure");
-      const runUnits = Math.trunc(numberValue("runUnits"));
-      const changeHours = Math.trunc(numberValue("changeHours"));
-      if (noLoadPressure <= 0 && loadPressure <= 0) {
-        throw new Error("기준 압력값이 없습니다");
+      const value = numberValue(key);
+      const packetValue = Math.round(value * control.scale);
+      const success = await sendControlWrites(control.label, "control_dialog_setting", [
+        {
+          key: control.address.toString(16).padStart(4, "0").toUpperCase(),
+          address: control.address,
+          length: 2,
+          value: packetValue,
+        },
+      ]);
+      if (success) {
+        setAppliedSettings((current) => ({ ...current, [key]: settings[key] }));
       }
-      const response = await fetch(`${apiBase()}/control/group-settings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          no_load_pressure: noLoadPressure,
-          load_pressure: loadPressure,
-          pressure_gap: pressureGap,
-          low_alarm_pressure: lowAlarmPressure,
-          run_units: runUnits,
-          change_hours: changeHours,
-          sort_mode: sortMode,
-          operation_mode: operationMode,
-          control_mode: controlMode,
-        }),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const result = await response.json();
-      setCommandStatus(`저장 #${result.id} 전송 대기...`);
-      await waitForControlCommand(result.id, (status) => {
-        if (status.status === "pending") setCommandStatus(`저장 #${result.id} 대기 중...`);
-        if (status.status === "in_progress") setCommandStatus(`저장 #${result.id} 장비 전송 중...`);
-        if (status.status === "completed") setCommandStatus(`저장 #${result.id} 전송 완료`);
-      });
     } catch (error) {
-      if (error instanceof ControlStatusUnsupportedError) setCommandStatus(`저장 #${result.id} 등록됨 / backend 갱신 필요`);
-      else setCommandStatus(`저장 실패: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setCommandBusy(false);
+      setCommandStatus(`${control.label} 실패: ${error instanceof Error ? error.message : String(error)}`);
     }
+  };
+
+  const selectSortMode = async (nextMode: "setting" | "time") => {
+    if (nextMode === sortMode) return;
+    const previous = sortMode;
+    setSortMode(nextMode);
+    const success = await sendControlWrites("운전 조건", "control_dialog_sort_mode", [
+      {
+        key: "0036",
+        address: 0x36,
+        length: 2,
+        value: setWordLowByte(dashboard.control.sortModeWord, nextMode === "time" ? 1 : 0),
+      },
+    ]);
+    if (!success) setSortMode(previous);
+  };
+
+  const selectOperationMode = async (nextMode: "local" | "remote") => {
+    if (nextMode === operationMode) return;
+    const previous = operationMode;
+    setOperationMode(nextMode);
+    const success = await sendControlWrites("운전 위치", "control_dialog_operation_mode", [
+      {
+        key: "0080",
+        address: 0x80,
+        length: 2,
+        value: setWordHighByte(dashboard.control.operationModeWord, nextMode === "local" ? 0 : 1),
+      },
+    ]);
+    if (!success) setOperationMode(previous);
+  };
+
+  const selectControlMode = async (nextMode: "single" | "group") => {
+    if (nextMode === controlMode) return;
+    const previous = controlMode;
+    setControlMode(nextMode);
+    const success = await sendControlWrites("제어 모드", "control_dialog_control_mode", [
+      {
+        key: "0034",
+        address: 0x34,
+        length: 2,
+        value: nextMode === "group" ? 1 : 0,
+      },
+    ]);
+    if (!success) setControlMode(previous);
   };
 
   return (
@@ -1098,36 +1171,41 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
             <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
               <PanelHeading eyebrow="CONTROL VALUES">제어 기준값</PanelHeading>
               <div className="mt-[12px] grid grid-cols-3 gap-[10px]">
-              {controls.map(([label, key, unit, step]) => (
-                <div key={label} className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px]">
-                  <div className="text-[14px] font-black text-[#6f879d]">{label}</div>
-                  <label className="mt-[8px] flex items-end justify-between gap-[8px]">
-                    <input
-                      className="min-w-0 flex-1 rounded-[6px] border border-[#c9deef] bg-white px-[8px] py-[5px] text-right text-[25px] font-black leading-none text-[#173f69] outline-none focus:border-[#237bd0]"
-                      disabled={commandBusy}
-                      inputMode="decimal"
-                      onChange={(event) => updateSetting(key, event.target.value)}
-                      step={step}
-                      type="number"
-                      value={settings[key]}
-                    />
-                    <span className="text-[14px] font-black text-[#6f879d]">{unit}</span>
-                  </label>
-                </div>
-              ))}
+                {controls.map(({ key, label, step, unit }) => (
+                  <div key={label} className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px]">
+                    <div className="text-[14px] font-black text-[#6f879d]">{label}</div>
+                    <label className="mt-[8px] flex items-end justify-between gap-[8px]">
+                      <input
+                        className="min-w-0 flex-1 rounded-[6px] border border-[#c9deef] bg-white px-[8px] py-[5px] text-right text-[25px] font-black leading-none text-[#173f69] outline-none focus:border-[#237bd0]"
+                        disabled={commandBusy}
+                        inputMode="decimal"
+                        onBlur={() => applySetting(key)}
+                        onChange={(event) => updateSetting(key, event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") event.currentTarget.blur();
+                        }}
+                        step={step}
+                        type="number"
+                        value={settings[key]}
+                      />
+                      <span className="text-[14px] font-black text-[#6f879d]">{unit}</span>
+                    </label>
+                  </div>
+                ))}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-[14px]">
               <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-                <PanelHeading eyebrow="SORT / SAVE">운전 조건</PanelHeading>
+                <PanelHeading eyebrow="SORT MODE">운전 조건</PanelHeading>
                 <div className="mt-[12px] grid gap-[10px]">
                   <SegmentedOption
                     items={[
                       ["setting", "설정순"],
                       ["time", "시간순"],
                     ]}
+                    disabled={commandBusy}
                     selected={sortMode}
-                    onSelect={(value) => setSortMode(value as "setting" | "time")}
+                    onSelect={(value) => selectSortMode(value as "setting" | "time")}
                   />
                   <label className="flex h-[54px] items-center justify-between rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-[16px] text-[17px] font-black text-[#244c75]">
                     <span>절약모드</span>
@@ -1152,16 +1230,18 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
                   ["local", "LOCAL"],
                   ["remote", "REMOTE"],
                 ]}
+                disabled={commandBusy}
                 selected={operationMode}
-                onSelect={(value) => setOperationMode(value as "local" | "remote")}
+                onSelect={(value) => selectOperationMode(value as "local" | "remote")}
               />
               <SegmentedOption
                 items={[
                   ["single", "개별"],
                   ["group", "통합"],
                 ]}
+                disabled={commandBusy}
                 selected={controlMode}
-                onSelect={(value) => setControlMode(value as "single" | "group")}
+                onSelect={(value) => selectControlMode(value as "single" | "group")}
               />
               <div className="rounded-[8px] bg-[#eef7ff] p-[14px] text-center">
                 <div className="text-[13px] font-black text-[#6f879d]">현재 모드</div>
@@ -1175,9 +1255,8 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
             </div>
           </aside>
         </div>
-        <div className="grid h-[72px] grid-cols-[1fr_180px] border-t border-[#dbe7f1] bg-white px-[18px] py-[12px]">
-          <span />
-          <button className="rounded-[8px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)] disabled:opacity-55" disabled={commandBusy} onClick={saveGroupSettings} type="button">저장</button>
+        <div className="flex h-[62px] items-center justify-end border-t border-[#dbe7f1] bg-white px-[18px] text-[14px] font-black text-[#6f879d]">
+          값 변경 후 Enter 또는 포커스 해제 시 즉시 장비로 전송됩니다
         </div>
       </section>
     </div>
@@ -1206,10 +1285,12 @@ function PanelHeading({ children, eyebrow }: { children: ReactNode; eyebrow: str
 }
 
 function SegmentedOption({
+  disabled = false,
   items,
   onSelect,
   selected,
 }: {
+  disabled?: boolean;
   items: Array<[string, string]>;
   onSelect: (value: string) => void;
   selected: string;
@@ -1222,6 +1303,7 @@ function SegmentedOption({
           className={`rounded-[6px] text-[18px] font-black transition-colors ${
             selected === value ? "bg-[#237bd0] text-white shadow-[0_4px_10px_rgba(35,123,208,0.28)]" : "text-[#3e6488]"
           }`}
+          disabled={disabled}
           onClick={() => onSelect(value)}
           type="button"
         >
