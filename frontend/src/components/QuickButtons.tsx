@@ -53,7 +53,7 @@ export function QuickButtons({
           <img src="/menu.png" alt="" className="h-[56px] w-[56px] object-contain" />
         </button>
         {menuOpen ? (
-          <div className="absolute bottom-[60px] right-0 z-20 flex flex-col gap-[4px]">
+          <div className="absolute bottom-[60px] right-0 z-20 flex flex-col gap-[12px]">
             {menuItems.map((item) => (
               <button
                 key={item.label}

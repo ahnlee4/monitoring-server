@@ -49,7 +49,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.37";
+const APP_VERSION = "0.1.38";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
