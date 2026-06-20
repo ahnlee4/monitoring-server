@@ -37,7 +37,15 @@ export type UpdateEvent = {
   type: string;
   device?: Device;
   keys?: string[];
+  values?: YujinMapValuePatch[];
   recorded_at?: string;
+};
+
+export type YujinMapValuePatch = {
+  key: string;
+  value: string;
+  updated_at?: string | null;
+  source?: string | null;
 };
 
 export type YujinMapValue = {

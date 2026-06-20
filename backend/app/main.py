@@ -603,6 +603,7 @@ async def ingest_yujin_map_values(
 
     recorded_at = payload.recorded_at or datetime.now(timezone.utc)
     updated_keys: list[str] = []
+    broadcast_values: list[dict] = []
     normalized_values = [(item.key.upper(), str(item.value)) for item in payload.values]
     if not normalized_values:
         return {"status": "accepted", "updated_count": 0, "keys": []}
@@ -656,12 +657,21 @@ async def ingest_yujin_map_values(
                 )
             )
         updated_keys.append(key)
+        broadcast_values.append(
+            {
+                "key": key,
+                "value": value_text,
+                "updated_at": recorded_at.isoformat(),
+                "source": payload.source,
+            }
+        )
 
     db.commit()
     await manager.broadcast_json(
         {
             "type": "yujin_map_update",
             "keys": updated_keys,
+            "values": broadcast_values,
             "recorded_at": recorded_at.isoformat(),
         }
     )

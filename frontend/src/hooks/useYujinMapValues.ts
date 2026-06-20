@@ -1,6 +1,6 @@
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import { fetchYujinMapValues, wsUrl } from "../services/api";
-import type { UpdateEvent, YujinMapValue } from "../types";
+import type { UpdateEvent, YujinMapValue, YujinMapValuePatch } from "../types";
 
 const MAP_VALUES_LIMIT = 300;
 const MAP_REFRESH_INTERVAL_MS = 1000;
@@ -9,6 +9,7 @@ const MAP_REFRESH_TIMEOUT_MS = 1200;
 
 export function useYujinMapValues() {
   const [mapValues, setMapValues] = useState<Record<string, YujinMapValue>>({});
+  const mapValuesRef = useRef<Record<string, YujinMapValue>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -37,7 +38,9 @@ export function useYujinMapValues() {
       try {
         const values = await fetchYujinMapValues(MAP_VALUES_LIMIT, MAP_REFRESH_TIMEOUT_MS);
         if (!cancelled) {
-          startTransition(() => setMapValues(toMapRecord(values)));
+          const nextValues = toMapRecord(values);
+          mapValuesRef.current = nextValues;
+          startTransition(() => setMapValues(nextValues));
         }
       } catch (error) {
         console.error("failed to load map values", error);
@@ -60,12 +63,40 @@ export function useYujinMapValues() {
       }, MAP_REFRESH_INTERVAL_MS);
     };
 
+    const applyMapPatches = (patches: YujinMapValuePatch[]) => {
+      if (!patches.length) return false;
+      let changed = false;
+      const next = { ...mapValuesRef.current };
+      for (const patch of patches) {
+        const key = patch.key.toUpperCase();
+        const previous = next[key];
+        if (!previous) return false;
+        if (previous.value === patch.value && previous.updated_at === patch.updated_at && previous.source === patch.source) {
+          continue;
+        }
+        changed = true;
+        next[key] = {
+          ...previous,
+          value: patch.value,
+          updated_at: patch.updated_at ?? previous.updated_at,
+          source: patch.source ?? previous.source,
+        };
+      }
+      if (changed) {
+        mapValuesRef.current = next;
+        startTransition(() => setMapValues(next));
+      }
+      return true;
+    };
+
     loadMapValues();
     scheduleLoop();
     const socket = new WebSocket(wsUrl());
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data) as UpdateEvent;
-      if (message.type === "yujin_map_update") scheduleReload();
+      if (message.type !== "yujin_map_update") return;
+      if (message.values?.length && applyMapPatches(message.values)) return;
+      scheduleReload();
     };
     socket.onerror = () => socket.close();
 
