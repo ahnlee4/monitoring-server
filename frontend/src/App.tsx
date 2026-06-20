@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.65";
+const APP_VERSION = "0.1.66";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -505,31 +505,58 @@ class ControlStatusUnsupportedError extends Error {
   }
 }
 
+class ControlStatusDelayedError extends Error {
+  constructor(public commandId: number) {
+    super("명령은 등록됐지만 완료 상태 확인이 지연되고 있습니다");
+  }
+}
+
 function isAbortError(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
-async function waitForControlCommand(commandId: number, onStatus: (status: ControlCommandStatus) => void) {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 10000);
-    try {
-      const response = await fetch(`${apiBase()}/control/commands/${commandId}`, { signal: controller.signal });
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function fetchControlCommandStatus(commandId: number, timeoutMs = 1200): Promise<ControlCommandStatus | null> {
+  const controller = new AbortController();
+  let timeoutId: number | undefined;
+  const timeoutPromise = new Promise<null>((resolve) => {
+    timeoutId = window.setTimeout(() => {
+      controller.abort();
+      resolve(null);
+    }, timeoutMs);
+  });
+  const requestPromise = fetch(`${apiBase()}/control/commands/${commandId}`, { signal: controller.signal })
+    .then(async (response) => {
       if (response.status === 404) throw new ControlStatusUnsupportedError();
       if (!response.ok) throw new Error(`status HTTP ${response.status}`);
-      const status = (await response.json()) as ControlCommandStatus;
+      return (await response.json()) as ControlCommandStatus;
+    })
+    .catch((error) => {
+      if (isAbortError(error)) return null;
+      throw error;
+    })
+    .finally(() => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    });
+
+  return Promise.race([requestPromise, timeoutPromise]);
+}
+
+async function waitForControlCommand(commandId: number, onStatus: (status: ControlCommandStatus) => void) {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const status = await fetchControlCommandStatus(commandId);
+    if (status) {
       onStatus(status);
       if (status.status === "completed") return status;
       if (status.status === "failed") throw new Error(status.error || "collector command failed");
-    } catch (error) {
-      if (!isAbortError(error)) throw error;
-      onStatus({ id: commandId, status: "pending" });
-    } finally {
-      window.clearTimeout(timeoutId);
     }
-    await new Promise((resolve) => window.setTimeout(resolve, 150));
+    await sleep(250);
   }
-  throw new Error("명령 응답 시간 초과");
+  throw new ControlStatusDelayedError(commandId);
 }
 
 function TopBar({ dashboard, now, onLogoClick }: { dashboard: DashboardState; now: Date; onLogoClick: () => void }) {
@@ -1192,6 +1219,10 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
         setCommandStatus(`${label} #${commandId} 등록됨 / backend 갱신 필요`);
         return true;
       }
+      if (error instanceof ControlStatusDelayedError) {
+        setCommandStatus(`${label} #${error.commandId} 등록됨 / 완료 확인 지연`);
+        return true;
+      }
       setCommandStatus(`${label} 실패: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     } finally {
@@ -1220,6 +1251,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
       });
     } catch (error) {
       if (error instanceof ControlStatusUnsupportedError && commandId !== null) setCommandStatus(`명령 #${commandId} 등록됨 / backend 갱신 필요`);
+      else if (error instanceof ControlStatusDelayedError) setCommandStatus(`명령 #${error.commandId} 등록됨 / 완료 확인 지연`);
       else setCommandStatus(`명령 전송 실패: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setCommandBusy(false);
@@ -1650,7 +1682,8 @@ function SettingsDialog({ level, onClose }: { level: UserLevel; onClose: () => v
         if (status.status === "completed") setSaveStatus(`${label} #${commandId} 전송 완료`);
       });
     } catch (error) {
-      setSaveStatus(`${label} 실패: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof ControlStatusDelayedError) setSaveStatus(`${label} #${error.commandId} 등록됨 / 완료 확인 지연`);
+      else setSaveStatus(`${label} 실패: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setSaving(false);
     }
