@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.63";
+const APP_VERSION = "0.1.64";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -505,10 +505,14 @@ class ControlStatusUnsupportedError extends Error {
   }
 }
 
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 async function waitForControlCommand(commandId: number, onStatus: (status: ControlCommandStatus) => void) {
   for (let attempt = 0; attempt < 200; attempt++) {
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 4000);
+    const timeoutId = window.setTimeout(() => controller.abort(), 10000);
     try {
       const response = await fetch(`${apiBase()}/control/commands/${commandId}`, { signal: controller.signal });
       if (response.status === 404) throw new ControlStatusUnsupportedError();
@@ -517,6 +521,9 @@ async function waitForControlCommand(commandId: number, onStatus: (status: Contr
       onStatus(status);
       if (status.status === "completed") return status;
       if (status.status === "failed") throw new Error(status.error || "collector command failed");
+    } catch (error) {
+      if (!isAbortError(error)) throw error;
+      onStatus({ id: commandId, status: "pending" });
     } finally {
       window.clearTimeout(timeoutId);
     }
