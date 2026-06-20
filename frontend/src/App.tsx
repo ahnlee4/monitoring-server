@@ -63,7 +63,7 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.90";
+const APP_VERSION = "0.1.91";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -1671,7 +1671,8 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
     const alignText = modeRows
       .map((row) => `${row.values[0] || "0"},${row.values[1] || "0"},${row.values[2] || "0"},0,0,0,0,0,0,0,0,0/`)
       .join("");
-    return [0xc9, 0x83, 0x00, ...asciiBytes(alignText)];
+    const data = asciiBytes(alignText);
+    return [0xc9, 0x20, 0x03, 0x00, (data.length >> 8) & 0xff, data.length & 0xff, ...data];
   };
   const saveModeAlign = async () => {
     await submitRawSetting("정렬표", "settings_mode_align_table", buildAlignListPayload());
