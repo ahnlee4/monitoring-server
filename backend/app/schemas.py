@@ -142,6 +142,13 @@ class MapWriteBatchIn(BaseModel):
     writes: list[MapWriteIn]
 
 
+class RawUart4CommandIn(BaseModel):
+    source: str = "frontend"
+    payload_hex: str
+    append_crc: bool = True
+    wait_response: bool = False
+
+
 class ControlCommandAckIn(BaseModel):
     status: Literal["completed", "failed"]
     error: str | None = None

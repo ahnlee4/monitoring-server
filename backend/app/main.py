@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -28,6 +29,7 @@ from app.schemas import (
     MapWriteBatchIn,
     MapWriteIn,
     OverviewOut,
+    RawUart4CommandIn,
     TelemetryIngestRequest,
     TelemetryRecordOut,
     YujinMapDefinitionOut,
@@ -213,6 +215,13 @@ def normalize_map_write(write: MapWriteIn) -> dict:
     return normalized
 
 
+def normalize_hex_payload(value: str) -> str:
+    compact = re.sub(r"[^0-9A-Fa-f]", "", value)
+    if len(compact) < 2 or len(compact) % 2:
+        raise HTTPException(status_code=422, detail="payload_hex must contain whole bytes")
+    return compact.upper()
+
+
 @app.get("/api/yujin/map-schema")
 def yujin_map_schema() -> dict:
     return build_yujin_map_schema()
@@ -297,6 +306,25 @@ async def create_map_write_batch_command(
         {
             "source": payload.source,
             "writes": [normalize_map_write(write) for write in payload.writes],
+        },
+    )
+    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    return command_out(command)
+
+
+@app.post("/api/control/raw-uart4", response_model=ControlCommandOut)
+async def create_raw_uart4_command(
+    payload: RawUart4CommandIn,
+    db: Session = Depends(get_db),
+) -> ControlCommandOut:
+    command = enqueue_control_command(
+        db,
+        "raw_uart4",
+        {
+            "source": payload.source,
+            "payload_hex": normalize_hex_payload(payload.payload_hex),
+            "append_crc": payload.append_crc,
+            "wait_response": payload.wait_response,
         },
     )
     await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})

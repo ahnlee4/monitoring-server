@@ -262,6 +262,9 @@ class RS485Collector(BaseCollector):
         raise Uart4ProtocolError(f"unsupported command 0x{command:02X}")
 
     def execute_control_command(self, command: ControlCommand) -> None:
+        if command.command_type == "raw_uart4":
+            self._execute_raw_uart4_command(command)
+            return
         if command.command_type != "map_write_batch":
             raise ValueError(f"unsupported control command: {command.command_type}")
 
@@ -283,6 +286,25 @@ class RS485Collector(BaseCollector):
                 self._debug("tx-control", request)
                 self._read_control_response(port, address)
             time.sleep(self.write_request_delay)
+
+    def _execute_raw_uart4_command(self, command: ControlCommand) -> None:
+        payload = command.payload
+        request = bytes_from_hex(str(payload["payload_hex"]))
+        if bool(payload.get("append_crc", True)):
+            request = append_crc(request)
+        port = self._open_serial()
+        with self._serial_lock:
+            port.reset_input_buffer()
+            port.write(request)
+            port.flush()
+            self._debug("tx-raw", request)
+            if bool(payload.get("wait_response", False)):
+                try:
+                    frame = self._read_frame(port, self.write_response_timeout)
+                    self._debug("rx-raw", frame)
+                except Uart4ProtocolError as exc:
+                    print(f"collector-uart4 raw command no immediate response: {exc}")
+        time.sleep(self.write_request_delay)
 
     def _read_control_response(self, port: serial.Serial, address: int) -> None:
         if self.write_response_timeout <= 0:
