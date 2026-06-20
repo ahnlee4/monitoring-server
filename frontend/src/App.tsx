@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.42";
+const APP_VERSION = "0.1.43";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -185,6 +185,8 @@ export default function App() {
   const dashboard = useMemo(() => buildDashboardFromMap(mapValues), [mapValues]);
   const lowPressureText = getLowPressureText(dashboard.lowPressureAlarm);
   const showMainScreen = activeScreen === "main";
+  const visibleCompressors = dashboard.compressors.filter((compressor) => compressor.connected);
+  const mainColumnCount = clamp(visibleCompressors.length, 2, 4);
   const openDialog = (dialog: ActiveDialog) => {
     if (dialog === "settings") setSettingsLevel(USER_LEVELS.user);
     setActiveDialog(dialog);
@@ -212,8 +214,14 @@ export default function App() {
           <section className="relative min-h-0">
             {showMainScreen ? (
               <>
-                <div className="grid h-full grid-cols-4 grid-rows-2 gap-0">
-                  {dashboard.compressors.map((compressor) => (
+                <div
+                  className="grid h-full gap-0"
+                  style={{
+                    gridAutoRows: "minmax(0, 1fr)",
+                    gridTemplateColumns: `repeat(${mainColumnCount}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {visibleCompressors.map((compressor) => (
                     <CompressorCard key={compressor.id} compressor={compressor} />
                   ))}
                 </div>
@@ -588,9 +596,6 @@ function CompressorCard({ compressor }: { compressor: CompressorState }) {
         </div>
         <MetricRow label="총 운전시간" value={formatIntegerValue(compressor.totalHours, "hr")} />
       </div>
-      {!compressor.connected ? (
-        <DisconnectedOverlay />
-      ) : null}
     </article>
   );
 }
@@ -607,12 +612,6 @@ function compressorTitleTone(id: number) {
     { background: "#205895", color: "#ffffff" },
   ];
   return tones[(Math.max(1, id) - 1) % tones.length];
-}
-
-function DisconnectedOverlay() {
-  return (
-    <div className="absolute inset-[2px] border border-[#9fc9fa] bg-[#f6fbff]/80 [background-image:linear-gradient(45deg,rgba(150,188,219,0.36)_25%,transparent_25%,transparent_50%,rgba(150,188,219,0.36)_50%,rgba(150,188,219,0.36)_75%,transparent_75%,transparent)] [background-size:16px_16px]" />
-  );
 }
 
 function MetricRow({ label, value }: { label: string; value: string }) {
