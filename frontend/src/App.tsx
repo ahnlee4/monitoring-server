@@ -62,7 +62,7 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.95";
+const APP_VERSION = "0.1.96";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -310,9 +310,9 @@ function readRunSequence(values: Record<string, YujinMapValue>) {
     (value) => value >= 1 && value <= 8,
   );
   const uniqueSequence = Array.from(new Set(sequence));
-  const fallback = Array.from({ length: 8 }, (_, index) => index + 1).filter((value) => !uniqueSequence.includes(value));
+  if (uniqueSequence.length > 0) return uniqueSequence;
 
-  return [...uniqueSequence, ...fallback];
+  return Array.from({ length: 8 }, (_, index) => index + 1);
 }
 
 function buildCompressorFromMap(
