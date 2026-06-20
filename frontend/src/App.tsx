@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.56";
+const APP_VERSION = "0.1.57";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -266,12 +266,14 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
   const mainPressure = scale10(liveMapNumber(values, "0000", 0));
   const optionDevice = liveMapNumber(values, "004A", 0);
   const lowAlarmStep = liveMapNumber(values, "0054", 0);
+  const sortModeWord = Math.trunc(liveMapNumber(values, "0024", 0));
 
   return {
     ...emptyDashboard,
     integratedRun: (liveMapNumber(values, "0050", 0) & 0x0001) === 0x0001,
     mainPressure,
     lowPressureAlarm: lowAlarmStep > 0 ? "warning" : "none",
+    sortMode: (sortModeWord & 0x0001) === 0x0001 ? "time" : "setting",
     control: {
       noLoadPressure: scale10(liveMapNumber(values, "0016", 0)),
       loadPressure: scale10(liveMapNumber(values, "0018", 0)),
@@ -281,7 +283,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
       changeHours: Math.trunc(liveMapNumber(values, "0046", 0)),
       remainMinutes: Math.trunc(liveMapNumber(values, "0048", 0)),
       controlModeWord: Math.trunc(liveMapNumber(values, "0034", 0)),
-      sortModeWord: Math.trunc(liveMapNumber(values, "0024", 0)),
+      sortModeWord,
       operationModeWord: Math.trunc(liveMapNumber(values, "0080", 0)),
     },
     options: buildOptions(optionDevice),
