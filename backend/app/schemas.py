@@ -112,6 +112,21 @@ class YujinMapIngestRequest(BaseModel):
     heartbeat_keys: list[str] = Field(default_factory=list)
 
 
+class ModeRowIn(BaseModel):
+    no: str
+    values: list[str]
+
+
+class ModeSettingsIn(BaseModel):
+    rows: list[ModeRowIn]
+    selected_mode_index: int = 0
+    use_mode_count: int = 1
+
+
+class ModeSettingsOut(ModeSettingsIn):
+    updated_at: datetime | None = None
+
+
 class GroupOperationIn(BaseModel):
     action: Literal["run", "stop"]
 

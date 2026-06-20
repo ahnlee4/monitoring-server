@@ -5,14 +5,13 @@ import { useYujinMapValues } from "./hooks/useYujinMapValues";
 import {
   ControlStatusDelayedError,
   ControlStatusUnsupportedError,
-  appendCrcLowFirst,
-  asciiBytes,
   enqueueGroupOperation,
   enqueueMapWriteBatch,
-  enqueueRawUart4Command,
+  fetchModeSettings,
+  updateModeSettings,
   waitForControlCommand,
 } from "./services/api";
-import type { MapWrite } from "./services/api";
+import type { MapWrite, ModeSettings } from "./services/api";
 import type { YujinMapValue } from "./types";
 
 type CompressorState = {
@@ -63,12 +62,11 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.93";
+const APP_VERSION = "0.1.94";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
 const MODE_ALIGN_COLUMNS = 3;
-const SETTINGS_MAP_SYNC_PAUSE_MS = 8_000;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
 const USER_LEVELS = {
@@ -1614,47 +1612,118 @@ function readUseUnitCount(values: Record<string, YujinMapValue>) {
   return count > 0 && count <= 12 ? count : null;
 }
 
+function normalizeModeRows(rows: ModeRow[]) {
+  const defaults = createDefaultModeRows();
+  return defaults.map((defaultRow, rowIndex) => {
+    const row = rows[rowIndex] ?? defaultRow;
+    return {
+      no: `${rowIndex + 1}`,
+      values: Array.from({ length: 4 }, (_, colIndex) => sanitizeNumericInput(row.values[colIndex] ?? defaultRow.values[colIndex] ?? "0", true) || "0"),
+    };
+  });
+}
+
+function modeSettingsToState(settings: ModeSettings) {
+  const useModeCount = clamp(Math.trunc(Number(settings.use_mode_count) || 1), 1, 12);
+  return {
+    rows: normalizeModeRows(settings.rows),
+    selectedModeIndex: clamp(Math.trunc(Number(settings.selected_mode_index) || 0), 0, Math.min(MODE_ALIGN_ROWS - 1, useModeCount - 1)),
+    useModeCount: String(useModeCount),
+  };
+}
+
+function buildModeSettingsPayload(rows: ModeRow[], selectedModeIndex: number, useModeCount: string): ModeSettings {
+  const count = clamp(Math.trunc(Number(useModeCount) || 1), 1, 12);
+  return {
+    rows: normalizeModeRows(rows),
+    selected_mode_index: clamp(Math.trunc(Number(selectedModeIndex) || 0), 0, Math.min(MODE_ALIGN_ROWS - 1, count - 1)),
+    use_mode_count: count,
+  };
+}
+
+function wordArrayToHex(words: number[]) {
+  return words.map((word) => (word & 0xffff).toString(16).padStart(4, "0").toUpperCase()).join("");
+}
+
+function buildApplySequenceWrites(rows: ModeRow[], selectedModeIndex: number, useModeCount: string): MapWrite[] {
+  const normalizedRows = normalizeModeRows(rows);
+  const row = normalizedRows[clamp(selectedModeIndex, 0, MODE_ALIGN_ROWS - 1)] ?? normalizedRows[0];
+  const allowedModeCount = clamp(Math.trunc(Number(useModeCount) || 1), 1, 12);
+  const activeModeIndex = clamp(selectedModeIndex, 0, allowedModeCount - 1);
+  const activeRow = normalizedRows[activeModeIndex] ?? row;
+  const runUnitCount = clamp(Math.trunc(Number(activeRow.values[3]) || 1), 1, 12);
+  const selectedUnits = activeRow.values
+    .slice(0, MODE_ALIGN_COLUMNS)
+    .map((value) => Math.trunc(Number(value) || 0))
+    .filter((value) => value > 0);
+  const words = Array.from({ length: 12 }, (_, index) => (index < runUnitCount ? selectedUnits[index] ?? 0 : 0));
+
+  return [
+    { address: 0x28, length: 0x12, data_hex: wordArrayToHex(words.slice(0, 9)) },
+    { address: 0x0e, length: 0x06, data_hex: wordArrayToHex(words.slice(9, 12)) },
+  ];
+}
+
 function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapValues: Record<string, YujinMapValue>; onClose: () => void }) {
   type ModeCellTarget = { rowIndex: number; colIndex: number; kind: "align" | "index" } | { kind: "count" };
   const factories = ["공장 1", "공장 2", "공장 3", "공장 4", "공장 5"];
-  const [modeRows, setModeRows] = useState(() => readModeRowsFromMap(mapValues));
+  const [modeRows, setModeRows] = useState(() => createDefaultModeRows());
   const [selectedModeIndex, setSelectedModeIndex] = useState(0);
   const [useModeCount, setUseModeCount] = useState("1");
   const [activeModeCell, setActiveModeCell] = useState<ModeCellTarget | null>(null);
   const [replaceNextModeInput, setReplaceNextModeInput] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("설정 저장 대기 중");
+  const [saveStatus, setSaveStatus] = useState("설정값 불러오는 중...");
   const [saving, setSaving] = useState(false);
-  const mapSyncPausedUntilRef = useRef(0);
   const isAdmin = level === USER_LEVELS.admin;
 
   useEffect(() => {
-    if (activeModeCell || saving) return;
-    if (Date.now() < mapSyncPausedUntilRef.current) return;
+    let alive = true;
+    fetchModeSettings()
+      .then((settings) => {
+        if (!alive) return;
+        const state = modeSettingsToState(settings);
+        setModeRows(state.rows);
+        setSelectedModeIndex(state.selectedModeIndex);
+        setUseModeCount(state.useModeCount);
+        setSaveStatus("설정 저장 대기 중");
+      })
+      .catch((error) => {
+        if (!alive) return;
+        setModeRows(readModeRowsFromMap(mapValues));
+        const nextUseUnit = readUseUnitIndex(mapValues);
+        if (nextUseUnit !== null) setSelectedModeIndex(nextUseUnit);
+        const nextUseModeCount = readUseUnitCount(mapValues);
+        if (nextUseModeCount !== null) setUseModeCount(String(nextUseModeCount));
+        setSaveStatus(`저장값 불러오기 실패: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
-    setModeRows(readModeRowsFromMap(mapValues));
-    const nextUseUnit = readUseUnitIndex(mapValues);
-    if (nextUseUnit !== null) setSelectedModeIndex(nextUseUnit);
-    const nextUseModeCount = readUseUnitCount(mapValues);
-    if (nextUseModeCount !== null) setUseModeCount(String(nextUseModeCount));
-  }, [activeModeCell, mapValues, saving]);
-  const submitRawSetting = async (label: string, source: string, payload: number[]) => {
-    mapSyncPausedUntilRef.current = Date.now() + SETTINGS_MAP_SYNC_PAUSE_MS;
+  const saveModeSettings = async (label: string, rows = modeRows, modeIndex = selectedModeIndex, modeCount = useModeCount) => {
     setSaving(true);
-    setSaveStatus(`${label} 명령 전송 중...`);
+    setSaveStatus(`${label} 저장 중...`);
     try {
-      const result = await enqueueRawUart4Command(source, appendCrcLowFirst(payload), false, false);
+      const saved = await updateModeSettings(buildModeSettingsPayload(rows, modeIndex, modeCount));
+      const state = modeSettingsToState(saved);
+      setModeRows(state.rows);
+      setSelectedModeIndex(state.selectedModeIndex);
+      setUseModeCount(state.useModeCount);
+
+      setSaveStatus(`${label} 저장 완료 / 장비 적용 중...`);
+      const result = await enqueueMapWriteBatch("settings_apply_sequence", buildApplySequenceWrites(state.rows, state.selectedModeIndex, state.useModeCount));
       const commandId = Number(result.id);
-      setSaveStatus(`${label} #${commandId} 전송 대기...`);
+      setSaveStatus(`${label} #${commandId} 적용 대기...`);
       await waitForControlCommand(commandId, (status) => {
-        if (status.status === "pending") setSaveStatus(`${label} #${commandId} 대기 중...`);
-        if (status.status === "in_progress") setSaveStatus(`${label} #${commandId} 장비 전송 중...`);
-        if (status.status === "completed") setSaveStatus(`${label} #${commandId} 전송 완료`);
+        if (status.status === "pending") setSaveStatus(`${label} #${commandId} 적용 대기 중...`);
+        if (status.status === "in_progress") setSaveStatus(`${label} #${commandId} 장비 적용 중...`);
+        if (status.status === "completed") setSaveStatus(`${label} 저장/적용 완료`);
       });
     } catch (error) {
       if (error instanceof ControlStatusDelayedError) setSaveStatus(`${label} #${error.commandId} 등록됨 / 완료 확인 지연`);
       else setSaveStatus(`${label} 실패: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      mapSyncPausedUntilRef.current = Date.now() + SETTINGS_MAP_SYNC_PAUSE_MS;
       setSaving(false);
     }
   };
@@ -1667,14 +1736,8 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
       ),
     );
   };
-  const buildAlignListPayload = () => {
-    const alignText = modeRows
-      .map((row) => `${row.values[0] || "0"},${row.values[1] || "0"},${row.values[2] || "0"},0,0,0,0,0,0,0,0,0/`)
-      .join("");
-    return [0xc9, 0x83, 0x00, ...asciiBytes(alignText)];
-  };
   const saveModeAlign = async () => {
-    await submitRawSetting("정렬표", "settings_mode_align_table", buildAlignListPayload());
+    await saveModeSettings("정렬표");
   };
   const saveModeIndex = async (rowIndex: number) => {
     const value = Math.trunc(Number(modeRows[rowIndex].values[3] || 0));
@@ -1682,8 +1745,7 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
       setSaveStatus("Index 값 범위는 0~65535입니다");
       return;
     }
-    const address = 12 + rowIndex * 2;
-    await submitRawSetting("Index", "settings_mode_index", [0xc9, 0x82, address, (value >> 8) & 0xff, value & 0xff]);
+    await saveModeSettings(`${rowIndex + 1}번 운전대수`);
   };
   const saveUseModeCount = async () => {
     const count = Math.trunc(Number(useModeCount));
@@ -1691,7 +1753,7 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
       setSaveStatus("사용모드 개수 범위는 1~12입니다");
       return;
     }
-    await submitRawSetting("사용모드 개수", "settings_use_mode_count", [0xc9, 0x80, 0x11, selectedModeIndex, count]);
+    await saveModeSettings("사용모드 개수");
   };
   const activeModeValue =
     activeModeCell?.kind === "count"
@@ -1765,73 +1827,76 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
           </aside>
         ) : null}
         <div className="grid content-start gap-[14px]">
-	          <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-	            <PanelHeading eyebrow="MODE TABLE">사용모드 / 정렬 설정</PanelHeading>
-	            <div className="mt-[12px] grid gap-[6px]">
-	              {modeRows.map((row, rowIndex) => (
-	                <div key={row.no} className="grid h-[38px] grid-cols-[54px_1fr_1fr_1fr_92px] gap-[5px]">
-	                  <button
-	                    className={`flex items-center justify-center rounded-[6px] font-black ${
-	                      selectedModeIndex === rowIndex ? "bg-[#237bd0] text-white" : "bg-[#eef3f7] text-[#45657f]"
-	                    }`}
-	                    disabled={saving}
-	                    onClick={() => setSelectedModeIndex(rowIndex)}
-	                    type="button"
-	                  >
-	                    {row.no}
-	                  </button>
-	                  {row.values.map((value, colIndex) => (
-	                    <input
-	                      key={`${row.no}-${colIndex}`}
-	                      className="min-w-0 rounded-[6px] border border-[#d9e6f0] bg-[#f8fbfd] px-0 text-center text-[16px] font-bold text-[#173f69] outline-none focus:border-[#237bd0] focus:bg-white"
-	                      disabled={saving}
-	                      inputMode="numeric"
-	                      onChange={(event) => updateModeCell(rowIndex, colIndex, event.target.value)}
-	                      onFocus={(event) => {
-	                        setActiveModeCell({ rowIndex, colIndex, kind: colIndex === 3 ? "index" : "align" });
-	                        setReplaceNextModeInput(true);
-	                        event.currentTarget.select();
-	                      }}
-	                      onKeyDown={(event) => {
-	                        if (event.key !== "Enter") return;
-	                        event.currentTarget.blur();
-	                        if (colIndex === 3) void saveModeIndex(rowIndex);
-	                        else void saveModeAlign();
-	                      }}
-	                      pattern="[0-9]*"
-	                      type="text"
-	                      value={value}
-	                    />
-	                  ))}
-	                </div>
-	              ))}
-	            </div>
-	            <div className="mt-[12px] grid h-[46px] grid-cols-[1fr_58px_78px_58px_120px] gap-[8px]">
-	              <div className="flex items-center text-[17px] font-black text-[#173f69]">사용모드 개수 설정</div>
-	              <ChoiceButton onClick={() => setUseModeCount((value) => String(Math.max(1, Number(value || 1) - 1)))}>-</ChoiceButton>
-	              <input
-	                className="min-w-0 rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-0 text-center text-[22px] font-black leading-none text-[#173f69] outline-none focus:border-[#237bd0] focus:bg-white"
-	                disabled={saving}
-	                inputMode="numeric"
-	                onChange={(event) => setUseModeCount(sanitizeNumericInput(event.target.value, true))}
-	                onFocus={(event) => {
-	                  setActiveModeCell({ kind: "count" });
-	                  setReplaceNextModeInput(true);
-	                  event.currentTarget.select();
-	                }}
-	                onKeyDown={(event) => {
-	                  if (event.key === "Enter") {
-	                    event.currentTarget.blur();
-	                    void saveUseModeCount();
-	                  }
-	                }}
-	                pattern="[0-9]*"
-	                type="text"
-	                value={useModeCount}
-	              />
-	              <ChoiceButton onClick={() => setUseModeCount((value) => String(Math.min(12, Number(value || 1) + 1)))}>+</ChoiceButton>
-	              <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-bold text-white disabled:opacity-55" disabled={saving} onClick={saveUseModeCount} type="button">저장</button>
-	            </div>
+          <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
+            <PanelHeading eyebrow="MODE TABLE">사용모드 / 정렬 설정</PanelHeading>
+            <div className="mt-[12px] grid gap-[6px]">
+              {modeRows.map((row, rowIndex) => (
+                <div key={row.no} className="grid h-[38px] grid-cols-[54px_1fr_1fr_1fr_92px] gap-[5px]">
+                  <button
+                    className={`flex items-center justify-center rounded-[6px] font-black ${
+                      selectedModeIndex === rowIndex ? "bg-[#237bd0] text-white" : "bg-[#eef3f7] text-[#45657f]"
+                    }`}
+                    disabled={saving}
+                    onClick={() => {
+                      setSelectedModeIndex(rowIndex);
+                      void saveModeSettings(`${row.no}번 모드`, modeRows, rowIndex, useModeCount);
+                    }}
+                    type="button"
+                  >
+                    {row.no}
+                  </button>
+                  {row.values.map((value, colIndex) => (
+                    <input
+                      key={`${row.no}-${colIndex}`}
+                      className="min-w-0 rounded-[6px] border border-[#d9e6f0] bg-[#f8fbfd] px-0 text-center text-[16px] font-bold text-[#173f69] outline-none focus:border-[#237bd0] focus:bg-white"
+                      disabled={saving}
+                      inputMode="numeric"
+                      onChange={(event) => updateModeCell(rowIndex, colIndex, event.target.value)}
+                      onFocus={(event) => {
+                        setActiveModeCell({ rowIndex, colIndex, kind: colIndex === 3 ? "index" : "align" });
+                        setReplaceNextModeInput(true);
+                        event.currentTarget.select();
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.currentTarget.blur();
+                        if (colIndex === 3) void saveModeIndex(rowIndex);
+                        else void saveModeAlign();
+                      }}
+                      pattern="[0-9]*"
+                      type="text"
+                      value={value}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="mt-[12px] grid h-[46px] grid-cols-[1fr_58px_78px_58px_120px] gap-[8px]">
+              <div className="flex items-center text-[17px] font-black text-[#173f69]">사용모드 개수 설정</div>
+              <ChoiceButton onClick={() => setUseModeCount((value) => String(Math.max(1, Number(value || 1) - 1)))}>-</ChoiceButton>
+              <input
+                className="min-w-0 rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-0 text-center text-[22px] font-black leading-none text-[#173f69] outline-none focus:border-[#237bd0] focus:bg-white"
+                disabled={saving}
+                inputMode="numeric"
+                onChange={(event) => setUseModeCount(sanitizeNumericInput(event.target.value, true))}
+                onFocus={(event) => {
+                  setActiveModeCell({ kind: "count" });
+                  setReplaceNextModeInput(true);
+                  event.currentTarget.select();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.currentTarget.blur();
+                    void saveUseModeCount();
+                  }
+                }}
+                pattern="[0-9]*"
+                type="text"
+                value={useModeCount}
+              />
+              <ChoiceButton onClick={() => setUseModeCount((value) => String(Math.min(12, Number(value || 1) + 1)))}>+</ChoiceButton>
+              <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-bold text-white disabled:opacity-55" disabled={saving} onClick={saveUseModeCount} type="button">저장</button>
+            </div>
             <div className="mt-[8px] rounded-[8px] bg-[#eef7ff] px-[10px] py-[8px] text-[13px] font-black text-[#45657f]">{saveStatus}</div>
           </div>
           {isAdmin ? (

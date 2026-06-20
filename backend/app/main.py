@@ -15,6 +15,7 @@ from app.config import get_settings
 from app.database import Base, engine, get_db, SessionLocal
 from app.models import (
     Alarm,
+    AppSetting,
     ControlCommand,
     CurrentValue,
     Device,
@@ -32,6 +33,8 @@ from app.schemas import (
     GroupSettingsIn,
     MapWriteBatchIn,
     MapWriteIn,
+    ModeSettingsIn,
+    ModeSettingsOut,
     OverviewOut,
     RawUart4CommandIn,
     TelemetryIngestRequest,
@@ -61,6 +64,7 @@ CONTROL_COMMAND_SOURCE_PRIORITY = {
     "control_dialog_control_mode": 1,
     "control_dialog_sort_mode": 1,
     "control_dialog_setting": 2,
+    "settings_apply_sequence": 2,
     "settings_mode_index": 3,
     "settings_use_mode_count": 3,
     "settings_mode_align_table": 4,
@@ -174,6 +178,74 @@ def seed_yujin_map() -> None:
                 )
             )
         db.commit()
+
+
+MODE_SETTINGS_KEY = "mode_settings"
+MODE_ALIGN_ROWS = 7
+MODE_ALIGN_COLUMNS = 4
+
+
+def default_mode_settings_payload() -> dict:
+    return {
+        "rows": [
+            {"no": str(index + 1), "values": ["3", "2", "0", "0"]}
+            for index in range(MODE_ALIGN_ROWS)
+        ],
+        "selected_mode_index": 0,
+        "use_mode_count": 1,
+    }
+
+
+def sanitize_mode_settings_payload(payload: dict) -> dict:
+    defaults = default_mode_settings_payload()
+    rows = payload.get("rows") if isinstance(payload, dict) else None
+    normalized_rows: list[dict] = []
+    if not isinstance(rows, list):
+        rows = defaults["rows"]
+
+    for index in range(MODE_ALIGN_ROWS):
+        row = rows[index] if index < len(rows) and isinstance(rows[index], dict) else {}
+        raw_values = row.get("values") if isinstance(row, dict) else []
+        values = raw_values if isinstance(raw_values, list) else []
+        normalized_values = []
+        for value_index in range(MODE_ALIGN_COLUMNS):
+            raw_value = values[value_index] if value_index < len(values) else defaults["rows"][index]["values"][value_index]
+            text = re.sub(r"\D", "", str(raw_value))
+            normalized_values.append(text or "0")
+        normalized_rows.append({"no": str(index + 1), "values": normalized_values})
+
+    try:
+        selected_mode_index = int(payload.get("selected_mode_index", defaults["selected_mode_index"]))
+    except (TypeError, ValueError):
+        selected_mode_index = defaults["selected_mode_index"]
+    try:
+        use_mode_count = int(payload.get("use_mode_count", defaults["use_mode_count"]))
+    except (TypeError, ValueError):
+        use_mode_count = defaults["use_mode_count"]
+
+    use_mode_count = max(1, min(12, use_mode_count))
+    return {
+        "rows": normalized_rows,
+        "selected_mode_index": max(0, min(MODE_ALIGN_ROWS - 1, use_mode_count - 1, selected_mode_index)),
+        "use_mode_count": use_mode_count,
+    }
+
+
+def load_mode_settings(db: Session) -> tuple[dict, datetime | None]:
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == MODE_SETTINGS_KEY))
+    if not setting:
+        payload = default_mode_settings_payload()
+        setting = AppSetting(key=MODE_SETTINGS_KEY, value_json=json.dumps(payload, ensure_ascii=False))
+        db.add(setting)
+        db.commit()
+        db.refresh(setting)
+        return payload, setting.updated_at
+
+    try:
+        payload = json.loads(setting.value_json)
+    except json.JSONDecodeError:
+        payload = default_mode_settings_payload()
+    return sanitize_mode_settings_payload(payload), setting.updated_at
 
 
 @lru_cache(maxsize=1)
@@ -353,6 +425,26 @@ def normalize_hex_payload(value: str) -> str:
 @app.get("/api/yujin/map-schema")
 def yujin_map_schema() -> dict:
     return build_yujin_map_schema()
+
+
+@app.get("/api/app-settings/mode-settings", response_model=ModeSettingsOut)
+def get_mode_settings(db: Session = Depends(get_db)) -> ModeSettingsOut:
+    payload, updated_at = load_mode_settings(db)
+    return ModeSettingsOut(**payload, updated_at=updated_at)
+
+
+@app.put("/api/app-settings/mode-settings", response_model=ModeSettingsOut)
+def update_mode_settings(payload: ModeSettingsIn, db: Session = Depends(get_db)) -> ModeSettingsOut:
+    normalized = sanitize_mode_settings_payload(payload.model_dump())
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == MODE_SETTINGS_KEY))
+    if not setting:
+        setting = AppSetting(key=MODE_SETTINGS_KEY, value_json=json.dumps(normalized, ensure_ascii=False))
+        db.add(setting)
+    else:
+        setting.value_json = json.dumps(normalized, ensure_ascii=False)
+    db.commit()
+    db.refresh(setting)
+    return ModeSettingsOut(**normalized, updated_at=setting.updated_at)
 
 
 def remember_yujin_heartbeats(keys: list[str], recorded_at: datetime, source: str) -> None:

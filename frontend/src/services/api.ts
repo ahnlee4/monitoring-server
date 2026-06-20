@@ -16,6 +16,13 @@ export type MapWrite = {
   data_hex?: string;
 };
 
+export type ModeSettings = {
+  rows: Array<{ no: string; values: string[] }>;
+  selected_mode_index: number;
+  use_mode_count: number;
+  updated_at?: string | null;
+};
+
 export class ControlStatusUnsupportedError extends Error {
   constructor() {
     super("명령 상태 조회 API가 없습니다. backend 이미지를 최신으로 갱신해주세요.");
@@ -73,10 +80,34 @@ export async function postJson<TResponse>(url: string, body: unknown, timeoutMs 
   return (await response.json()) as TResponse;
 }
 
+export async function putJson<TResponse>(url: string, body: unknown, timeoutMs = 3000): Promise<TResponse> {
+  const response = await fetchWithTimeout(
+    url,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    timeoutMs,
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return (await response.json()) as TResponse;
+}
+
 export async function fetchYujinMapValues(limit: number, timeoutMs: number) {
   const response = await fetchWithTimeout(`${apiBase()}/yujin/live-map?limit=${limit}`, { cache: "no-store" }, timeoutMs);
   if (!response.ok) throw new Error(`live-map ${response.status}`);
   return (await response.json()) as YujinMapValue[];
+}
+
+export async function fetchModeSettings() {
+  const response = await fetchWithTimeout(`${apiBase()}/app-settings/mode-settings`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`mode-settings ${response.status}`);
+  return (await response.json()) as ModeSettings;
+}
+
+export async function updateModeSettings(settings: ModeSettings) {
+  return putJson<ModeSettings>(`${apiBase()}/app-settings/mode-settings`, settings);
 }
 
 export async function enqueueMapWriteBatch(source: string, writes: MapWrite[]) {

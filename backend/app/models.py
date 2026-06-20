@@ -117,6 +117,17 @@ class YujinMapValueHistory(Base):
     definition: Mapped[YujinMapDefinition] = relationship(back_populates="history")
 
 
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    value_json: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), index=True
+    )
+
+
 class ControlCommand(Base):
     __tablename__ = "control_commands"
 
