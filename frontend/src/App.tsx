@@ -5,6 +5,7 @@ import { useYujinMapValues } from "./hooks/useYujinMapValues";
 import {
   ControlStatusDelayedError,
   ControlStatusUnsupportedError,
+  appendCrcLowFirst,
   asciiBytes,
   enqueueGroupOperation,
   enqueueMapWriteBatch,
@@ -62,7 +63,7 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.89";
+const APP_VERSION = "0.1.90";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -1641,7 +1642,7 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
     setSaving(true);
     setSaveStatus(`${label} 명령 전송 중...`);
     try {
-      const result = await enqueueRawUart4Command(source, payload);
+      const result = await enqueueRawUart4Command(source, appendCrcLowFirst(payload), false, false);
       const commandId = Number(result.id);
       setSaveStatus(`${label} #${commandId} 전송 대기...`);
       await waitForControlCommand(commandId, (status) => {

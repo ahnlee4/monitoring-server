@@ -83,11 +83,11 @@ export async function enqueueMapWriteBatch(source: string, writes: MapWrite[]) {
   return postJson<{ id: number }>(`${apiBase()}/control/map-write-batch`, { source, writes });
 }
 
-export async function enqueueRawUart4Command(source: string, payload: number[], waitResponse = false) {
+export async function enqueueRawUart4Command(source: string, payload: number[], waitResponse = false, appendCrc = true) {
   return postJson<{ id: number }>(`${apiBase()}/control/raw-uart4`, {
     source,
     payload_hex: bytesToHex(payload),
-    append_crc: true,
+    append_crc: appendCrc,
     wait_response: waitResponse,
   });
 }
@@ -102,6 +102,22 @@ export function bytesToHex(bytes: number[]) {
 
 export function asciiBytes(value: string) {
   return Array.from(value, (char) => char.charCodeAt(0) & 0xff);
+}
+
+export function appendCrcLowFirst(payload: number[]) {
+  const crc = crc16(payload);
+  return [...payload, crc & 0xff, (crc >> 8) & 0xff];
+}
+
+function crc16(payload: number[]) {
+  let crc = 0xffff;
+  for (const byte of payload) {
+    crc ^= byte & 0xff;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = crc & 1 ? (crc >> 1) ^ 0xa001 : crc >> 1;
+    }
+  }
+  return crc & 0xffff;
 }
 
 export async function fetchControlCommandStatus(commandId: number, timeoutMs = 1200): Promise<ControlCommandStatus | null> {
