@@ -49,6 +49,7 @@ CONTROL_COMMAND_STALE_SECONDS = 10
 DATABASE_STARTUP_TIMEOUT_SECONDS = 120
 DATABASE_STARTUP_RETRY_SECONDS = 2
 YUJIN_INGEST_SLOW_LOG_MS = 500
+YUJIN_MAP_HEARTBEATS: dict[str, tuple[datetime, str]] = {}
 
 CONTROL_COMMAND_SOURCE_PRIORITY = {
     "group_operation": 0,
@@ -308,6 +309,31 @@ def yujin_map_schema() -> dict:
     return build_yujin_map_schema()
 
 
+def remember_yujin_heartbeats(keys: list[str], recorded_at: datetime, source: str) -> None:
+    for key in keys:
+        current = YUJIN_MAP_HEARTBEATS.get(key)
+        if current and current[0] >= recorded_at:
+            continue
+        YUJIN_MAP_HEARTBEATS[key] = (recorded_at, source)
+
+
+def heartbeat_timestamp(key: str, stored_at: datetime | None) -> datetime | None:
+    heartbeat = YUJIN_MAP_HEARTBEATS.get(key.upper())
+    if not heartbeat:
+        return stored_at
+    heartbeat_at, _ = heartbeat
+    if stored_at is not None and stored_at >= heartbeat_at:
+        return stored_at
+    return heartbeat_at
+
+
+def heartbeat_source(key: str, stored_source: str | None) -> str | None:
+    heartbeat = YUJIN_MAP_HEARTBEATS.get(key.upper())
+    if not heartbeat:
+        return stored_source
+    return heartbeat[1] or stored_source
+
+
 @app.post("/api/control/group-operation", response_model=ControlCommandOut)
 async def create_group_operation_command(
     payload: GroupOperationIn,
@@ -537,8 +563,8 @@ def yujin_map_values(
             name=definition.name,
             section=definition.section,
             value=current.value_text,
-            updated_at=current.updated_at,
-            source=current.source,
+            updated_at=heartbeat_timestamp(definition.key, current.updated_at),
+            source=heartbeat_source(definition.key, current.source),
         )
         for definition, current in rows
     ]
@@ -564,8 +590,8 @@ def yujin_map_value(key: str, db: Session = Depends(get_db)) -> YujinMapValueOut
         name=definition.name,
         section=definition.section,
         value=current.value_text,
-        updated_at=current.updated_at,
-        source=current.source,
+        updated_at=heartbeat_timestamp(definition.key, current.updated_at),
+        source=heartbeat_source(definition.key, current.source),
     )
 
 
@@ -611,6 +637,7 @@ async def ingest_yujin_map_values(
     keys = list(dict.fromkeys([key for key, _ in normalized_values] + heartbeat_keys))
     if not keys:
         return {"status": "accepted", "received_count": 0, "updated_count": 0, "keys": []}
+    remember_yujin_heartbeats(keys, recorded_at, payload.source)
 
     if normalized_values:
         value_keys = list(dict.fromkeys(key for key, _ in normalized_values))
