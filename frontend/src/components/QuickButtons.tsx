@@ -61,7 +61,7 @@ export function QuickButtons({
                 onClick={() => handleMenuAction(item.action)}
                 type="button"
               >
-                <span className="pl-[8px] text-left text-[18px] font-black leading-none text-[#163d69] drop-shadow-[0_1px_0_rgba(255,255,255,0.75)]">
+                <span className="justify-self-end rounded-[8px] border border-[#b9dff7] bg-[#e7f5ff] px-[10px] py-[7px] text-left text-[18px] font-black leading-none text-[#163d69] shadow-[0_2px_5px_rgba(37,97,148,0.14)]">
                   {item.label}
                 </span>
                 <span className="flex h-[56px] w-[56px] items-center justify-center">
