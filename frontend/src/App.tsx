@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent, PointerEvent, ReactNode } from "react";
 import { QuickButtons } from "./components/QuickButtons";
 import type { UpdateEvent, YujinMapValue } from "./types";
 
@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.48";
+const APP_VERSION = "0.1.49";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -1063,6 +1063,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
   const [appliedSettings, setAppliedSettings] = useState(initialSettings);
   const [commandStatus, setCommandStatus] = useState("명령 대기 중");
   const [commandBusy, setCommandBusy] = useState(false);
+  const [activeControlKey, setActiveControlKey] = useState<keyof typeof settings | null>(null);
   const controls: Array<{
     address: number;
     key: keyof typeof settings;
@@ -1079,7 +1080,33 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     { label: "가동 대수", key: "runUnits", unit: "ea", step: "1", address: 0x26, scale: 1 },
   ];
   const updateSetting = (key: keyof typeof settings, value: string) => {
-    setSettings((current) => ({ ...current, [key]: value }));
+    const integerOnly = key === "changeHours" || key === "runUnits";
+    setSettings((current) => ({ ...current, [key]: sanitizeNumericInput(value, integerOnly) }));
+  };
+  const activeControl = activeControlKey ? controls.find((item) => item.key === activeControlKey) : undefined;
+  const appendKeypadValue = (value: string) => {
+    if (!activeControlKey) return;
+    const integerOnly = activeControlKey === "changeHours" || activeControlKey === "runUnits";
+    setSettings((current) => {
+      const nextValue = value === "." && (integerOnly || current[activeControlKey].includes("."))
+        ? current[activeControlKey]
+        : `${current[activeControlKey]}${value}`;
+      return { ...current, [activeControlKey]: sanitizeNumericInput(nextValue, integerOnly) };
+    });
+  };
+  const backspaceKeypadValue = () => {
+    if (!activeControlKey) return;
+    setSettings((current) => ({ ...current, [activeControlKey]: current[activeControlKey].slice(0, -1) }));
+  };
+  const clearKeypadValue = () => {
+    if (!activeControlKey) return;
+    setSettings((current) => ({ ...current, [activeControlKey]: "" }));
+  };
+  const confirmKeypadValue = async () => {
+    if (!activeControlKey) return;
+    const key = activeControlKey;
+    setActiveControlKey(null);
+    await applySetting(key);
   };
   const numberValue = (key: keyof typeof settings) => {
     if (settings[key].trim() === "") throw new Error(`${key} 값이 비어 있습니다`);
@@ -1247,23 +1274,34 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
             <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
               <PanelHeading eyebrow="CONTROL VALUES">제어 기준값</PanelHeading>
               <div className="mt-[12px] grid grid-cols-3 gap-[10px]">
-                {controls.map(({ key, label, step, unit }) => (
+                {controls.map(({ key, label, unit }) => (
                   <div key={label} className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px]">
                     <div className="text-[14px] font-black text-[#6f879d]">{label}</div>
                     <label className="mt-[8px] flex items-end justify-between gap-[8px]">
-                      <input
-                        className="min-w-0 flex-1 rounded-[6px] border border-[#c9deef] bg-white px-[8px] py-[5px] text-right text-[25px] font-black leading-none text-[#173f69] outline-none focus:border-[#237bd0]"
-                        disabled={commandBusy}
-                        inputMode="decimal"
-                        onBlur={() => applySetting(key)}
-                        onChange={(event) => updateSetting(key, event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") event.currentTarget.blur();
-                        }}
-                        step={step}
-                        type="number"
-                        value={settings[key]}
-                      />
+	                      <input
+	                        className="min-w-0 flex-1 rounded-[6px] border border-[#c9deef] bg-white px-[8px] py-[5px] text-right text-[25px] font-black leading-none text-[#173f69] outline-none focus:border-[#237bd0]"
+	                        autoComplete="off"
+	                        disabled={commandBusy}
+	                        enterKeyHint="done"
+	                        inputMode={key === "changeHours" || key === "runUnits" ? "numeric" : "decimal"}
+	                        onBlur={() => {
+	                          void applySetting(key);
+	                          window.setTimeout(() => {
+	                            setActiveControlKey((current) => (current === key ? null : current));
+	                          }, 120);
+	                        }}
+	                        onChange={(event) => updateSetting(key, event.target.value)}
+	                        onFocus={(event) => {
+	                          setActiveControlKey(key);
+	                          event.currentTarget.select();
+	                        }}
+	                        onKeyDown={(event) => {
+	                          if (event.key === "Enter") event.currentTarget.blur();
+	                        }}
+	                        pattern={key === "changeHours" || key === "runUnits" ? "[0-9]*" : "[0-9.]*"}
+	                        type="text"
+	                        value={settings[key]}
+	                      />
                       <span className="text-[14px] font-black text-[#6f879d]">{unit}</span>
                     </label>
                   </div>
@@ -1334,9 +1372,111 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
           </aside>
         </div>
         <div className="flex h-[62px] items-center justify-end border-t border-[#dbe7f1] bg-white px-[18px] text-[14px] font-black text-[#6f879d]">
-          값 변경 후 Enter 또는 포커스 해제 시 즉시 장비로 전송됩니다
+          입력칸 선택 시 숫자 키패드가 표시되며, 확인 또는 포커스 해제 시 즉시 장비로 전송됩니다
         </div>
       </section>
+      {activeControl ? (
+        <NumericKeypad
+          allowDecimal={activeControl.key !== "changeHours" && activeControl.key !== "runUnits"}
+          disabled={commandBusy}
+          label={activeControl.label}
+          onAppend={appendKeypadValue}
+          onBackspace={backspaceKeypadValue}
+          onClear={clearKeypadValue}
+          onConfirm={confirmKeypadValue}
+          unit={activeControl.unit}
+          value={settings[activeControl.key]}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function sanitizeNumericInput(value: string, integerOnly: boolean) {
+  const numeric = value.replace(integerOnly ? /\D/g : /[^0-9.]/g, "");
+  if (integerOnly) return numeric;
+  const [head, ...tails] = numeric.split(".");
+  return tails.length > 0 ? `${head}.${tails.join("")}` : head;
+}
+
+function NumericKeypad({
+  allowDecimal,
+  disabled,
+  label,
+  onAppend,
+  onBackspace,
+  onClear,
+  onConfirm,
+  unit,
+  value,
+}: {
+  allowDecimal: boolean;
+  disabled: boolean;
+  label: string;
+  onAppend: (value: string) => void;
+  onBackspace: () => void;
+  onClear: () => void;
+  onConfirm: () => void;
+  unit: string;
+  value: string;
+}) {
+  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0"];
+  const preventFocusLoss = (event: PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+  };
+
+  return (
+    <div className="absolute bottom-[92px] left-1/2 z-[60] w-[360px] -translate-x-1/2 rounded-[14px] border border-[#b8d2e8] bg-white p-[12px] shadow-[0_18px_36px_rgba(15,43,72,0.34)]">
+      <div className="mb-[10px] flex items-end justify-between rounded-[10px] bg-[#eef7ff] px-[12px] py-[9px]">
+        <span>
+          <span className="block text-[12px] font-black tracking-[0.08em] text-[#6f879d]">{label}</span>
+          <span className="mt-[3px] block text-[25px] font-black leading-none text-[#173f69]">{value || "0"}</span>
+        </span>
+        <span className="text-[14px] font-black text-[#6f879d]">{unit}</span>
+      </div>
+      <div className="grid grid-cols-3 gap-[8px]">
+        {keys.map((key) => (
+          <button
+            key={key}
+            className="h-[50px] rounded-[8px] border border-[#d3e4f2] bg-[#f8fbfd] text-[24px] font-black text-[#173f69] active:bg-[#e2f1ff] disabled:opacity-45"
+            disabled={disabled || (key === "." && !allowDecimal)}
+            onClick={() => onAppend(key)}
+            onPointerDown={preventFocusLoss}
+            type="button"
+          >
+            {key}
+          </button>
+        ))}
+        <button
+          className="h-[50px] rounded-[8px] border border-[#d3e4f2] bg-[#f8fbfd] text-[18px] font-black text-[#173f69] active:bg-[#e2f1ff] disabled:opacity-45"
+          disabled={disabled}
+          onClick={onBackspace}
+          onPointerDown={preventFocusLoss}
+          type="button"
+        >
+          지움
+        </button>
+      </div>
+      <div className="mt-[8px] grid grid-cols-2 gap-[8px]">
+        <button
+          className="h-[48px] rounded-[8px] border border-[#d3e4f2] bg-white text-[17px] font-black text-[#45657f] active:bg-[#eef7ff] disabled:opacity-45"
+          disabled={disabled}
+          onClick={onClear}
+          onPointerDown={preventFocusLoss}
+          type="button"
+        >
+          초기화
+        </button>
+        <button
+          className="h-[48px] rounded-[8px] bg-[#237bd0] text-[18px] font-black text-white active:bg-[#1968b3] disabled:opacity-45"
+          disabled={disabled}
+          onClick={onConfirm}
+          onPointerDown={preventFocusLoss}
+          type="button"
+        >
+          확인
+        </button>
+      </div>
     </div>
   );
 }
