@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.57";
+const APP_VERSION = "0.1.58";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -162,11 +162,11 @@ export default function App() {
 
     const scheduleReload = () => {
       window.clearTimeout(reloadTimer);
-      reloadTimer = window.setTimeout(loadMapValues, 120);
+      reloadTimer = window.setTimeout(loadMapValues, 50);
     };
 
     loadMapValues();
-    pollTimer = window.setInterval(loadMapValues, 3000);
+    pollTimer = window.setInterval(loadMapValues, 500);
     const socket = new WebSocket(wsUrl());
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data) as UpdateEvent;
