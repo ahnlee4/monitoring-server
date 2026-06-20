@@ -62,7 +62,7 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.84";
+const APP_VERSION = "0.1.85";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -1001,6 +1001,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
   const [commandStatus, setCommandStatus] = useState("명령 대기 중");
   const [commandBusy, setCommandBusy] = useState(false);
   const [activeControlKey, setActiveControlKey] = useState<keyof typeof settings | null>(null);
+  const [replaceNextKeypadInput, setReplaceNextKeypadInput] = useState(false);
   const controls: Array<{
     address: number;
     key: keyof typeof settings;
@@ -1025,19 +1026,23 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     if (!activeControlKey) return;
     const integerOnly = activeControlKey === "changeHours" || activeControlKey === "runUnits";
     setSettings((current) => {
-      const nextValue = value === "." && (integerOnly || current[activeControlKey].includes("."))
-        ? current[activeControlKey]
-        : `${current[activeControlKey]}${value}`;
+      const currentValue = replaceNextKeypadInput ? "" : current[activeControlKey];
+      const nextValue = value === "." && (integerOnly || currentValue.includes("."))
+        ? currentValue
+        : `${currentValue}${value}`;
       return { ...current, [activeControlKey]: sanitizeNumericInput(nextValue, integerOnly) };
     });
+    setReplaceNextKeypadInput(false);
   };
   const backspaceKeypadValue = () => {
     if (!activeControlKey) return;
     setSettings((current) => ({ ...current, [activeControlKey]: current[activeControlKey].slice(0, -1) }));
+    setReplaceNextKeypadInput(false);
   };
   const clearKeypadValue = () => {
     if (!activeControlKey) return;
     setSettings((current) => ({ ...current, [activeControlKey]: "" }));
+    setReplaceNextKeypadInput(false);
   };
   const confirmKeypadValue = async () => {
     if (!activeControlKey) return;
@@ -1228,6 +1233,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
                         onChange={(event) => updateSetting(key, event.target.value)}
                         onFocus={(event) => {
                           setActiveControlKey(key);
+                          setReplaceNextKeypadInput(true);
                           event.currentTarget.select();
                         }}
                         onKeyDown={(event) => {
@@ -1361,7 +1367,7 @@ function NumericKeypad({
   };
 
   return (
-    <div className="fixed bottom-[92px] left-1/2 z-[60] w-[360px] -translate-x-1/2 rounded-[14px] border border-[#b8d2e8] bg-white p-[12px] shadow-[0_18px_36px_rgba(15,43,72,0.34)]">
+    <div className="fixed left-1/2 top-1/2 z-[60] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-[14px] border border-[#b8d2e8] bg-white p-[12px] shadow-[0_18px_36px_rgba(15,43,72,0.34)]">
       <div className="mb-[10px] flex items-end justify-between rounded-[10px] bg-[#eef7ff] px-[12px] py-[9px]">
         <span>
           <span className="block text-[12px] font-black tracking-[0.08em] text-[#6f879d]">{label}</span>
@@ -1519,6 +1525,7 @@ function SettingsDialog({ level, onClose }: { level: UserLevel; onClose: () => v
   const [selectedModeIndex, setSelectedModeIndex] = useState(0);
   const [useModeCount, setUseModeCount] = useState("1");
   const [activeModeCell, setActiveModeCell] = useState<ModeCellTarget | null>(null);
+  const [replaceNextModeInput, setReplaceNextModeInput] = useState(false);
   const [saveStatus, setSaveStatus] = useState("설정 저장 대기 중");
   const [saving, setSaving] = useState(false);
   const isAdmin = level === USER_LEVELS.admin;
@@ -1597,13 +1604,16 @@ function SettingsDialog({ level, onClose }: { level: UserLevel; onClose: () => v
     updateModeCell(activeModeCell.rowIndex, activeModeCell.colIndex, value);
   };
   const appendActiveModeValue = (value: string) => {
-    updateActiveModeValue(`${activeModeValue}${value}`);
+    updateActiveModeValue(replaceNextModeInput ? value : `${activeModeValue}${value}`);
+    setReplaceNextModeInput(false);
   };
   const backspaceActiveModeValue = () => {
     updateActiveModeValue(activeModeValue.slice(0, -1));
+    setReplaceNextModeInput(false);
   };
   const clearActiveModeValue = () => {
     updateActiveModeValue("");
+    setReplaceNextModeInput(false);
   };
   const confirmActiveModeValue = async () => {
     if (!activeModeCell) return;
@@ -1665,6 +1675,7 @@ function SettingsDialog({ level, onClose }: { level: UserLevel; onClose: () => v
 	                      onChange={(event) => updateModeCell(rowIndex, colIndex, event.target.value)}
 	                      onFocus={(event) => {
 	                        setActiveModeCell({ rowIndex, colIndex, kind: colIndex === 3 ? "index" : "align" });
+	                        setReplaceNextModeInput(true);
 	                        event.currentTarget.select();
 	                      }}
 	                      onKeyDown={(event) => {
@@ -1691,6 +1702,7 @@ function SettingsDialog({ level, onClose }: { level: UserLevel; onClose: () => v
 	                onChange={(event) => setUseModeCount(sanitizeNumericInput(event.target.value, true))}
 	                onFocus={(event) => {
 	                  setActiveModeCell({ kind: "count" });
+	                  setReplaceNextModeInput(true);
 	                  event.currentTarget.select();
 	                }}
 	                onKeyDown={(event) => {
