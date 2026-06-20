@@ -45,9 +45,25 @@ from app.yujin_map import build_yujin_map_schema
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
-CONTROL_COMMAND_STALE_SECONDS = 30
+CONTROL_COMMAND_STALE_SECONDS = 10
 DATABASE_STARTUP_TIMEOUT_SECONDS = 120
 DATABASE_STARTUP_RETRY_SECONDS = 2
+
+CONTROL_COMMAND_SOURCE_PRIORITY = {
+    "group_operation": 0,
+    "control_dialog_operation_mode": 1,
+    "control_dialog_control_mode": 1,
+    "control_dialog_sort_mode": 1,
+    "control_dialog_setting": 2,
+    "settings_mode_index": 3,
+    "settings_use_mode_count": 3,
+    "settings_mode_align_table": 4,
+}
+SUPERSEDE_PENDING_CONTROL_SOURCES = {
+    "control_dialog_operation_mode",
+    "control_dialog_control_mode",
+    "control_dialog_sort_mode",
+}
 
 app.add_middleware(
     CORSMiddleware,
@@ -172,12 +188,52 @@ def command_out(command: ControlCommand) -> ControlCommandOut:
     )
 
 
+def control_command_payload(command: ControlCommand) -> dict:
+    try:
+        payload = json.loads(command.payload_json)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def control_command_source(command: ControlCommand) -> str:
+    payload = control_command_payload(command)
+    return str(payload.get("source") or "")
+
+
+def control_command_priority(command: ControlCommand) -> tuple[int, datetime, int]:
+    source = control_command_source(command)
+    if command.command_type == "raw_uart4":
+        source_priority = CONTROL_COMMAND_SOURCE_PRIORITY.get(source, 3)
+    else:
+        source_priority = CONTROL_COMMAND_SOURCE_PRIORITY.get(source, 9)
+    return (source_priority, command.created_at, command.id)
+
+
+def fail_pending_commands_by_source(db: Session, source: str, error: str) -> None:
+    pending_commands = db.scalars(
+        select(ControlCommand)
+        .where(ControlCommand.status == "pending")
+        .order_by(ControlCommand.created_at.asc(), ControlCommand.id.asc())
+    ).all()
+    now = datetime.now(timezone.utc)
+    for command in pending_commands:
+        if control_command_source(command) != source:
+            continue
+        command.status = "failed"
+        command.error_text = error
+        command.updated_at = now
+
+
 def enqueue_control_command(
     db: Session,
     command_type: str,
     payload: dict,
     requested_by: str = "frontend",
+    supersede_source: str | None = None,
 ) -> ControlCommand:
+    if supersede_source:
+        fail_pending_commands_by_source(db, supersede_source, "newer command superseded this pending command")
     command = ControlCommand(
         command_type=command_type,
         status="pending",
@@ -273,6 +329,7 @@ async def create_group_operation_command(
                 }
             ],
         },
+        supersede_source="group_operation",
     )
     await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
     return command_out(command)
@@ -331,6 +388,7 @@ async def create_map_write_batch_command(
             "source": payload.source,
             "writes": [normalize_map_write(write) for write in payload.writes],
         },
+        supersede_source=payload.source if payload.source in SUPERSEDE_PENDING_CONTROL_SOURCES else None,
     )
     await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
     return command_out(command)
@@ -380,8 +438,8 @@ def next_control_commands(
         select(ControlCommand)
         .where(ControlCommand.status == "pending")
         .order_by(ControlCommand.created_at.asc(), ControlCommand.id.asc())
-        .limit(limit)
     ).all()
+    commands = sorted(commands, key=control_command_priority)[:limit]
     for command in commands:
         command.status = "in_progress"
         command.error_text = None
