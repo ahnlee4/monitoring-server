@@ -62,13 +62,14 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.94";
+const APP_VERSION = "0.1.95";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
 const MODE_ALIGN_COLUMNS = 3;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
+type ModeSequenceAction = "previous" | "refresh" | "next";
 const USER_LEVELS = {
   admin: 0,
   manager: 1,
@@ -152,6 +153,7 @@ export default function App() {
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>("main");
   const [settingsLevel, setSettingsLevel] = useState<UserLevel>(USER_LEVELS.user);
   const [adminLogoClicks, setAdminLogoClicks] = useState({ count: 0, lastAt: 0 });
+  const [modeSequenceBusy, setModeSequenceBusy] = useState(false);
   const mapValues = useYujinMapValues();
 
   useEffect(() => {
@@ -164,6 +166,22 @@ export default function App() {
   const showMainScreen = activeScreen === "main";
   const visibleCompressors = dashboard.compressors.filter((compressor) => compressor.connected);
   const mainColumnCount = clamp(visibleCompressors.length, 2, 4);
+  const handleModeSequenceAction = async (action: ModeSequenceAction) => {
+    if (modeSequenceBusy) return;
+    setModeSequenceBusy(true);
+    try {
+      const settings = await fetchModeSettings();
+      const nextSettings = buildNextModeSettings(settings, dashboard, action);
+      if (nextSettings) await updateModeSettings(nextSettings);
+      const writes = buildModeSequenceActionWrites(nextSettings ?? settings, dashboard, action);
+      const result = await enqueueMapWriteBatch(`mode_sequence_${action}`, writes);
+      await waitForControlCommand(Number(result.id), () => {});
+    } catch (error) {
+      console.error("mode sequence action failed", error);
+    } finally {
+      setModeSequenceBusy(false);
+    }
+  };
   const openDialog = (dialog: ActiveDialog) => {
     if (dialog === "settings") setSettingsLevel(USER_LEVELS.user);
     setActiveDialog(dialog);
@@ -219,7 +237,9 @@ export default function App() {
             activeScreen={activeScreen}
             dashboard={dashboard}
             menuOpen={menuOpen}
+            modeSequenceBusy={modeSequenceBusy}
             onOpenDialog={openDialog}
+            onModeSequenceAction={handleModeSequenceAction}
             onToggleDetail={() => setActiveScreen((screen) => (screen === "detail" ? "main" : "detail"))}
             setMenuOpen={setMenuOpen}
           />
@@ -689,21 +709,25 @@ function Footer({
   activeScreen,
   dashboard,
   menuOpen,
+  modeSequenceBusy,
   onOpenDialog,
+  onModeSequenceAction,
   onToggleDetail,
   setMenuOpen,
 }: {
   activeScreen: ActiveScreen;
   dashboard: DashboardState;
   menuOpen: boolean;
+  modeSequenceBusy: boolean;
   onOpenDialog: (dialog: ActiveDialog) => void;
+  onModeSequenceAction: (action: ModeSequenceAction) => void;
   onToggleDetail: () => void;
   setMenuOpen: (open: boolean) => void;
 }) {
   return (
     <footer className="relative z-40 grid min-h-0 grid-cols-[45px_216px_45px_282px_45px_558px_66px] gap-[2px] overflow-visible bg-white p-[3px]">
       <VerticalTitle>모드</VerticalTitle>
-      <ModePanel active={dashboard.sortMode} />
+      <ModePanel active={dashboard.sortMode} busy={modeSequenceBusy} onAction={onModeSequenceAction} />
       <VerticalTitle>통합제어</VerticalTitle>
       <ControlPanel control={dashboard.control} />
       <VerticalTitle>옵션</VerticalTitle>
@@ -727,7 +751,15 @@ function VerticalTitle({ children }: { children: string }) {
   );
 }
 
-function ModePanel({ active }: { active: DashboardState["sortMode"] }) {
+function ModePanel({
+  active,
+  busy,
+  onAction,
+}: {
+  active: DashboardState["sortMode"];
+  busy: boolean;
+  onAction: (action: ModeSequenceAction) => void;
+}) {
   return (
     <div className="grid min-h-0 grid-rows-2 gap-[4px] border border-[#9fc9fa] bg-[#eef7ff] p-[3px]">
       <div className="grid grid-cols-2 gap-[4px]">
@@ -735,9 +767,9 @@ function ModePanel({ active }: { active: DashboardState["sortMode"] }) {
         <ModeButton active={active === "time"}>시간순</ModeButton>
       </div>
       <div className="grid grid-cols-3 gap-[4px]">
-        <IconButton label="이전" src="/arrow_back_ios_new_24dp.png" />
-        <IconButton label="새로고침" src="/refresh_24dp.png" />
-        <IconButton label="다음" src="/arrow_forward_ios_24dp.png" />
+        <IconButton disabled={busy} label="이전" onClick={() => onAction("previous")} src="/arrow_back_ios_new_24dp.png" />
+        <IconButton disabled={busy} label="새로고침" onClick={() => onAction("refresh")} src="/refresh_24dp.png" />
+        <IconButton disabled={busy} label="다음" onClick={() => onAction("next")} src="/arrow_forward_ios_24dp.png" />
       </div>
     </div>
   );
@@ -756,11 +788,13 @@ function ModeButton({ active, children }: { active: boolean; children: ReactNode
   );
 }
 
-function IconButton({ label, src }: { label: string; src: string }) {
+function IconButton({ disabled = false, label, onClick, src }: { disabled?: boolean; label: string; onClick?: () => void; src: string }) {
   return (
     <button
       aria-label={label}
-      className="flex items-center justify-center rounded-[6px] border border-[#9fc9fa] bg-white shadow-[1px_1px_1px_#c2c2c2]"
+      className="flex items-center justify-center rounded-[6px] border border-[#9fc9fa] bg-white shadow-[1px_1px_1px_#c2c2c2] disabled:opacity-45"
+      disabled={disabled}
+      onClick={onClick}
       type="button"
     >
       <img src={src} alt="" className="h-[42px] w-[42px] object-contain" />
@@ -1645,6 +1679,14 @@ function wordArrayToHex(words: number[]) {
   return words.map((word) => (word & 0xffff).toString(16).padStart(4, "0").toUpperCase()).join("");
 }
 
+function buildSequenceWritesFromUnits(units: number[], runUnitCount: number): MapWrite[] {
+  const words = Array.from({ length: 12 }, (_, index) => (index < runUnitCount ? units[index] ?? 0 : 0));
+  return [
+    { address: 0x28, length: 0x12, data_hex: wordArrayToHex(words.slice(0, 9)) },
+    { address: 0x0e, length: 0x06, data_hex: wordArrayToHex(words.slice(9, 12)) },
+  ];
+}
+
 function buildApplySequenceWrites(rows: ModeRow[], selectedModeIndex: number, useModeCount: string): MapWrite[] {
   const normalizedRows = normalizeModeRows(rows);
   const row = normalizedRows[clamp(selectedModeIndex, 0, MODE_ALIGN_ROWS - 1)] ?? normalizedRows[0];
@@ -1656,12 +1698,36 @@ function buildApplySequenceWrites(rows: ModeRow[], selectedModeIndex: number, us
     .slice(0, MODE_ALIGN_COLUMNS)
     .map((value) => Math.trunc(Number(value) || 0))
     .filter((value) => value > 0);
-  const words = Array.from({ length: 12 }, (_, index) => (index < runUnitCount ? selectedUnits[index] ?? 0 : 0));
+  return buildSequenceWritesFromUnits(selectedUnits, runUnitCount);
+}
 
-  return [
-    { address: 0x28, length: 0x12, data_hex: wordArrayToHex(words.slice(0, 9)) },
-    { address: 0x0e, length: 0x06, data_hex: wordArrayToHex(words.slice(9, 12)) },
-  ];
+function buildNextModeSettings(settings: ModeSettings, dashboard: DashboardState, action: ModeSequenceAction): ModeSettings | null {
+  if (dashboard.sortMode !== "setting" || action === "refresh") return null;
+  const state = modeSettingsToState(settings);
+  const count = clamp(Number(state.useModeCount) || 1, 1, MODE_ALIGN_ROWS);
+  const direction = action === "next" ? 1 : -1;
+  const selectedModeIndex = (state.selectedModeIndex + direction + count) % count;
+  return buildModeSettingsPayload(state.rows, selectedModeIndex, state.useModeCount);
+}
+
+function buildModeSequenceActionWrites(settings: ModeSettings, dashboard: DashboardState, action: ModeSequenceAction) {
+  const state = modeSettingsToState(settings);
+  if (dashboard.sortMode === "setting") {
+    return buildApplySequenceWrites(state.rows, state.selectedModeIndex, state.useModeCount);
+  }
+
+  const connectedOrder = dashboard.compressors.map((compressor) => compressor.id);
+  const nextOrder =
+    action === "refresh"
+      ? [...dashboard.compressors].sort((a, b) => a.totalHours - b.totalHours || a.id - b.id).map((compressor) => compressor.id)
+      : rotateSequence(connectedOrder, action === "next" ? 1 : -1);
+  return buildSequenceWritesFromUnits(nextOrder, nextOrder.length);
+}
+
+function rotateSequence(sequence: number[], direction: 1 | -1) {
+  if (sequence.length <= 1) return sequence;
+  if (direction > 0) return [sequence[sequence.length - 1], ...sequence.slice(0, -1)];
+  return [...sequence.slice(1), sequence[0]];
 }
 
 function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapValues: Record<string, YujinMapValue>; onClose: () => void }) {
