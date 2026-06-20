@@ -143,6 +143,7 @@ class RS485Collector(BaseCollector):
         debug_hex: bool = False,
         slow_address_log_ms: float = 200.0,
         publish_telemetry_frames: bool = False,
+        settings_poll_interval_cycles: int = 5,
     ) -> None:
         self.serial_port = serial_port
         self.baudrate = baudrate
@@ -154,12 +155,14 @@ class RS485Collector(BaseCollector):
         self.debug_hex = debug_hex
         self.slow_address_log_ms = slow_address_log_ms
         self.publish_telemetry_frames = publish_telemetry_frames
+        self.settings_poll_interval_cycles = max(0, settings_poll_interval_cycles)
         self._serial: serial.Serial | None = None
         self._serial_lock = threading.RLock()
         self._control_priority = threading.Event()
         self._word_cache: dict[int, list[int]] = {}
         self._published_map_cache: dict[str, str] = {}
         self._last_debug_at: float | None = None
+        self._poll_cycle_index = 0
         self._is_injection = [True] * self.comp_qty
 
     def request_control_priority(self) -> None:
@@ -178,6 +181,8 @@ class RS485Collector(BaseCollector):
             if self._control_priority.is_set():
                 return CollectorBatch(source="collector-uart4", recorded_at=recorded_at)
             port = self._open_serial()
+            poll_settings = self._should_poll_settings_maps()
+            self._poll_cycle_index += 1
             system_words = self._poll_address(port, 0x00)
             if system_words is not None:
                 self._word_cache[0x00] = system_words
@@ -189,6 +194,16 @@ class RS485Collector(BaseCollector):
                     source="collector-uart4",
                     recorded_at=recorded_at,
                 )
+
+            if poll_settings:
+                for mem_addr in (0x03, 0x04):
+                    if self._control_priority.is_set():
+                        break
+                    words = self._poll_address(port, mem_addr)
+                    if words is not None:
+                        self._word_cache[mem_addr] = words
+                        map_values.extend(words_to_generic_map_values(mem_addr, words))
+                    time.sleep(self.inter_request_delay)
 
             for comp_index in range(self.comp_qty):
                 if self._control_priority.is_set():
@@ -215,6 +230,9 @@ class RS485Collector(BaseCollector):
             map_values=self._filter_changed_map_values(map_values),
             heartbeat_keys=heartbeat_keys,
         )
+
+    def _should_poll_settings_maps(self) -> bool:
+        return self.settings_poll_interval_cycles > 0 and self._poll_cycle_index % self.settings_poll_interval_cycles == 0
 
     def _open_serial(self) -> serial.Serial:
         with self._serial_lock:

@@ -62,8 +62,11 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.86";
+const APP_VERSION = "0.1.87";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
+const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
+const MODE_ALIGN_ROWS = 7;
+const MODE_ALIGN_COLUMNS = 3;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
 const USER_LEVELS = {
@@ -222,7 +225,9 @@ export default function App() {
           />
         </div>
         {activeDialog === "factory" ? <FactoryDialog onClose={() => setActiveDialog(null)} /> : null}
-        {activeDialog === "settings" ? <SettingsDialog level={settingsLevel} onClose={() => setActiveDialog(null)} /> : null}
+        {activeDialog === "settings" ? (
+          <SettingsDialog level={settingsLevel} mapValues={mapValues} onClose={() => setActiveDialog(null)} />
+        ) : null}
         {activeDialog === "control" ? <ControlDialog dashboard={dashboard} onClose={() => setActiveDialog(null)} /> : null}
         {activeDialog === "password" ? (
           <PasswordDialog
@@ -244,10 +249,21 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
   const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
   const systemOnline = hasRecentValue(values, "0000", DEVICE_LINK_GRACE_MS) || hasRecentValue(values, "0002", DEVICE_LINK_GRACE_MS);
   const compQty = clamp(Math.trunc(liveMapNumber(values, "004E", 0)), 0, 8);
+  const displayQty = compQty > 0 ? compQty : 8;
+  const displayOrder = readRunSequence(values);
   const mainPressure = scale10(liveMapNumber(values, "0000", 0));
   const optionDevice = liveMapNumber(values, "004A", 0);
   const lowAlarmStep = liveMapNumber(values, "0054", 0);
   const sortModeWord = Math.trunc(liveMapNumber(values, "0024", 0));
+  const connectedCompressors = compressors.map((compressor, index) => ({
+    ...compressor,
+    connected: systemOnline && Boolean(connectedMask & (1 << index)),
+    name: `${index + 1}호기`,
+    model: compressor.model,
+  }));
+  const orderedCompressors = displayOrder
+    .slice(0, displayQty)
+    .flatMap((compNo) => (connectedCompressors[compNo - 1] ? [connectedCompressors[compNo - 1]] : []));
 
   return {
     ...emptyDashboard,
@@ -268,14 +284,18 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
       operationModeWord: Math.trunc(liveMapNumber(values, "0080", 0)),
     },
     options: buildOptions(optionDevice),
-    compressors: compressors.map((compressor, index) => ({
-      ...compressor,
-      connected: systemOnline && Boolean(connectedMask & (1 << index)),
-      name: `${index + 1}호기`,
-      model: compressor.model,
-      pressure: index < compQty ? compressor.pressure : 0,
-    })),
+    compressors: orderedCompressors,
   };
+}
+
+function readRunSequence(values: Record<string, YujinMapValue>) {
+  const sequence = MAIN_RUN_SEQUENCE_KEYS.map((key) => Math.trunc(liveMapNumber(values, key, 0))).filter(
+    (value) => value >= 1 && value <= 8,
+  );
+  const uniqueSequence = Array.from(new Set(sequence));
+  const fallback = Array.from({ length: 8 }, (_, index) => index + 1).filter((value) => !uniqueSequence.includes(value));
+
+  return [...uniqueSequence, ...fallback];
 }
 
 function buildCompressorFromMap(
@@ -1526,14 +1546,79 @@ function PasswordDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
   );
 }
 
-function SettingsDialog({ level, onClose }: { level: UserLevel; onClose: () => void }) {
-  type ModeCellTarget = { rowIndex: number; colIndex: number; kind: "align" | "index" } | { kind: "count" };
-  const initialModeRows = Array.from({ length: 7 }, (_, index) => ({
+type ModeRow = {
+  no: string;
+  values: string[];
+};
+
+function createDefaultModeRows(): ModeRow[] {
+  return Array.from({ length: MODE_ALIGN_ROWS }, (_, index) => ({
     no: `${index + 1}`,
     values: ["3", "2", "0", "0"],
   }));
+}
+
+function readLiveWord(values: Record<string, YujinMapValue>, key: string) {
+  const item = values[key.toUpperCase()];
+  if (!isLiveMapValue(item)) return null;
+  const word = Number(item.value);
+  return Number.isFinite(word) ? Math.trunc(word) & 0xffff : null;
+}
+
+function readAsciiMap(values: Record<string, YujinMapValue>, highAddr: string) {
+  const bytes: number[] = [];
+  for (let offset = 0; offset <= 0xfe; offset += 2) {
+    const word = readLiveWord(values, `${highAddr}${offset.toString(16).padStart(2, "0")}`);
+    if (word === null) break;
+    bytes.push((word >> 8) & 0xff, word & 0xff);
+  }
+
+  const endIndex = bytes.findIndex((byte) => byte === 0);
+  const asciiBytesOnly = endIndex >= 0 ? bytes.slice(0, endIndex) : bytes;
+  return String.fromCharCode(...asciiBytesOnly.filter((byte) => byte >= 0x20 && byte <= 0x7e));
+}
+
+function readModeRowsFromMap(values: Record<string, YujinMapValue>): ModeRow[] {
+  const rows = createDefaultModeRows();
+  const alignList = readAsciiMap(values, "03").split("=")[0];
+
+  alignList
+    .split("/")
+    .filter(Boolean)
+    .slice(0, MODE_ALIGN_ROWS)
+    .forEach((rowText, rowIndex) => {
+      const cells = rowText.split(",").slice(0, MODE_ALIGN_COLUMNS);
+      cells.forEach((cell, colIndex) => {
+        rows[rowIndex].values[colIndex] = sanitizeNumericInput(cell, true) || "0";
+      });
+    });
+
+  for (let rowIndex = 0; rowIndex < MODE_ALIGN_ROWS; rowIndex += 1) {
+    const runUnit = readLiveWord(values, `04${(0x12 + rowIndex * 2).toString(16).padStart(2, "0")}`);
+    if (runUnit !== null) rows[rowIndex].values[3] = String(runUnit);
+  }
+
+  return rows;
+}
+
+function readUseUnitIndex(values: Record<string, YujinMapValue>) {
+  const useUnit = readLiveWord(values, "0420");
+  return useUnit === null ? null : clamp(useUnit, 0, MODE_ALIGN_ROWS - 1);
+}
+
+function readUseUnitCount(values: Record<string, YujinMapValue>) {
+  const highWord = readLiveWord(values, "0446");
+  const lowWord = readLiveWord(values, "0448");
+  if (highWord === null || lowWord === null) return null;
+
+  const count = ((highWord & 0xff) << 8) | ((lowWord >> 8) & 0xff);
+  return count > 0 && count <= 12 ? count : null;
+}
+
+function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapValues: Record<string, YujinMapValue>; onClose: () => void }) {
+  type ModeCellTarget = { rowIndex: number; colIndex: number; kind: "align" | "index" } | { kind: "count" };
   const factories = ["공장 1", "공장 2", "공장 3", "공장 4", "공장 5"];
-  const [modeRows, setModeRows] = useState(initialModeRows);
+  const [modeRows, setModeRows] = useState(() => readModeRowsFromMap(mapValues));
   const [selectedModeIndex, setSelectedModeIndex] = useState(0);
   const [useModeCount, setUseModeCount] = useState("1");
   const [activeModeCell, setActiveModeCell] = useState<ModeCellTarget | null>(null);
@@ -1541,6 +1626,16 @@ function SettingsDialog({ level, onClose }: { level: UserLevel; onClose: () => v
   const [saveStatus, setSaveStatus] = useState("설정 저장 대기 중");
   const [saving, setSaving] = useState(false);
   const isAdmin = level === USER_LEVELS.admin;
+
+  useEffect(() => {
+    if (activeModeCell || saving) return;
+
+    setModeRows(readModeRowsFromMap(mapValues));
+    const nextUseUnit = readUseUnitIndex(mapValues);
+    if (nextUseUnit !== null) setSelectedModeIndex(nextUseUnit);
+    const nextUseModeCount = readUseUnitCount(mapValues);
+    if (nextUseModeCount !== null) setUseModeCount(String(nextUseModeCount));
+  }, [activeModeCell, mapValues, saving]);
   const submitRawSetting = async (label: string, source: string, payload: number[]) => {
     setSaving(true);
     setSaveStatus(`${label} 명령 전송 중...`);
