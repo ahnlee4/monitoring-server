@@ -49,7 +49,7 @@ type ActiveDialog = "factory" | "settings" | "control" | null;
 type ActiveScreen = "main" | "detail";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.35";
+const APP_VERSION = "0.1.36";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
@@ -577,11 +577,28 @@ function TripleRow({ label, valueA, valueB }: { label: string; valueA: string; v
   );
 }
 
-function MetricLabel({ children }: { children: ReactNode }) {
+function MetricLabel({ children }: { children: string }) {
   return (
     <div className="flex min-h-0 items-center justify-center overflow-hidden border border-[#75b4ee] bg-[#b0d2ff] px-[4px] text-center text-[17px] font-bold leading-tight text-[#13243a]">
-      {children}
+      <MetricLabelText label={children} />
     </div>
+  );
+}
+
+function MetricLabelText({ label }: { label: string }) {
+  const compactLabel = label.replace(/\s+/g, "");
+  const shouldDistribute = compactLabel.length <= 3 && !compactLabel.includes("/");
+
+  if (!shouldDistribute) {
+    return <span className="text-[15px] tracking-[-0.04em]">{label}</span>;
+  }
+
+  return (
+    <span aria-label={label} className="flex w-[58px] items-center justify-between whitespace-pre">
+      {compactLabel.split("").map((char, index) => (
+        <span key={`${char}-${index}`}>{char}</span>
+      ))}
+    </span>
   );
 }
 
