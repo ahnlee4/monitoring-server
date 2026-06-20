@@ -268,10 +268,10 @@ async def create_group_settings_command(
         {"key": "0046", "address": 0x46, "length": 2, "value": int(payload.change_hours)},
         {"key": "0034", "address": 0x34, "length": 2, "value": 1 if payload.control_mode == "group" else 0},
         {
-            "key": "0036",
-            "address": 0x36,
+            "key": "0024",
+            "address": 0x24,
             "length": 2,
-            "value": set_word_low_byte(current_map_int(db, "0036", 0), 1 if payload.sort_mode == "time" else 0),
+            "value": set_word_low_byte(current_map_int(db, "0024", 0), 1 if payload.sort_mode == "time" else 0),
         },
         {
             "key": "0080",

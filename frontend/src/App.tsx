@@ -50,7 +50,7 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.52";
+const APP_VERSION = "0.1.53";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
@@ -281,7 +281,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
       changeHours: Math.trunc(liveMapNumber(values, "0046", 0)),
       remainMinutes: Math.trunc(liveMapNumber(values, "0048", 0)),
       controlModeWord: Math.trunc(liveMapNumber(values, "0034", 0)),
-      sortModeWord: Math.trunc(liveMapNumber(values, "0036", 0)),
+      sortModeWord: Math.trunc(liveMapNumber(values, "0024", 0)),
       operationModeWord: Math.trunc(liveMapNumber(values, "0080", 0)),
     },
     options: buildOptions(optionDevice),
@@ -1224,8 +1224,8 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     setSortMode(nextMode);
     const success = await sendControlWrites("운전 조건", "control_dialog_sort_mode", [
       {
-        key: "0036",
-        address: 0x36,
+        key: "0024",
+        address: 0x24,
         length: 2,
         value: setWordLowByte(dashboard.control.sortModeWord, nextMode === "time" ? 1 : 0),
       },
