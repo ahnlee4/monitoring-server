@@ -50,10 +50,14 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const APP_VERSION = "0.1.67";
+const APP_VERSION = "0.1.68";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
+const MAP_VALUES_LIMIT = 300;
+const MAP_REFRESH_INTERVAL_MS = 1000;
+const MAP_REFRESH_MIN_INTERVAL_MS = 800;
+const MAP_REFRESH_TIMEOUT_MS = 1200;
 const USER_LEVELS = {
   admin: 0,
   manager: 1,
@@ -147,26 +151,59 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     let reloadTimer: number | undefined;
-    let pollTimer: number | undefined;
+    let loopTimer: number | undefined;
+    let inFlight = false;
+    let dirty = false;
+    let lastLoadedAt = 0;
 
     const loadMapValues = async () => {
+      if (cancelled) return;
+      if (inFlight) {
+        dirty = true;
+        return;
+      }
+
+      const elapsed = Date.now() - lastLoadedAt;
+      if (lastLoadedAt > 0 && elapsed < MAP_REFRESH_MIN_INTERVAL_MS) {
+        dirty = true;
+        scheduleReload(MAP_REFRESH_MIN_INTERVAL_MS - elapsed);
+        return;
+      }
+
+      inFlight = true;
+      dirty = false;
       try {
-        const response = await fetch(`${apiBase()}/yujin/map-values?limit=2000`, { cache: "no-store" });
+        const response = await fetchWithTimeout(
+          `${apiBase()}/yujin/map-values?limit=${MAP_VALUES_LIMIT}`,
+          { cache: "no-store" },
+          MAP_REFRESH_TIMEOUT_MS,
+        );
         if (!response.ok) throw new Error(`map-values ${response.status}`);
         const values = (await response.json()) as YujinMapValue[];
         if (!cancelled) setMapValues(toMapRecord(values));
       } catch (error) {
         console.error("failed to load map values", error);
+      } finally {
+        lastLoadedAt = Date.now();
+        inFlight = false;
+        if (dirty && !cancelled) scheduleReload(MAP_REFRESH_MIN_INTERVAL_MS);
       }
     };
 
-    const scheduleReload = () => {
+    function scheduleReload(delay = MAP_REFRESH_MIN_INTERVAL_MS) {
       window.clearTimeout(reloadTimer);
-      reloadTimer = window.setTimeout(loadMapValues, 50);
+      reloadTimer = window.setTimeout(loadMapValues, delay);
+    }
+
+    const scheduleLoop = () => {
+      loopTimer = window.setTimeout(async () => {
+        await loadMapValues();
+        if (!cancelled) scheduleLoop();
+      }, MAP_REFRESH_INTERVAL_MS);
     };
 
     loadMapValues();
-    pollTimer = window.setInterval(loadMapValues, 500);
+    scheduleLoop();
     const socket = new WebSocket(wsUrl());
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data) as UpdateEvent;
@@ -177,7 +214,7 @@ export default function App() {
     return () => {
       cancelled = true;
       window.clearTimeout(reloadTimer);
-      window.clearInterval(pollTimer);
+      window.clearTimeout(loopTimer);
       socket.close();
     };
   }, []);
