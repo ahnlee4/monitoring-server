@@ -333,6 +333,7 @@ class RS485Collector(BaseCollector):
         request = bytes_from_hex(str(payload["payload_hex"]))
         if bool(payload.get("append_crc", True)):
             request = append_crc(request)
+        request = normalize_legacy_setting_crc(request)
         port = self._open_serial()
         with self._serial_lock:
             port.reset_input_buffer()
@@ -635,6 +636,18 @@ def signed_16(value: int) -> int:
 def append_crc(payload: bytes) -> bytes:
     crc = crc16(payload)
     return payload + bytes([(crc >> 8) & 0xFF, crc & 0xFF])
+
+
+def append_crc_low_first(payload: bytes) -> bytes:
+    crc = crc16(payload)
+    return payload + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
+
+
+def normalize_legacy_setting_crc(request: bytes) -> bytes:
+    if len(request) < 5 or request[0] != FRAME_MASTER_ID or request[1] not in (0x80, 0x82, 0x83):
+        return request
+
+    return append_crc_low_first(request[:-2])
 
 
 def validate_crc(frame: bytes) -> None:
