@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Detail Theme Options</title>
+    <style>
+      @font-face {
+        font-family: "NotoSansKR";
+        src: url("../frontend/public/NotoSansKR-Bold.ttf") format("truetype");
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        background: #141b24;
+        font-family: "NotoSansKR", "Malgun Gothic", sans-serif;
+        color: #111827;
+      }
+
+      .board {
+        width: 1280px;
+        height: 800px;
+        display: grid;
+        grid-template-rows: 74px 1fr;
+        gap: 10px;
+        overflow: hidden;
+        background: #eaf4fd;
+        padding: 10px;
+      }
+
+      .board-head {
+        display: grid;
+        grid-template-columns: 260px 1fr 250px;
+        gap: 8px;
+      }
+
+      .head-cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border: 1px solid #75b4ee;
+        background: #3374ce;
+        color: #fff;
+        text-align: center;
+        font-size: 22px;
+        font-weight: 900;
+      }
+
+      .head-cell.sub {
+        background: #ffffff;
+        color: #173f69;
+        font-size: 18px;
+      }
+
+      .theme-grid {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+        gap: 10px;
+      }
+
+      .theme {
+        min-width: 0;
+        min-height: 0;
+        display: grid;
+        grid-template-rows: 42px 1fr;
+        overflow: hidden;
+        border: 2px solid #9fc9fa;
+        background: #ffffff;
+      }
+
+      .theme-title {
+        display: grid;
+        grid-template-columns: 76px 1fr 170px;
+        align-items: center;
+        overflow: hidden;
+        border-bottom: 1px solid #c9dff2;
+        background: #f8fbff;
+      }
+
+      .theme-code {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #1f67b2;
+        color: #fff;
+        font-size: 22px;
+        font-weight: 900;
+      }
+
+      .theme-name {
+        padding: 0 12px;
+        color: #173f69;
+        font-size: 20px;
+        font-weight: 900;
+      }
+
+      .theme-desc {
+        padding-right: 10px;
+        color: #667380;
+        text-align: right;
+        font-size: 13px;
+        font-weight: 900;
+      }
+
+      .theme-body {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        padding: 12px;
+        overflow: hidden;
+      }
+
+      .notes {
+        display: grid;
+        align-content: start;
+        gap: 7px;
+        overflow: hidden;
+        color: #30445a;
+        font-size: 14px;
+        font-weight: 900;
+        line-height: 1.3;
+      }
+
+      .notes strong {
+        color: #0d4da5;
+        font-size: 18px;
+      }
+
+      .notes span {
+        display: block;
+        border-left: 4px solid #75b4ee;
+        background: #f4f9ff;
+        padding: 7px 9px;
+      }
+
+      .sample-card {
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      /* A. Classic panel */
+      .classic .sample-card {
+        display: grid;
+        grid-template-rows: 44px 1fr 50px;
+        gap: 4px;
+        border: 2px solid #3374ce;
+        background: #d8ecff;
+        padding: 4px;
+      }
+
+      .classic .status {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 3px;
+      }
+
+      .classic .status div,
+      .classic .summary,
+      .classic .metric {
+        border: 1px solid #75b4ee;
+      }
+
+      .classic .status div {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        font-size: 15px;
+        font-weight: 900;
+      }
+
+      .classic .status .on {
+        background: #e42222;
+        color: #fff;
+      }
+
+      .classic .visual {
+        display: grid;
+        grid-template-columns: 1fr 120px;
+        gap: 4px;
+        overflow: hidden;
+      }
+
+      .classic .machine {
+        display: grid;
+        place-items: center;
+        background: #fff;
+        border: 1px solid #75b4ee;
+      }
+
+      .classic img {
+        max-width: 90%;
+        max-height: 90%;
+      }
+
+      .classic .metrics {
+        display: grid;
+        gap: 3px;
+      }
+
+      .classic .metric {
+        display: grid;
+        grid-template-columns: 48px 1fr;
+        background: #fff;
+        font-size: 14px;
+        font-weight: 900;
+      }
+
+      .classic .metric label {
+        display: grid;
+        place-items: center;
+        background: #b0d2ff;
+      }
+
+      .classic .metric b {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 6px;
+      }
+
+      .classic .summary {
+        display: grid;
+        grid-template-columns: 60px 1fr 92px;
+        background: #fff;
+      }
+
+      .classic .summary span {
+        display: grid;
+        place-items: center;
+        color: #0d4da5;
+        font-weight: 900;
+      }
+
+      .classic .summary b {
+        display: grid;
+        place-items: center;
+        background: #1e5c98;
+        color: #fff;
+        font-size: 24px;
+      }
+
+      /* B. SCADA flat */
+      .scada .sample-card {
+        display: grid;
+        grid-template-rows: 46px 1fr 48px;
+        gap: 8px;
+        border: 1px solid #b8d6ef;
+        background: #f7fbff;
+        padding: 10px;
+      }
+
+      .scada .status {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .scada .pill {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 34px;
+        padding: 0 10px;
+        background: #ffffff;
+        border-left: 5px solid #9aa2aa;
+        color: #405166;
+        font-size: 14px;
+        font-weight: 900;
+      }
+
+      .scada .pill.run {
+        border-color: #e42222;
+        color: #b91515;
+      }
+
+      .scada .pill.remote {
+        border-color: #4caa70;
+        color: #27613f;
+      }
+
+      .scada .visual {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        gap: 10px;
+        overflow: hidden;
+      }
+
+      .scada .machine {
+        display: grid;
+        place-items: center;
+        background: #fff;
+        border: 1px solid #d6e6f4;
+      }
+
+      .scada img {
+        max-width: 88%;
+        max-height: 88%;
+      }
+
+      .scada .metrics {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 7px;
+      }
+
+      .scada .metric {
+        display: grid;
+        align-content: center;
+        background: #fff;
+        border-left: 4px solid #75b4ee;
+        padding: 7px;
+      }
+
+      .scada .metric label {
+        color: #667380;
+        font-size: 11px;
+        font-weight: 900;
+      }
+
+      .scada .metric b {
+        margin-top: 4px;
+        color: #173f69;
+        font-size: 19px;
+      }
+
+      .scada .summary {
+        display: grid;
+        grid-template-columns: 62px 1fr 96px;
+        overflow: hidden;
+        background: #173f69;
+        color: #fff;
+      }
+
+      .scada .summary span,
+      .scada .summary b {
+        display: grid;
+        place-items: center;
+        font-weight: 900;
+      }
+
+      .scada .summary span:nth-child(2) {
+        justify-content: start;
+        padding-left: 10px;
+      }
+
+      .scada .summary b {
+        background: #2f78c7;
+        font-size: 24px;
+      }
+
+      /* C. Instrument card */
+      .instrument .sample-card {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: 10px;
+        border: 1px solid #a7cef0;
+        background: #eef7ff;
+        padding: 10px;
+      }
+
+      .instrument .left {
+        display: grid;
+        grid-template-rows: 82px 1fr;
+        gap: 8px;
+      }
+
+      .instrument .gauge {
+        display: grid;
+        place-items: center;
+        border: 7px solid #75b4ee;
+        border-radius: 999px;
+        background: #fff;
+        color: #173f69;
+        font-size: 26px;
+        font-weight: 900;
+      }
+
+      .instrument .status {
+        display: grid;
+        gap: 6px;
+      }
+
+      .instrument .status div {
+        display: grid;
+        place-items: center;
+        background: #fff;
+        color: #173f69;
+        font-size: 13px;
+        font-weight: 900;
+      }
+
+      .instrument .status .run {
+        background: #e42222;
+        color: #fff;
+      }
+
+      .instrument .right {
+        display: grid;
+        grid-template-rows: 42px 1fr 42px;
+        gap: 8px;
+        overflow: hidden;
+      }
+
+      .instrument .title {
+        display: flex;
+        align-items: center;
+        background: #1f67b2;
+        color: #fff;
+        padding: 0 12px;
+        font-size: 20px;
+        font-weight: 900;
+      }
+
+      .instrument .body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        overflow: hidden;
+      }
+
+      .instrument .machine {
+        display: grid;
+        place-items: center;
+        background: #fff;
+      }
+
+      .instrument img {
+        max-width: 90%;
+        max-height: 90%;
+      }
+
+      .instrument .metrics {
+        display: grid;
+        gap: 6px;
+      }
+
+      .instrument .metric {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #fff;
+        padding: 0 8px;
+        color: #173f69;
+        font-size: 15px;
+        font-weight: 900;
+      }
+
+      .instrument .summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #fff;
+        padding: 0 12px;
+        color: #0d4da5;
+        font-weight: 900;
+      }
+
+      /* D. Touch console */
+      .touch .sample-card {
+        display: grid;
+        grid-template-rows: 52px 1fr 46px;
+        gap: 8px;
+        background: #f1f6fb;
+        border: 1px solid #c8d8e6;
+        padding: 10px;
+      }
+
+      .touch .status {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+
+      .touch .status div {
+        display: grid;
+        grid-template-rows: 18px 1fr;
+        background: #fff;
+        color: #173f69;
+        overflow: hidden;
+      }
+
+      .touch .status span {
+        display: grid;
+        place-items: center;
+        background: #e0edf8;
+        font-size: 10px;
+      }
+
+      .touch .status b {
+        display: grid;
+        place-items: center;
+        font-size: 15px;
+      }
+
+      .touch .status .run b {
+        background: #e42222;
+        color: #fff;
+      }
+
+      .touch .status .ok b {
+        background: #4caa70;
+        color: #fff;
+      }
+
+      .touch .body {
+        display: grid;
+        grid-template-columns: 1fr 122px;
+        gap: 10px;
+        overflow: hidden;
+      }
+
+      .touch .machine {
+        display: grid;
+        place-items: center;
+        background: #fff;
+      }
+
+      .touch img {
+        max-width: 90%;
+        max-height: 90%;
+      }
+
+      .touch .metrics {
+        display: grid;
+        gap: 6px;
+      }
+
+      .touch .metric {
+        display: grid;
+        grid-template-rows: 16px 1fr;
+        background: #fff;
+        color: #173f69;
+      }
+
+      .touch .metric label {
+        display: grid;
+        place-items: center;
+        background: #eaf4fd;
+        color: #667380;
+        font-size: 10px;
+      }
+
+      .touch .metric b {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 7px;
+        font-size: 16px;
+      }
+
+      .touch .summary {
+        display: grid;
+        grid-template-columns: 64px 1fr 96px;
+        background: #fff;
+        overflow: hidden;
+      }
+
+      .touch .summary span,
+      .touch .summary b {
+        display: grid;
+        place-items: center;
+        color: #173f69;
+        font-weight: 900;
+      }
+
+      .touch .summary span:first-child {
+        background: #3374ce;
+        color: #fff;
+      }
+
+      .touch .summary b {
+        background: #173f69;
+        color: #fff;
+        font-size: 23px;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="board">
+      <header class="board-head">
+        <div class="head-cell">상세화면 테마 선택</div>
+        <div class="head-cell sub">아래 4가지 중 방향을 고른 뒤, 선택한 테마로 실제 상세화면 샘플을 다시 제작</div>
+        <div class="head-cell">1280 × 800 기준</div>
+      </header>
+
+      <main class="theme-grid">
+        <section class="theme classic">
+          <div class="theme-title">
+            <div class="theme-code">A</div>
+            <div class="theme-name">Classic HMI</div>
+            <div class="theme-desc">원본 GUI와 가장 가까움</div>
+          </div>
+          <div class="theme-body">
+            <div class="sample-card">
+              <div class="status">
+                <div>REM</div>
+                <div class="on">부하</div>
+                <div>알림</div>
+                <div>고장</div>
+              </div>
+              <div class="visual">
+                <div class="machine"><img src="../frontend/public/equip_mini.png" alt="" /></div>
+                <div class="metrics">
+                  <div class="metric"><label>압력</label><b>6.42</b></div>
+                  <div class="metric"><label>온도</label><b>42.0</b></div>
+                  <div class="metric"><label>회전</label><b>1820</b></div>
+                  <div class="metric"><label>시간</label><b>12548</b></div>
+                </div>
+              </div>
+              <div class="summary"><span>1호기</span><span>Micos 75FAV</span><b>6.42</b></div>
+            </div>
+            <div class="notes">
+              <strong>A. Classic HMI</strong>
+              <span>장점: 원본 Java GUI와 가장 유사해서 이질감이 적음</span>
+              <span>단점: 최신 UI 느낌은 약하고 선/칸이 많아질 수 있음</span>
+              <span>추천: 원본 재현 우선이면 이 방향</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="theme scada">
+          <div class="theme-title">
+            <div class="theme-code">B</div>
+            <div class="theme-name">Modern SCADA Flat</div>
+            <div class="theme-desc">선 적고 정보 위계 선명</div>
+          </div>
+          <div class="theme-body">
+            <div class="sample-card">
+              <div class="status">
+                <div class="pill remote">MODE REM</div>
+                <div class="pill run">RUN 부하</div>
+                <div class="pill">ALARM 정상</div>
+              </div>
+              <div class="visual">
+                <div class="machine"><img src="../frontend/public/equip_mini.png" alt="" /></div>
+                <div class="metrics">
+                  <div class="metric"><label>압력</label><b>6.42 bar</b></div>
+                  <div class="metric"><label>온도</label><b>42.0 ℃</b></div>
+                  <div class="metric"><label>회전</label><b>1820 rpm</b></div>
+                  <div class="metric"><label>시간</label><b>12548 hr</b></div>
+                </div>
+              </div>
+              <div class="summary"><span>1호기</span><span>Micos 75FAV / OIL FREE</span><b>6.42</b></div>
+            </div>
+            <div class="notes">
+              <strong>B. Modern SCADA Flat</strong>
+              <span>장점: 지금 문제인 난잡한 선을 줄이면서도 구분이 명확함</span>
+              <span>단점: 원본과는 조금 달라짐</span>
+              <span>추천: 가장 무난하고 사용자 친화적인 방향</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="theme instrument">
+          <div class="theme-title">
+            <div class="theme-code">C</div>
+            <div class="theme-name">Instrument Panel</div>
+            <div class="theme-desc">대표값 강조형</div>
+          </div>
+          <div class="theme-body">
+            <div class="sample-card">
+              <div class="left">
+                <div class="gauge">6.42</div>
+                <div class="status">
+                  <div>REM</div>
+                  <div class="run">부하</div>
+                  <div>정상</div>
+                </div>
+              </div>
+              <div class="right">
+                <div class="title">1호기 · Micos 75FAV</div>
+                <div class="body">
+                  <div class="machine"><img src="../frontend/public/equip_mini.png" alt="" /></div>
+                  <div class="metrics">
+                    <div class="metric"><span>온도</span><b>42.0 ℃</b></div>
+                    <div class="metric"><span>설정</span><b>6.80 bar</b></div>
+                    <div class="metric"><span>회전</span><b>1820 rpm</b></div>
+                    <div class="metric"><span>시간</span><b>12548 hr</b></div>
+                  </div>
+                </div>
+                <div class="summary"><span>OIL FREE / INVERTER</span><b>bar</b></div>
+              </div>
+            </div>
+            <div class="notes">
+              <strong>C. Instrument Panel</strong>
+              <span>장점: 압력 같은 대표값이 가장 잘 보임</span>
+              <span>단점: 원본 카드형 UI와 차이가 큼</span>
+              <span>추천: 현장 작업자가 빠르게 수치만 봐야 한다면 이 방향</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="theme touch">
+          <div class="theme-title">
+            <div class="theme-code">D</div>
+            <div class="theme-name">Touch Console</div>
+            <div class="theme-desc">터치 패널 친화형</div>
+          </div>
+          <div class="theme-body">
+            <div class="sample-card">
+              <div class="status">
+                <div class="ok"><span>MODE</span><b>REM</b></div>
+                <div class="run"><span>RUN</span><b>부하</b></div>
+                <div><span>ALARM</span><b>정상</b></div>
+                <div><span>FAULT</span><b>정상</b></div>
+              </div>
+              <div class="body">
+                <div class="machine"><img src="../frontend/public/equip_mini.png" alt="" /></div>
+                <div class="metrics">
+                  <div class="metric"><label>압력</label><b>6.42</b></div>
+                  <div class="metric"><label>온도</label><b>42.0</b></div>
+                  <div class="metric"><label>회전</label><b>1820</b></div>
+                  <div class="metric"><label>시간</label><b>12548</b></div>
+                </div>
+              </div>
+              <div class="summary"><span>1호기</span><span>Micos 75FAV</span><b>6.42</b></div>
+            </div>
+            <div class="notes">
+              <strong>D. Touch Console</strong>
+              <span>장점: 큰 터치 화면에서 버튼/상태가 잘 보임</span>
+              <span>단점: 조금 앱 UI처럼 보일 수 있음</span>
+              <span>추천: 보드 모니터에서 손으로 조작하는 UX를 우선하면 이 방향</span>
+            </div>
+          </div>
+        </section>
+      </main>
+    </section>
+  </body>
+</html>
