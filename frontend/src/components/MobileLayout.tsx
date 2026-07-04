@@ -325,19 +325,19 @@ function MobileDetailCard({
 
 function MobileValue({ label, prominent = false, unit, value }: { label: string; prominent?: boolean; unit: string; value: string }) {
   const containerClass = prominent
-    ? "grid h-full min-h-0 grid-rows-[auto_1fr] rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[clamp(10px,1.6dvh,16px)] py-[clamp(8px,1.2dvh,12px)]"
+    ? "grid h-full min-h-0 grid-rows-[auto_1fr] rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[clamp(9px,1.4dvh,14px)] py-[clamp(7px,1dvh,10px)]"
     : "rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[clamp(8px,1.1dvh,11px)] py-[clamp(6px,1dvh,9px)]";
   const labelClass = prominent
-    ? "text-[clamp(13px,2.1dvh,18px)] font-black text-[#6f879d]"
+    ? "text-[clamp(13px,1.8dvh,16px)] font-black text-[#6f879d]"
     : "text-[clamp(11px,1.4dvh,13px)] font-black text-[#6f879d]";
   const valueRowClass = prominent
     ? "flex min-h-0 items-center justify-end gap-[5px] text-right"
     : "mt-[clamp(3px,0.6dvh,5px)] flex items-end justify-end gap-[4px] text-right";
   const valueClass = prominent
-    ? "min-w-0 truncate text-[clamp(26px,4.2dvh,38px)] font-black leading-none text-[#173f69]"
+    ? "min-w-0 truncate text-[clamp(24px,3.6dvh,32px)] font-black leading-none text-[#173f69]"
     : "min-w-0 truncate text-[clamp(18px,2.4dvh,23px)] font-black leading-none text-[#173f69]";
   const unitClass = prominent
-    ? "shrink-0 pb-[2px] text-[clamp(12px,1.8dvh,16px)] font-black text-[#6f879d]"
+    ? "shrink-0 pb-[2px] text-[clamp(11px,1.6dvh,14px)] font-black text-[#6f879d]"
     : "shrink-0 pb-[1px] text-[clamp(10px,1.3dvh,12px)] font-black text-[#6f879d]";
 
   return (
