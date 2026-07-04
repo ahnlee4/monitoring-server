@@ -127,13 +127,13 @@ export function EquipmentDetailDialog({
 
   return (
     <div className="absolute inset-0 z-[55] flex items-center justify-center bg-black/60 p-[16px] max-sm:p-[8px]">
-      <section className="grid h-[760px] w-[576px] grid-rows-[56px_1fr_auto_48px] overflow-hidden rounded-[12px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_14px_34px_rgba(15,43,72,0.32)] max-sm:h-[calc(100dvh-16px)] max-sm:w-full">
-        <header className="grid grid-cols-[1fr_48px] border-b border-[#dbe7f1] bg-white px-[8px] py-[7px]">
-          <div className="grid grid-cols-4 rounded-[8px] border border-[#d3e7f8] bg-[#edf6fe] p-[4px]">
+      <section className="grid h-[760px] w-[576px] grid-rows-[56px_1fr_auto_48px] overflow-hidden rounded-[12px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_14px_34px_rgba(15,43,72,0.32)] max-sm:h-[calc(100dvh-16px)] max-sm:w-full max-sm:grid-rows-[auto_minmax(0,1fr)_auto] max-sm:rounded-[10px]">
+        <header className="grid grid-cols-[1fr_48px] border-b border-[#dbe7f1] bg-white px-[8px] py-[7px] max-sm:grid-cols-[1fr_42px] max-sm:gap-[7px] max-sm:px-[9px] max-sm:py-[9px]">
+          <div className="grid grid-cols-4 rounded-[8px] border border-[#d3e7f8] bg-[#edf6fe] p-[4px] max-sm:rounded-[7px] max-sm:p-[3px]">
             {TABS.map((tab) => (
               <button
                 key={tab.key}
-                className={`rounded-[6px] text-[16px] font-black transition-colors ${
+                className={`min-h-[38px] rounded-[6px] text-[16px] font-black transition-colors max-sm:min-h-[34px] max-sm:text-[12px] ${
                   activeTab === tab.key ? "bg-[#237bd0] text-white shadow-[0_4px_10px_rgba(35,123,208,0.28)]" : "text-[#3e6488]"
                 }`}
                 onClick={() => setActiveTab(tab.key)}
@@ -145,7 +145,7 @@ export function EquipmentDetailDialog({
           </div>
           <button
             aria-label="닫기"
-            className="ml-[8px] flex items-center justify-center rounded-[8px] border border-[#cfdde8] bg-[#f3f7fa] text-[28px] font-black leading-none text-[#45657f] transition-colors hover:bg-[#e8f0f6]"
+            className="ml-[8px] flex items-center justify-center rounded-[8px] border border-[#cfdde8] bg-[#f3f7fa] text-[28px] font-black leading-none text-[#45657f] transition-colors hover:bg-[#e8f0f6] max-sm:ml-0 max-sm:rounded-[7px] max-sm:text-[25px]"
             onClick={onClose}
             type="button"
           >
@@ -153,13 +153,13 @@ export function EquipmentDetailDialog({
           </button>
         </header>
 
-        <div className="min-h-0 overflow-hidden p-[12px]">
+        <div className="min-h-0 overflow-hidden p-[12px] max-sm:p-[9px]">
           {activeTab === "error" ? <ErrorTab items={errorItems} compressorName={compressor.name} /> : null}
           {activeTab === "power" ? <PowerTab /> : null}
           {activeTab === "setting" || activeTab === "status" ? <MetricGrid items={visibleItems} /> : null}
         </div>
 
-        <div className="border-t border-[#dbe7f1] bg-white px-[12px] py-[10px]">
+        <div className="border-t border-[#dbe7f1] bg-white px-[12px] py-[10px] max-sm:px-[9px] max-sm:py-[8px]">
           {activeTab === "setting" ? (
             <OperatePanel
               commandBusy={commandBusy}
@@ -174,7 +174,7 @@ export function EquipmentDetailDialog({
           )}
         </div>
 
-        <button className="m-[8px] mt-0 rounded-[8px] bg-[#237bd0] text-[20px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)] disabled:opacity-45" onClick={onClose} type="button">
+        <button className="m-[8px] mt-0 rounded-[8px] bg-[#237bd0] text-[20px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)] disabled:opacity-45 max-sm:hidden" onClick={onClose} type="button">
           닫기
         </button>
       </section>
@@ -222,7 +222,7 @@ function PowerTab() {
 
 function MetricGrid({ items }: { items: DetailItem[] }) {
   return (
-    <div className="grid h-full auto-rows-[82px] grid-cols-2 gap-[9px] overflow-y-auto rounded-[10px] border border-[#d9e6f0] bg-white p-[12px] pr-[8px] max-sm:grid-cols-1">
+    <div className="grid h-full auto-rows-[82px] grid-cols-2 gap-[9px] overflow-y-auto rounded-[10px] border border-[#d9e6f0] bg-white p-[12px] pr-[8px] max-sm:auto-rows-[68px] max-sm:grid-cols-1 max-sm:gap-[7px] max-sm:rounded-[8px] max-sm:p-[8px] max-sm:pr-[6px]">
       {items.map((item) => (
         <MetricCard key={item.label} item={item} />
       ))}
@@ -234,15 +234,15 @@ function MetricCard({ item }: { item: DetailItem }) {
   const valueParts = splitValueUnit(item.value);
 
   return (
-    <div className={`grid min-h-0 grid-rows-[24px_1fr] rounded-[8px] border bg-[#f8fbfd] p-[10px] ${item.alarm ? "border-[#f1b2b2]" : "border-[#d9e6f0]"}`}>
-      <div className={`flex items-center text-[14px] font-black leading-none ${item.alarm ? "text-[#d92525]" : "text-[#6f879d]"}`}>
+    <div className={`grid min-h-0 grid-rows-[24px_1fr] rounded-[8px] border bg-[#f8fbfd] p-[10px] max-sm:grid-rows-[20px_1fr] max-sm:p-[8px] ${item.alarm ? "border-[#f1b2b2]" : "border-[#d9e6f0]"}`}>
+      <div className={`flex items-center text-[14px] font-black leading-none max-sm:text-[12px] ${item.alarm ? "text-[#d92525]" : "text-[#6f879d]"}`}>
         <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{item.label}</span>
       </div>
-      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_48px] items-end">
-        <div className={`flex min-w-0 items-end justify-end text-right text-[24px] font-black leading-none ${item.alarm ? "text-[#d92525]" : "text-[#173f69]"}`}>
+      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_48px] items-end max-sm:grid-cols-[minmax(0,1fr)_36px]">
+        <div className={`flex min-w-0 items-end justify-end text-right text-[24px] font-black leading-none max-sm:text-[21px] ${item.alarm ? "text-[#d92525]" : "text-[#173f69]"}`}>
           <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{valueParts.value}</span>
         </div>
-        <div className={`flex items-end justify-start pb-[1px] pl-[5px] text-[13px] font-black leading-none ${item.alarm ? "text-[#d92525]" : "text-[#6f879d]"}`}>
+        <div className={`flex items-end justify-start pb-[1px] pl-[5px] text-[13px] font-black leading-none max-sm:pl-[4px] max-sm:text-[11px] ${item.alarm ? "text-[#d92525]" : "text-[#6f879d]"}`}>
           {valueParts.unit}
         </div>
       </div>
@@ -266,10 +266,10 @@ function OperatePanel({
   repairActive: boolean;
 }) {
   return (
-    <div className="grid gap-[8px]">
-      <div className="grid h-[58px] grid-cols-3 gap-[9px] max-sm:h-auto max-sm:grid-cols-1">
+    <div className="grid gap-[8px] max-sm:gap-[6px]">
+      <div className="grid h-[58px] grid-cols-3 gap-[9px] max-sm:h-[48px] max-sm:gap-[6px]">
         <button
-          className="rounded-[8px] border border-[#237bd0] bg-[#eef7ff] text-[20px] font-black text-[#173f69] shadow-[0_5px_11px_rgba(35,123,208,0.12)] disabled:opacity-45"
+          className="rounded-[8px] border border-[#237bd0] bg-[#eef7ff] text-[20px] font-black text-[#173f69] shadow-[0_5px_11px_rgba(35,123,208,0.12)] disabled:opacity-45 max-sm:rounded-[7px] max-sm:text-[14px]"
           disabled={commandBusy || !connected}
           onClick={onToggleRepair}
           type="button"
@@ -277,7 +277,7 @@ function OperatePanel({
           {repairActive ? "정비 해제" : "정비 설정"}
         </button>
         <button
-          className="rounded-[8px] bg-[#d92525] text-[23px] font-black text-white shadow-[0_5px_11px_rgba(208,31,38,0.18)] disabled:opacity-45"
+          className="rounded-[8px] bg-[#d92525] text-[23px] font-black text-white shadow-[0_5px_11px_rgba(208,31,38,0.18)] disabled:opacity-45 max-sm:rounded-[7px] max-sm:text-[17px]"
           disabled={commandBusy || !connected}
           onClick={() => onOperate(true)}
           type="button"
@@ -285,7 +285,7 @@ function OperatePanel({
           운전
         </button>
         <button
-          className="rounded-[8px] bg-[#667380] text-[23px] font-black text-white shadow-[0_5px_11px_rgba(70,82,94,0.14)] disabled:opacity-45"
+          className="rounded-[8px] bg-[#667380] text-[23px] font-black text-white shadow-[0_5px_11px_rgba(70,82,94,0.14)] disabled:opacity-45 max-sm:rounded-[7px] max-sm:text-[17px]"
           disabled={commandBusy || !connected}
           onClick={() => onOperate(false)}
           type="button"
@@ -293,7 +293,7 @@ function OperatePanel({
           정지
         </button>
       </div>
-      <div className="h-[20px] truncate rounded-[7px] bg-[#eef7ff] px-[10px] text-[12px] font-black leading-[20px] text-[#237bd0]">{commandStatus}</div>
+      <div className="h-[20px] truncate rounded-[7px] bg-[#eef7ff] px-[10px] text-[12px] font-black leading-[20px] text-[#237bd0] max-sm:h-[24px] max-sm:leading-[24px]">{commandStatus}</div>
     </div>
   );
 }
@@ -313,9 +313,9 @@ function splitValueUnit(text: string) {
 
 function EmptyTab({ description, title }: { description: string; title: string }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center rounded-[10px] border border-[#d9e6f0] bg-white text-center">
-      <div className="text-[28px] font-black text-[#173f69]">{title}</div>
-      <div className="mt-[10px] text-[15px] font-black text-[#6f879d]">{description}</div>
+    <div className="flex h-full flex-col items-center justify-center rounded-[10px] border border-[#d9e6f0] bg-white px-[14px] text-center max-sm:rounded-[8px]">
+      <div className="text-[28px] font-black text-[#173f69] max-sm:text-[20px]">{title}</div>
+      <div className="mt-[10px] text-[15px] font-black text-[#6f879d] max-sm:text-[13px]">{description}</div>
     </div>
   );
 }
