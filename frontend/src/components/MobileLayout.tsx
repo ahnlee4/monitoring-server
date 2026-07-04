@@ -39,6 +39,13 @@ type MobileDashboard = {
 type ActiveDialog = "factory" | "settings" | "control" | "password" | null;
 type ActiveScreen = "main" | "detail";
 type ModeSequenceAction = "previous" | "refresh" | "next";
+type FullscreenDocument = Document & {
+  webkitExitFullscreen?: () => Promise<void> | void;
+  webkitFullscreenElement?: Element | null;
+};
+type FullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
 
 export function MobileLayout({
   activeScreen,
@@ -98,6 +105,18 @@ function MobileHeader({
   now: Date;
   onLogoClick: () => void;
 }) {
+  const handleFullscreenClick = () => {
+    const fullscreenDocument = document as FullscreenDocument;
+    const fullscreenElement = document.documentElement as FullscreenElement;
+
+    if (document.fullscreenElement || fullscreenDocument.webkitFullscreenElement) {
+      void (document.exitFullscreen?.() ?? fullscreenDocument.webkitExitFullscreen?.());
+      return;
+    }
+
+    void (fullscreenElement.requestFullscreen?.() ?? fullscreenElement.webkitRequestFullscreen?.());
+  };
+
   return (
     <header className="shrink-0 border-b border-[#d8e6f1] bg-white px-[12px] py-[10px] shadow-[0_6px_18px_rgba(18,54,88,0.08)]">
       <div className="flex items-center justify-between gap-[10px]">
@@ -108,9 +127,18 @@ function MobileHeader({
             <span className="mt-[4px] block text-[11px] font-black text-[#6f879d]">App {dashboard.appVersion} / Fw {dashboard.firmwareVersion}</span>
           </span>
         </button>
-        <span className={`rounded-[8px] px-[10px] py-[7px] text-[15px] font-black text-white ${dashboard.integratedRun ? "bg-[#d92525]" : "bg-[#667380]"}`}>
-          {dashboard.integratedRun ? "운전" : "정지"}
-        </span>
+        <div className="grid shrink-0 grid-cols-[58px_44px] gap-[6px]">
+          <span className={`flex min-h-[44px] items-center justify-center rounded-[9px] px-[10px] text-[17px] font-black text-white ${dashboard.integratedRun ? "bg-[#d92525]" : "bg-[#667380]"}`}>
+            {dashboard.integratedRun ? "운전" : "정지"}
+          </span>
+          <button
+            className="min-h-[44px] rounded-[9px] border border-[#c9deef] bg-[#eef7ff] text-[12px] font-black text-[#173f69] shadow-[0_4px_10px_rgba(35,123,208,0.1)]"
+            onClick={handleFullscreenClick}
+            type="button"
+          >
+            전체
+          </button>
+        </div>
       </div>
       <div className="mt-[10px] grid grid-cols-2 gap-[8px]">
         <MobileSummaryTile label="메인 압력" unit="bar" value={formatNumber(dashboard.mainPressure, 1)} />
