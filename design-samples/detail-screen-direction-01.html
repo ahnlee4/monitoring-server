@@ -190,11 +190,11 @@
         min-width: 0;
         min-height: 0;
         display: grid;
-        grid-template-rows: 34px 1fr 58px;
+        grid-template-rows: 38px 1fr 60px;
         gap: 5px;
         overflow: hidden;
         border: 1px solid #a7cef0;
-        background: #edf7ff;
+        background: #e7f3ff;
         padding: 5px;
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
       }
@@ -203,9 +203,12 @@
         order: 3;
         min-width: 0;
         display: grid;
-        grid-template-columns: 56px minmax(0, 1fr) 104px;
+        grid-template-columns: 58px minmax(0, 1fr) 106px;
         gap: 4px;
         overflow: hidden;
+        border: 1px solid #9fc9fa;
+        background: #f8fcff;
+        padding: 3px;
       }
 
       .device-index,
@@ -219,10 +222,10 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #3374ce;
+        background: #1f67b2;
         color: #fff;
         text-align: center;
-        font-size: 18px;
+        font-size: 17px;
         font-weight: 900;
         line-height: 1.08;
       }
@@ -230,7 +233,7 @@
       .device-meta {
         display: grid;
         grid-template-rows: 1fr 22px;
-        background: #fff;
+        background: transparent;
       }
 
       .device-meta strong {
@@ -238,9 +241,10 @@
         align-items: center;
         min-width: 0;
         overflow: hidden;
-        padding: 0 8px;
+        padding: 0 7px;
+        background: #ffffff;
         color: #0d4da5;
-        font-size: 19px;
+        font-size: 18px;
         font-weight: 900;
         line-height: 1;
         white-space: nowrap;
@@ -252,10 +256,10 @@
         align-items: center;
         min-width: 0;
         overflow: hidden;
-        background: #eef7ff;
-        padding: 0 8px;
+        background: #dcefff;
+        padding: 0 7px;
         color: #173f69;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 900;
         line-height: 1;
         white-space: nowrap;
@@ -265,7 +269,7 @@
       .device-value {
         display: grid;
         grid-template-rows: 1fr 18px;
-        background: #1e5c98;
+        background: #184f86;
         color: #fff;
       }
 
@@ -275,7 +279,7 @@
         justify-content: center;
         min-width: 0;
         overflow: hidden;
-        font-size: 25px;
+        font-size: 24px;
         font-weight: 900;
         line-height: 1;
         letter-spacing: -0.05em;
@@ -306,6 +310,7 @@
         display: grid;
         grid-template-rows: 1fr 30px;
         overflow: hidden;
+        border: 1px solid #c7e0f5;
         background: #fff;
       }
 
@@ -348,6 +353,7 @@
         display: grid;
         grid-template-columns: 46px 1fr;
         overflow: hidden;
+        border-left: 3px solid #9fc9fa;
         background: #fff;
       }
 
@@ -356,7 +362,7 @@
         align-items: center;
         justify-content: center;
         overflow: hidden;
-        background: #d9ecff;
+        background: #edf7ff;
         color: #13243a;
         text-align: center;
         font-size: 12px;
@@ -397,15 +403,18 @@
         display: grid;
         grid-template-columns: repeat(4, 1fr);
         gap: 4px;
+        border: 1px solid #b9d8f1;
+        background: #f8fcff;
+        padding: 3px;
       }
 
       .status-cell {
         min-width: 0;
         display: grid;
-        grid-template-columns: 1fr 1.25fr;
+        grid-template-columns: 37px 1fr;
         align-items: center;
         overflow: hidden;
-        background: #fff;
+        background: #ffffff;
       }
 
       .status-cell span {
@@ -414,7 +423,7 @@
         justify-content: center;
         min-width: 0;
         overflow: hidden;
-        background: #eef7ff;
+        background: #e6f2ff;
         color: #173f69;
         align-self: stretch;
         font-size: 8px;
@@ -429,46 +438,46 @@
         justify-content: center;
         min-width: 0;
         overflow: hidden;
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 900;
         line-height: 1;
         letter-spacing: -0.04em;
       }
 
       .status-cell.green {
-        background: #eaf7ef;
+        border-left: 4px solid #4caa70;
       }
 
       .status-cell.green strong {
-        background: #4caa70;
-        color: #fff;
+        background: #eef8f2;
+        color: #27613f;
       }
 
       .status-cell.gray {
-        background: #f2f5f7;
+        border-left: 4px solid #9aa2aa;
       }
 
       .status-cell.gray strong {
-        background: #d4dae0;
+        background: #f2f5f7;
         color: #47525d;
       }
 
       .status-cell.red {
-        background: #fff0f0;
+        border-left: 4px solid #e42222;
       }
 
       .status-cell.red strong {
-        background: #e42222;
-        color: #fff;
+        background: #fff0f0;
+        color: #b91515;
       }
 
       .status-cell.yellow {
-        background: #fff9d9;
+        border-left: 4px solid #e3c700;
       }
 
       .status-cell.yellow strong {
-        background: #fff15a;
-        color: #111;
+        background: #fff9d9;
+        color: #5f5200;
       }
 
       .status-overlay {
