@@ -69,7 +69,7 @@ type UserLevel = 0 | 1 | 2;
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.108";
+const APP_VERSION = "0.1.109";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -1527,21 +1527,21 @@ function PasswordDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
 
   return (
     <DialogShell onClose={onClose} subtitle="원본 프로그램과 동일하게 권한별 설정 화면을 엽니다" title="비밀번호 입력">
-      <form className="grid gap-[14px] bg-[#f6f9fc] p-[18px] max-sm:p-[14px]" onSubmit={submitPassword}>
+      <form className="grid max-h-[calc(100dvh-92px)] gap-[14px] overflow-y-auto bg-[#f6f9fc] p-[18px] max-sm:max-h-[calc(100dvh-80px)] max-sm:gap-[10px] max-sm:p-[12px]" onSubmit={submitPassword}>
         <label className="grid gap-[8px]">
-          <span className="text-[16px] font-black text-[#45657f]">관리자 / 매니저 / 일반 비밀번호</span>
+          <span className="text-[16px] font-black text-[#45657f] max-sm:text-[13px]">관리자 / 매니저 / 일반 비밀번호</span>
           <input
             autoFocus
-            className="h-[58px] rounded-[8px] border border-[#c9deef] bg-white px-[16px] text-center text-[28px] font-black tracking-[0.16em] text-[#173f69] outline-none focus:border-[#237bd0]"
+            className="h-[58px] rounded-[8px] border border-[#c9deef] bg-white px-[16px] text-center text-[28px] font-black tracking-[0.16em] text-[#173f69] outline-none focus:border-[#237bd0] max-sm:h-[48px] max-sm:text-[22px]"
             onChange={(event) => setPassword(event.target.value)}
             type="password"
             value={password}
           />
         </label>
-        <div className={`rounded-[8px] px-[12px] py-[10px] text-center text-[14px] font-black ${message.includes("올바르지") ? "bg-[#fff0f0] text-[#d92525]" : "bg-[#eef7ff] text-[#45657f]"}`}>
+        <div className={`rounded-[8px] px-[12px] py-[10px] text-center text-[14px] font-black max-sm:py-[8px] max-sm:text-[12px] ${message.includes("올바르지") ? "bg-[#fff0f0] text-[#d92525]" : "bg-[#eef7ff] text-[#45657f]"}`}>
           {message}
         </div>
-        <div className="grid h-[54px] grid-cols-2 gap-[10px]">
+        <div className="grid h-[54px] grid-cols-2 gap-[10px] max-sm:h-[46px]">
           <button className="rounded-[8px] border border-[#cfdde8] bg-[#f8fbfd] text-[18px] font-black text-[#45657f]" onClick={onClose} type="button">취소</button>
           <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)]" type="submit">확인</button>
         </div>
