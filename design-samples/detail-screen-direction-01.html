@@ -387,32 +387,74 @@
       }
 
       .status-cell {
+        min-width: 0;
+        display: grid;
+        grid-template-rows: 13px 1fr;
+        overflow: hidden;
+        border: 1px solid #75b4ee;
+        background: #fff;
+      }
+
+      .status-cell span {
         display: flex;
         align-items: center;
         justify-content: center;
+        min-width: 0;
         overflow: hidden;
-        border: 1px solid #75b4ee;
-        font-size: 17px;
+        border-bottom: 1px solid rgba(23, 63, 105, 0.12);
+        background: #eef7ff;
+        color: #173f69;
+        font-size: 9px;
         font-weight: 900;
+        line-height: 1;
+        letter-spacing: -0.04em;
+      }
+
+      .status-cell strong {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        overflow: hidden;
+        font-size: 15px;
+        font-weight: 900;
+        line-height: 1;
+        letter-spacing: -0.04em;
       }
 
       .status-cell.green {
+        border-color: #4caa70;
+      }
+
+      .status-cell.green strong {
         background: #4caa70;
         color: #fff;
       }
 
       .status-cell.gray {
-        background: #bdbdbd;
-        color: #111;
+        border-color: #b8c0c7;
+      }
+
+      .status-cell.gray strong {
+        background: #d4dae0;
+        color: #47525d;
       }
 
       .status-cell.red {
+        border-color: #e42222;
+      }
+
+      .status-cell.red strong {
         background: #e42222;
         color: #fff;
       }
 
       .status-cell.yellow {
-        background: #ffff00;
+        border-color: #e3c700;
+      }
+
+      .status-cell.yellow strong {
+        background: #fff15a;
         color: #111;
       }
 
@@ -658,10 +700,10 @@
                   </div>
                 </div>
                 <div class="status-row">
-                  <div class="status-cell green">리모트</div>
-                  <div class="status-cell red">부 하</div>
-                  <div class="status-cell gray">알 림</div>
-                  <div class="status-cell gray">고 장</div>
+                  <div class="status-cell green"><span>MODE</span><strong>REM</strong></div>
+                  <div class="status-cell red"><span>RUN</span><strong>부하</strong></div>
+                  <div class="status-cell gray"><span>ALARM</span><strong>정상</strong></div>
+                  <div class="status-cell gray"><span>FAULT</span><strong>정상</strong></div>
                 </div>
               </article>
 
@@ -685,10 +727,10 @@
                   </div>
                 </div>
                 <div class="status-row">
-                  <div class="status-cell green">리모트</div>
-                  <div class="status-cell gray">정 지</div>
-                  <div class="status-cell gray">알 림</div>
-                  <div class="status-cell gray">고 장</div>
+                  <div class="status-cell green"><span>MODE</span><strong>REM</strong></div>
+                  <div class="status-cell gray"><span>RUN</span><strong>정지</strong></div>
+                  <div class="status-cell gray"><span>ALARM</span><strong>정상</strong></div>
+                  <div class="status-cell gray"><span>FAULT</span><strong>정상</strong></div>
                 </div>
               </article>
 
@@ -712,10 +754,10 @@
                   </div>
                 </div>
                 <div class="status-row">
-                  <div class="status-cell green">로 컬</div>
-                  <div class="status-cell red">부 하</div>
-                  <div class="status-cell yellow">알 림</div>
-                  <div class="status-cell gray">고 장</div>
+                  <div class="status-cell green"><span>MODE</span><strong>LOC</strong></div>
+                  <div class="status-cell red"><span>RUN</span><strong>부하</strong></div>
+                  <div class="status-cell yellow"><span>ALARM</span><strong>발생</strong></div>
+                  <div class="status-cell gray"><span>FAULT</span><strong>정상</strong></div>
                 </div>
               </article>
 
@@ -742,10 +784,10 @@
                   </div>
                 </div>
                 <div class="status-row">
-                  <div class="status-cell green">리모트</div>
-                  <div class="status-cell gray">정 지</div>
-                  <div class="status-cell gray">알 림</div>
-                  <div class="status-cell red">고 장</div>
+                  <div class="status-cell green"><span>MODE</span><strong>REM</strong></div>
+                  <div class="status-cell gray"><span>RUN</span><strong>정지</strong></div>
+                  <div class="status-cell gray"><span>ALARM</span><strong>정상</strong></div>
+                  <div class="status-cell red"><span>FAULT</span><strong>발생</strong></div>
                 </div>
               </article>
 
@@ -767,10 +809,10 @@
                   </div>
                 </div>
                 <div class="status-row">
-                  <div class="status-cell green">DIO</div>
-                  <div class="status-cell red">운 전</div>
-                  <div class="status-cell gray">알 림</div>
-                  <div class="status-cell gray">고 장</div>
+                  <div class="status-cell green"><span>TYPE</span><strong>DIO</strong></div>
+                  <div class="status-cell red"><span>RUN</span><strong>운전</strong></div>
+                  <div class="status-cell gray"><span>ALARM</span><strong>정상</strong></div>
+                  <div class="status-cell gray"><span>FAULT</span><strong>정상</strong></div>
                 </div>
               </article>
 
@@ -792,10 +834,10 @@
                   </div>
                 </div>
                 <div class="status-row">
-                  <div class="status-cell green">AIO</div>
-                  <div class="status-cell red">운 전</div>
-                  <div class="status-cell gray">알 림</div>
-                  <div class="status-cell gray">고 장</div>
+                  <div class="status-cell green"><span>TYPE</span><strong>AIO</strong></div>
+                  <div class="status-cell red"><span>RUN</span><strong>운전</strong></div>
+                  <div class="status-cell gray"><span>ALARM</span><strong>정상</strong></div>
+                  <div class="status-cell gray"><span>FAULT</span><strong>정상</strong></div>
                 </div>
               </article>
             </div>
