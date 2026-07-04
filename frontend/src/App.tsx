@@ -69,7 +69,7 @@ type UserLevel = 0 | 1 | 2;
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.109";
+const APP_VERSION = "0.1.110";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -2006,11 +2006,11 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
           {isAdmin ? (
             <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
               <PanelHeading eyebrow="FACTORY">공장 정보</PanelHeading>
-              <div className="mt-[12px] grid grid-cols-5 gap-[8px]">
+              <div className="mt-[12px] grid grid-cols-2 gap-[8px] max-sm:grid-cols-1">
                 {factories.map((factory, index) => (
-                  <div key={factory} className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[10px] text-center">
-                    <div className="text-[16px] font-black text-[#173f69]">{factory}</div>
-                    <div className="mt-[7px] text-[13px] font-bold text-[#6f879d]">192.168.0.{10 + index}</div>
+                  <div key={factory} className="grid min-h-[74px] content-center rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[11px] text-center">
+                    <div className="text-[17px] font-black leading-none text-[#173f69]">{factory}</div>
+                    <div className="mt-[9px] break-all text-[14px] font-bold leading-tight text-[#6f879d]">192.168.0.{10 + index}</div>
                   </div>
                 ))}
               </div>
