@@ -68,7 +68,7 @@ type UserLevel = 0 | 1 | 2;
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.101";
+const APP_VERSION = "0.1.102";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -591,7 +591,7 @@ function CompressorCard({ compressor, onOpenDetail }: { compressor: CompressorSt
 function DisconnectBanner() {
   return (
     <div className="flex h-full items-center justify-center bg-[#f1f3f5]">
-      <div className="flex h-[76px] w-full items-center justify-center border-y border-[#b8c0c7] bg-[#9aa2aa] text-[38px] font-black leading-none tracking-[0.28em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+      <div className="flex h-[114px] w-full items-center justify-center border-y border-[#b8c0c7] bg-[#9aa2aa] text-[57px] font-black leading-none tracking-[0.26em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
         DISCONNECT
       </div>
     </div>
