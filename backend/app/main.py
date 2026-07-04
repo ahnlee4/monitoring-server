@@ -46,7 +46,7 @@ from app.schemas import (
     YujinMapValueHistoryOut,
     YujinMapValueOut,
 )
-from app.sms import DisconnectSmsMonitor, TwilioSmsClient
+from app.sms import DisconnectSmsMonitor, SolapiSmsClient
 from app.ws import manager
 from app.yujin_map import build_yujin_map_schema
 
@@ -115,7 +115,7 @@ def on_startup() -> None:
     migrate_legacy_schema()
     seed_devices()
     seed_yujin_map()
-    sms_monitor = DisconnectSmsMonitor(settings, latest_yujin_seen_at, TwilioSmsClient(settings))
+    sms_monitor = DisconnectSmsMonitor(settings, latest_yujin_seen_at, SolapiSmsClient(settings))
     sms_monitor.start()
 
 

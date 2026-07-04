@@ -37,10 +37,10 @@ services:
       SMS_COOLDOWN_SECONDS: ${SMS_COOLDOWN_SECONDS:-600}
       SMS_WATCH_KEYS: ${SMS_WATCH_KEYS:-0000,0002}
       SMS_FACTORY_NAME: ${SMS_FACTORY_NAME:-Monitoring Server}
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
-      TWILIO_FROM: ${TWILIO_FROM:-}
-      TWILIO_TO: ${TWILIO_TO:-}
+      SOLAPI_API_KEY: ${SOLAPI_API_KEY:-}
+      SOLAPI_API_SECRET: ${SOLAPI_API_SECRET:-}
+      SOLAPI_FROM: ${SOLAPI_FROM:-}
+      SOLAPI_TO: ${SOLAPI_TO:-}
     depends_on:
       db:
         condition: service_healthy

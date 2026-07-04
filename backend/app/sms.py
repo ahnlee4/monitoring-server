@@ -1,11 +1,14 @@
+import hashlib
+import hmac
+import json
 import re
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from threading import Event, Thread
+from uuid import uuid4
 
 from app.config import Settings
 
@@ -16,19 +19,19 @@ class SmsSendError(RuntimeError):
     pass
 
 
-class TwilioSmsClient:
+class SolapiSmsClient:
     def __init__(self, settings: Settings) -> None:
-        self.account_sid = settings.twilio_account_sid.strip()
-        self.auth_token = settings.twilio_auth_token.strip()
-        self.from_number = normalize_twilio_phone(settings.twilio_from)
-        self.to_numbers = [normalize_twilio_phone(number) for number in settings.twilio_to_list]
+        self.api_key = settings.solapi_api_key.strip()
+        self.api_secret = settings.solapi_api_secret.strip()
+        self.from_number = normalize_domestic_phone(settings.solapi_from)
+        self.to_numbers = [normalize_domestic_phone(number) for number in settings.solapi_to_list]
 
     @property
     def configured(self) -> bool:
         return all(
             [
-                self.account_sid,
-                self.auth_token,
+                self.api_key,
+                self.api_secret,
                 self.from_number,
                 self.to_numbers,
             ]
@@ -36,38 +39,52 @@ class TwilioSmsClient:
 
     def send(self, content: str) -> None:
         if not self.configured:
-            raise SmsSendError("Twilio SMS settings are incomplete")
+            raise SmsSendError("Solapi SMS settings are incomplete")
 
         for to_number in self.to_numbers:
             self._send_one(to_number, content)
 
     def _send_one(self, to_number: str, content: str) -> None:
-        data = urllib.parse.urlencode(
-            {
-                "From": self.from_number,
-                "To": to_number,
-                "Body": content[:1600],
+        body = {
+            "message": {
+                "to": to_number,
+                "from": self.from_number,
+                "text": content[:2000],
             }
-        ).encode("utf-8")
+        }
+        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
-            f"https://api.twilio.com/2010-04-01/Accounts/{self.account_sid}/Messages.json",
+            "https://api.solapi.com/messages/v4/send",
             data=data,
             method="POST",
             headers={
-                "Authorization": build_basic_auth(self.account_sid, self.auth_token),
-                "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": self._authorization(),
+                "Content-Type": "application/json; charset=utf-8",
             },
         )
 
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
                 if response.status < 200 or response.status >= 300:
-                    raise SmsSendError(f"Twilio SMS failed with HTTP {response.status}")
+                    raise SmsSendError(f"Solapi SMS failed with HTTP {response.status}")
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:500]
-            raise SmsSendError(f"Twilio SMS failed with HTTP {exc.code}: {detail}") from exc
+            raise SmsSendError(f"Solapi SMS failed with HTTP {exc.code}: {detail}") from exc
         except urllib.error.URLError as exc:
-            raise SmsSendError(f"Twilio SMS request failed: {exc.reason}") from exc
+            raise SmsSendError(f"Solapi SMS request failed: {exc.reason}") from exc
+
+    def _authorization(self) -> str:
+        salt = uuid4().hex
+        date = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        signature = hmac.new(
+            self.api_secret.encode("utf-8"),
+            f"{date}{salt}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        return (
+            f"HMAC-SHA256 apiKey={self.api_key}, "
+            f"date={date}, salt={salt}, signature={signature}"
+        )
 
 
 class DisconnectSmsMonitor:
@@ -75,7 +92,7 @@ class DisconnectSmsMonitor:
         self,
         settings: Settings,
         latest_seen_at: Callable[[list[str]], datetime | None],
-        sender: TwilioSmsClient,
+        sender: SolapiSmsClient,
     ) -> None:
         self.settings = settings
         self.latest_seen_at = latest_seen_at
@@ -94,7 +111,7 @@ class DisconnectSmsMonitor:
             print("sms disconnect alert disabled")
             return
         if not self.sender.configured:
-            print("sms disconnect monitor disabled: Twilio settings are incomplete")
+            print("sms disconnect monitor disabled: Solapi settings are incomplete")
             return
 
         self.thread = Thread(target=self._run, name="disconnect-sms-monitor", daemon=True)
@@ -145,22 +162,10 @@ class DisconnectSmsMonitor:
             print(f"sms alert failed: {exc}")
 
 
-def normalize_twilio_phone(value: str) -> str:
-    stripped = re.sub(r"[\s-]", "", value.strip())
-    digits = re.sub(r"\D", "", stripped)
-    if not digits:
-        return ""
-    if stripped.startswith("+"):
-        return f"+{digits}"
-    if digits.startswith("00"):
-        return f"+{digits[2:]}"
-    if digits.startswith("0"):
-        return f"+82{digits[1:]}"
-    return f"+{digits}"
-
-
-def build_basic_auth(account_sid: str, auth_token: str) -> str:
-    import base64
-
-    token = base64.b64encode(f"{account_sid}:{auth_token}".encode("utf-8")).decode("ascii")
-    return f"Basic {token}"
+def normalize_domestic_phone(value: str) -> str:
+    digits = re.sub(r"\D", "", value.strip())
+    if digits.startswith("82") and not digits.startswith("820"):
+        return f"0{digits[2:]}"
+    if digits.startswith("820"):
+        return f"0{digits[3:]}"
+    return digits

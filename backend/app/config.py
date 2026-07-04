@@ -21,10 +21,10 @@ class Settings(BaseSettings):
     sms_cooldown_seconds: float = 600.0
     sms_watch_keys: str = "0000,0002"
     sms_factory_name: str = "Monitoring Server"
-    twilio_account_sid: str = ""
-    twilio_auth_token: str = ""
-    twilio_from: str = ""
-    twilio_to: str = ""
+    solapi_api_key: str = ""
+    solapi_api_secret: str = ""
+    solapi_from: str = ""
+    solapi_to: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -39,8 +39,8 @@ class Settings(BaseSettings):
         return [item.strip().upper() for item in self.sms_watch_keys.split(",") if item.strip()]
 
     @property
-    def twilio_to_list(self) -> list[str]:
-        return [item.strip() for item in self.twilio_to.split(",") if item.strip()]
+    def solapi_to_list(self) -> list[str]:
+        return [item.strip() for item in self.solapi_to.split(",") if item.strip()]
 
 
 @lru_cache
