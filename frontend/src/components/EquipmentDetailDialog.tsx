@@ -126,15 +126,15 @@ export function EquipmentDetailDialog({
   };
 
   return (
-    <div className="absolute inset-0 z-[55] flex items-center justify-center bg-black/55 p-[16px]">
-      <section className="grid h-[760px] w-[576px] grid-rows-[50px_1fr_auto_44px] overflow-hidden border border-[#75b4ee] bg-[#eaf4fd] shadow-[0_18px_40px_rgba(14,39,65,0.38)]">
-        <header className="grid grid-cols-[1fr_48px] border-b border-[#75b4ee] bg-white">
-          <div className="grid grid-cols-4 gap-[1px] bg-[#75b4ee]">
+    <div className="absolute inset-0 z-[55] flex items-center justify-center bg-black/60 p-[16px]">
+      <section className="grid h-[760px] w-[576px] grid-rows-[56px_1fr_auto_48px] overflow-hidden rounded-[12px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_14px_34px_rgba(15,43,72,0.32)]">
+        <header className="grid grid-cols-[1fr_48px] border-b border-[#dbe7f1] bg-white px-[8px] py-[7px]">
+          <div className="grid grid-cols-4 rounded-[8px] border border-[#d3e7f8] bg-[#edf6fe] p-[4px]">
             {TABS.map((tab) => (
               <button
                 key={tab.key}
-                className={`text-[16px] font-black ${
-                  activeTab === tab.key ? "bg-[#237bd0] text-white" : "bg-[#ffffff] text-[#237bd0]"
+                className={`rounded-[6px] text-[16px] font-black transition-colors ${
+                  activeTab === tab.key ? "bg-[#237bd0] text-white shadow-[0_4px_10px_rgba(35,123,208,0.28)]" : "text-[#3e6488]"
                 }`}
                 onClick={() => setActiveTab(tab.key)}
                 type="button"
@@ -145,7 +145,7 @@ export function EquipmentDetailDialog({
           </div>
           <button
             aria-label="닫기"
-            className="flex items-center justify-center border-l border-[#75b4ee] bg-white text-[30px] font-black leading-none text-[#45657f]"
+            className="ml-[8px] flex items-center justify-center rounded-[8px] border border-[#cfdde8] bg-[#f3f7fa] text-[28px] font-black leading-none text-[#45657f] transition-colors hover:bg-[#e8f0f6]"
             onClick={onClose}
             type="button"
           >
@@ -153,13 +153,13 @@ export function EquipmentDetailDialog({
           </button>
         </header>
 
-        <div className="min-h-0 overflow-hidden p-[8px]">
+        <div className="min-h-0 overflow-hidden p-[12px]">
           {activeTab === "error" ? <ErrorTab items={errorItems} compressorName={compressor.name} /> : null}
           {activeTab === "power" ? <PowerTab /> : null}
           {activeTab === "setting" || activeTab === "status" ? <MetricGrid items={visibleItems} /> : null}
         </div>
 
-        <div className="border-t border-[#75b4ee] bg-white px-[8px] py-[6px]">
+        <div className="border-t border-[#dbe7f1] bg-white px-[12px] py-[10px]">
           {activeTab === "setting" ? (
             <OperatePanel
               commandBusy={commandBusy}
@@ -174,7 +174,7 @@ export function EquipmentDetailDialog({
           )}
         </div>
 
-        <button className="bg-[#237bd0] text-[22px] font-black text-white disabled:opacity-45" onClick={onClose} type="button">
+        <button className="m-[8px] mt-0 rounded-[8px] bg-[#237bd0] text-[20px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)] disabled:opacity-45" onClick={onClose} type="button">
           닫기
         </button>
       </section>
@@ -222,7 +222,7 @@ function PowerTab() {
 
 function MetricGrid({ items }: { items: DetailItem[] }) {
   return (
-    <div className="grid h-full auto-rows-[76px] grid-cols-2 gap-[6px] overflow-y-auto pr-[2px]">
+    <div className="grid h-full auto-rows-[82px] grid-cols-2 gap-[9px] overflow-y-auto rounded-[10px] border border-[#d9e6f0] bg-white p-[12px] pr-[8px]">
       {items.map((item) => (
         <MetricCard key={item.label} item={item} />
       ))}
@@ -234,19 +234,15 @@ function MetricCard({ item }: { item: DetailItem }) {
   const valueParts = splitValueUnit(item.value);
 
   return (
-    <div className="grid min-h-0 grid-rows-[30px_1fr] overflow-hidden border border-[#75b4ee] bg-white">
-      <div
-        className={`flex items-center justify-center px-[6px] text-center text-[15px] font-black leading-none ${
-          item.alarm ? "bg-[#e42626] text-white" : "bg-[#3374ce] text-white"
-        }`}
-      >
+    <div className={`grid min-h-0 grid-rows-[24px_1fr] rounded-[8px] border bg-[#f8fbfd] p-[10px] ${item.alarm ? "border-[#f1b2b2]" : "border-[#d9e6f0]"}`}>
+      <div className={`flex items-center text-[14px] font-black leading-none ${item.alarm ? "text-[#d92525]" : "text-[#6f879d]"}`}>
         <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{item.label}</span>
       </div>
-      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_56px] border-t border-[#75b4ee]">
-        <div className={`flex min-w-0 items-center justify-end px-[8px] text-right text-[22px] font-black leading-none ${item.alarm ? "text-[#e42626]" : "text-[#173f69]"}`}>
+      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_48px] items-end">
+        <div className={`flex min-w-0 items-end justify-end text-right text-[24px] font-black leading-none ${item.alarm ? "text-[#d92525]" : "text-[#173f69]"}`}>
           <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{valueParts.value}</span>
         </div>
-        <div className={`flex items-center justify-start px-[4px] text-[14px] font-black leading-none ${item.alarm ? "text-[#e42626]" : "text-[#173f69]"}`}>
+        <div className={`flex items-end justify-start pb-[1px] pl-[5px] text-[13px] font-black leading-none ${item.alarm ? "text-[#d92525]" : "text-[#6f879d]"}`}>
           {valueParts.unit}
         </div>
       </div>
@@ -270,26 +266,18 @@ function OperatePanel({
   repairActive: boolean;
 }) {
   return (
-    <div className="grid gap-[6px]">
-      <div className="grid grid-cols-[1fr_150px] gap-[8px]">
-        <div className="flex items-center justify-center border border-[#75b4ee] bg-[#eaf4fd] px-[8px] text-[18px] font-black text-[#237bd0]">
-          정비 장비 설정 / 해제
-        </div>
+    <div className="grid gap-[8px]">
+      <div className="grid h-[58px] grid-cols-3 gap-[9px]">
         <button
-          className="border border-[#237bd0] bg-[#eef7ff] text-[20px] font-black text-[#173f69] disabled:opacity-45"
+          className="rounded-[8px] border border-[#237bd0] bg-[#eef7ff] text-[20px] font-black text-[#173f69] shadow-[0_5px_11px_rgba(35,123,208,0.12)] disabled:opacity-45"
           disabled={commandBusy || !connected}
           onClick={onToggleRepair}
           type="button"
         >
           {repairActive ? "정비 해제" : "정비 설정"}
         </button>
-      </div>
-      <div className="grid grid-cols-[1fr_150px_150px] gap-[8px]">
-        <div className="flex items-center justify-center border border-[#75b4ee] bg-[#eaf4fd] px-[8px] text-[18px] font-black text-[#237bd0]">
-          OPERATE / STOP BUTTON
-        </div>
         <button
-          className="bg-[#d92525] text-[22px] font-black text-white disabled:opacity-45"
+          className="rounded-[8px] bg-[#d92525] text-[23px] font-black text-white shadow-[0_5px_11px_rgba(208,31,38,0.18)] disabled:opacity-45"
           disabled={commandBusy || !connected}
           onClick={() => onOperate(true)}
           type="button"
@@ -297,7 +285,7 @@ function OperatePanel({
           운전
         </button>
         <button
-          className="bg-[#667380] text-[22px] font-black text-white disabled:opacity-45"
+          className="rounded-[8px] bg-[#667380] text-[23px] font-black text-white shadow-[0_5px_11px_rgba(70,82,94,0.14)] disabled:opacity-45"
           disabled={commandBusy || !connected}
           onClick={() => onOperate(false)}
           type="button"
@@ -305,7 +293,7 @@ function OperatePanel({
           정지
         </button>
       </div>
-      <div className="h-[18px] truncate text-[12px] font-black text-[#237bd0]">{commandStatus}</div>
+      <div className="h-[20px] truncate rounded-[7px] bg-[#eef7ff] px-[10px] text-[12px] font-black leading-[20px] text-[#237bd0]">{commandStatus}</div>
     </div>
   );
 }
@@ -325,7 +313,7 @@ function splitValueUnit(text: string) {
 
 function EmptyTab({ description, title }: { description: string; title: string }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center text-center">
+    <div className="flex h-full flex-col items-center justify-center rounded-[10px] border border-[#d9e6f0] bg-white text-center">
       <div className="text-[28px] font-black text-[#173f69]">{title}</div>
       <div className="mt-[10px] text-[15px] font-black text-[#6f879d]">{description}</div>
     </div>
