@@ -249,7 +249,7 @@ function MobileCompressorCard({
 }) {
   return (
     <button
-      className="grid min-h-0 w-full snap-start scroll-mt-0 grid-rows-[auto_1fr_auto] gap-[clamp(7px,1dvh,10px)] rounded-[13px] border border-[#d9e6f0] bg-white p-[clamp(10px,1.4dvh,14px)] text-left shadow-[0_8px_20px_rgba(18,54,88,0.08)]"
+      className="grid min-h-0 w-full snap-start scroll-mt-0 grid-rows-[auto_minmax(0,0.82fr)_auto] gap-[clamp(7px,1dvh,10px)] rounded-[13px] border border-[#d9e6f0] bg-white p-[clamp(10px,1.4dvh,14px)] text-left shadow-[0_8px_20px_rgba(18,54,88,0.08)]"
       onClick={() => onOpenDetail(compressor.id)}
       type="button"
     >
@@ -325,13 +325,13 @@ function MobileDetailCard({
 
 function MobileValue({ label, prominent = false, unit, value }: { label: string; prominent?: boolean; unit: string; value: string }) {
   const containerClass = prominent
-    ? "grid h-full min-h-0 grid-rows-[auto_1fr] rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[clamp(9px,1.4dvh,14px)] py-[clamp(7px,1dvh,10px)]"
+    ? "grid h-full min-h-0 content-start rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[clamp(9px,1.4dvh,14px)] py-[clamp(7px,1dvh,10px)]"
     : "rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[clamp(8px,1.1dvh,11px)] py-[clamp(6px,1dvh,9px)]";
   const labelClass = prominent
     ? "text-[clamp(13px,1.8dvh,16px)] font-black text-[#6f879d]"
     : "text-[clamp(11px,1.4dvh,13px)] font-black text-[#6f879d]";
   const valueRowClass = prominent
-    ? "flex min-h-0 items-end justify-end gap-[5px] text-right"
+    ? "mt-[clamp(5px,0.7dvh,7px)] flex min-h-0 items-end justify-end gap-[5px] text-right"
     : "mt-[clamp(3px,0.6dvh,5px)] flex items-end justify-end gap-[4px] text-right";
   const valueClass = prominent
     ? "min-w-0 truncate text-[clamp(24px,3.6dvh,32px)] font-black leading-none text-[#173f69]"
