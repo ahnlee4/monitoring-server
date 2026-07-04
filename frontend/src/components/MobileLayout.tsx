@@ -262,11 +262,11 @@ function MobileCompressorCard({
           {compressor.running ? "운전" : "정지"}
         </span>
       </div>
-      <div className="mt-[clamp(8px,1.1dvh,11px)] grid min-h-0 grid-cols-2 gap-[clamp(6px,0.9dvh,9px)]">
-        <MobileValue label="압력" unit="bar" value={formatNumber(compressor.pressure, 1)} />
-        <MobileValue label="온도" unit="℃" value={formatNumber(compressor.temperature, 1)} />
-        <MobileValue label={compressor.inverter ? "제어압력" : "무부하"} unit="bar" value={formatNumber(compressor.inverter ? compressor.controlPressure : compressor.noLoadPressure, 1)} />
-        <MobileValue label={compressor.inverter ? "회전수" : "부하"} unit={compressor.inverter ? "rpm" : "bar"} value={compressor.inverter ? formatInteger(compressor.rpm) : formatNumber(compressor.loadPressure, 1)} />
+      <div className="mt-[clamp(8px,1.1dvh,11px)] grid h-full min-h-0 grid-cols-2 grid-rows-2 gap-[clamp(6px,0.9dvh,9px)]">
+        <MobileValue prominent label="압력" unit="bar" value={formatNumber(compressor.pressure, 1)} />
+        <MobileValue prominent label="온도" unit="℃" value={formatNumber(compressor.temperature, 1)} />
+        <MobileValue prominent label={compressor.inverter ? "제어압력" : "무부하"} unit="bar" value={formatNumber(compressor.inverter ? compressor.controlPressure : compressor.noLoadPressure, 1)} />
+        <MobileValue prominent label={compressor.inverter ? "회전수" : "부하"} unit={compressor.inverter ? "rpm" : "bar"} value={compressor.inverter ? formatInteger(compressor.rpm) : formatNumber(compressor.loadPressure, 1)} />
       </div>
       <div className="mt-[clamp(7px,1dvh,10px)] grid grid-cols-3 gap-[clamp(6px,0.9dvh,9px)]">
         <MobileBadge tone="green">{compressor.local ? "LOCAL" : "REMOTE"}</MobileBadge>
@@ -317,13 +317,29 @@ function MobileDetailCard({
   );
 }
 
-function MobileValue({ label, unit, value }: { label: string; unit: string; value: string }) {
+function MobileValue({ label, prominent = false, unit, value }: { label: string; prominent?: boolean; unit: string; value: string }) {
+  const containerClass = prominent
+    ? "grid h-full min-h-0 grid-rows-[auto_1fr] rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[clamp(10px,1.6dvh,16px)] py-[clamp(8px,1.2dvh,12px)]"
+    : "rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[clamp(8px,1.1dvh,11px)] py-[clamp(6px,1dvh,9px)]";
+  const labelClass = prominent
+    ? "text-[clamp(13px,2.1dvh,18px)] font-black text-[#6f879d]"
+    : "text-[clamp(11px,1.4dvh,13px)] font-black text-[#6f879d]";
+  const valueRowClass = prominent
+    ? "flex min-h-0 items-center justify-end gap-[5px] text-right"
+    : "mt-[clamp(3px,0.6dvh,5px)] flex items-end justify-end gap-[4px] text-right";
+  const valueClass = prominent
+    ? "min-w-0 truncate text-[clamp(26px,4.2dvh,38px)] font-black leading-none text-[#173f69]"
+    : "min-w-0 truncate text-[clamp(18px,2.4dvh,23px)] font-black leading-none text-[#173f69]";
+  const unitClass = prominent
+    ? "shrink-0 pb-[2px] text-[clamp(12px,1.8dvh,16px)] font-black text-[#6f879d]"
+    : "shrink-0 pb-[1px] text-[clamp(10px,1.3dvh,12px)] font-black text-[#6f879d]";
+
   return (
-    <div className="rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[clamp(8px,1.1dvh,11px)] py-[clamp(6px,1dvh,9px)]">
-      <div className="text-[clamp(11px,1.4dvh,13px)] font-black text-[#6f879d]">{label}</div>
-      <div className="mt-[clamp(3px,0.6dvh,5px)] flex items-end justify-end gap-[4px] text-right">
-        <span className="min-w-0 truncate text-[clamp(18px,2.4dvh,23px)] font-black leading-none text-[#173f69]">{value}</span>
-        <span className="shrink-0 pb-[1px] text-[clamp(10px,1.3dvh,12px)] font-black text-[#6f879d]">{unit}</span>
+    <div className={containerClass}>
+      <div className={labelClass}>{label}</div>
+      <div className={valueRowClass}>
+        <span className={valueClass}>{value}</span>
+        <span className={unitClass}>{unit}</span>
       </div>
     </div>
   );
