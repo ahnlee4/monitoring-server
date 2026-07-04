@@ -335,6 +335,11 @@ def yujin_live_value_out(definition: dict, live: tuple[str, datetime, str]) -> Y
     )
 
 
+def yujin_heartbeat_value_out(definition: dict, heartbeat: tuple[datetime, str]) -> YujinMapValueOut:
+    updated_at, source = heartbeat
+    return yujin_live_value_out(definition, (str(definition["default_value"]), updated_at, source))
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "service": "backend", "timestamp": datetime.now(timezone.utc)}
@@ -758,8 +763,13 @@ def yujin_live_map_values(
     definitions = yujin_schema_index()
     rows: list[YujinMapValueOut] = []
     with YUJIN_LIVE_MAP_LOCK:
-        live_items = [(key, YUJIN_LIVE_MAP[key]) for key in sorted(YUJIN_LIVE_MAP.keys())]
-    for key, live in live_items:
+        live_items = [(key, YUJIN_LIVE_MAP[key], YUJIN_MAP_HEARTBEATS.get(key)) for key in sorted(YUJIN_LIVE_MAP.keys())]
+        heartbeat_items = [
+            (key, None, heartbeat)
+            for key, heartbeat in sorted(YUJIN_MAP_HEARTBEATS.items())
+            if key not in YUJIN_LIVE_MAP
+        ]
+    for key, live, heartbeat in [*live_items, *heartbeat_items]:
         definition = definitions.get(key)
         if not definition:
             continue
@@ -767,7 +777,7 @@ def yujin_live_map_values(
             continue
         if key_prefix and not key.startswith(key_prefix.upper()):
             continue
-        rows.append(yujin_live_value_out(definition, live))
+        rows.append(yujin_live_value_out(definition, live) if live else yujin_heartbeat_value_out(definition, heartbeat))
         if len(rows) >= limit:
             break
     return rows
