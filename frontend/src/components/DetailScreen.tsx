@@ -1,5 +1,4 @@
 import type { YujinMapValue } from "../types";
-import type { ReactNode } from "react";
 
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const LIVE_VALUE_MAX_AGE_MS = 12_000;
@@ -105,57 +104,47 @@ function DetailCompressorCard({
   const runText = getRunText(compressor);
   const modeText = compressor.local ? "LOC" : "REM";
   const pressureText = compressor.connected ? formatScaledValue(compressor.pressure, "bar") : "--- bar";
+  const machineType = compressor.inverter ? "INVERTER" : "STANDARD";
 
   return (
     <button
-      className="grid min-h-0 grid-rows-[78px_1fr] overflow-hidden rounded-[5px] border border-[#82b8ec] bg-[#f9fcff] p-[4px] text-left shadow-[inset_0_0_0_1px_#ffffff]"
+      className="grid min-h-0 grid-rows-[42px_1fr_34px] gap-[3px] overflow-hidden border border-[#75b4ee] bg-[#d8ecff] p-[3px] text-left shadow-[inset_0_0_0_1px_#ffffff]"
       onClick={() => onOpenDetail(compressor.id)}
       type="button"
     >
-      <div className="grid grid-cols-[68px_1fr] gap-[4px]">
-        <StatusColumn modeText={modeText} runText={runText} loadText={getLoadText(compressor)} fault={compressor.fault} connected={compressor.connected} />
-        <div className="grid grid-rows-[26px_1fr] gap-[4px]">
-          <div className="flex min-w-0 items-center justify-start overflow-hidden rounded-[3px] border border-[#1f65ad] bg-[#2f78c7] px-[9px] text-[16px] font-black leading-none text-white">
-            <span className="truncate">{compressor.name} ({compressor.model})</span>
-          </div>
-          <div className="grid grid-cols-[1fr_54px] overflow-hidden rounded-[6px] border border-[#1e5c98] bg-white">
-            <div className="flex items-center justify-end bg-[#2874bf] px-[8px] text-[30px] font-black leading-none tracking-[-0.04em] text-white">
-              {pressureText.replace(" bar", "")}
-            </div>
-            <div className="flex items-end justify-center bg-[#1e5c98] pb-[8px] text-[14px] font-black leading-none text-white">
-              {pressureText.includes("bar") ? "bar" : ""}
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="grid min-h-0 grid-cols-[1fr_98px] gap-[4px] pt-[4px]">
-        <div className="grid min-h-0 grid-rows-[1fr_28px] overflow-hidden rounded-[4px] border border-[#c8e0f4] bg-white">
+      <DeviceSummary indexLabel={compressor.name} title={compressor.model} value={pressureText} />
+      <div className="grid min-h-0 grid-cols-[1fr_126px] gap-[3px] overflow-hidden">
+        <div className="grid min-h-0 grid-rows-[1fr_30px] overflow-hidden border border-[#75b4ee] bg-white">
           <div className="relative flex min-h-0 items-center justify-center overflow-hidden bg-[#ffffff]">
             <img src={imageSrc} alt="" className="max-h-full max-w-full object-contain" />
             {!compressor.connected ? <StatusOverlay src="/failure.png" label="FAIL" /> : null}
             {compressor.connected && compressor.fault ? <StatusOverlay src="/fault.png" label="FAULT" /> : null}
           </div>
-          <div className="flex items-center justify-center border-t border-[#d9eafa] bg-[#eef7ff] text-[17px] font-black text-[#173f69]">
-            {compressor.inverter ? "INVERTER" : "STANDARD"}
-          </div>
+          <div className="flex items-center justify-center border-t border-[#75b4ee] bg-[#eef7ff] text-[16px] font-black text-[#173f69]">{machineType}</div>
         </div>
-        <div className="grid content-start gap-[3px]">
-          <SideMetric label="온도" value={compressor.connected ? formatScaledValue(compressor.temperature, "℃") : "--- ℃"} />
+        <div className="grid grid-rows-4 gap-[3px] overflow-hidden">
+          <DetailMetric label="온도" value={compressor.connected ? formatScaledValue(compressor.temperature, "℃") : "--- ℃"} />
           {compressor.inverter ? (
             <>
-              <SideMetric label="제어압력" value={formatScaledValue(compressor.controlPressure, "bar")} />
-              <SideMetric label="회전수" value={formatIntegerValue(compressor.rpm, "rpm")} />
+              <DetailMetric label="제어" value={formatScaledValue(compressor.controlPressure, "bar")} />
+              <DetailMetric label="회전" value={formatIntegerValue(compressor.rpm, "rpm")} />
             </>
           ) : (
             <>
-              <SideMetric label="무부하" value={formatScaledValue(compressor.noLoadPressure, "bar")} />
-              <SideMetric label="부하" value={formatScaledValue(compressor.loadPressure, "bar")} />
+              <DetailMetric label="무부하" value={formatScaledValue(compressor.noLoadPressure, "bar")} />
+              <DetailMetric label="부하" value={formatScaledValue(compressor.loadPressure, "bar")} />
             </>
           )}
-          <SideMetric label="운전시간" value={formatIntegerValue(compressor.totalHours, "hr")} />
-          <AlarmBadge alarm={compressor.alarm} fault={compressor.fault} />
+          <DetailMetric label="시간" value={formatIntegerValue(compressor.totalHours, "hr")} />
         </div>
       </div>
+      <StatusRow
+        alarm={compressor.alarm}
+        connected={compressor.connected}
+        fault={compressor.fault}
+        modeText={modeText}
+        runText={runText}
+      />
     </button>
   );
 }
@@ -168,71 +157,75 @@ function AuxiliaryDeviceCard({ device }: { device: AuxiliaryDevice }) {
       : `${device.measuredValue.toFixed(device.measuredUnit === "bar" ? 2 : 1)} ${device.measuredUnit}`;
 
   return (
-    <article className="grid min-h-0 grid-rows-[78px_1fr] overflow-hidden rounded-[5px] border border-[#82b8ec] bg-[#f9fcff] p-[4px] shadow-[inset_0_0_0_1px_#ffffff]">
-      <div className="grid grid-cols-[68px_1fr] gap-[4px]">
-        <StatusColumn modeText={device.modeText} runText={device.runText} loadText={device.loadText} fault={device.fault} connected={device.connected} />
-        <div className="grid grid-rows-[26px_1fr] gap-[4px]">
-          <div className="flex items-center justify-center rounded-[3px] border border-[#1f65ad] bg-[#2f78c7] px-[10px] text-[16px] font-black leading-none text-white">
-            {device.name}
+    <article className="grid min-h-0 grid-rows-[42px_1fr_34px] gap-[3px] overflow-hidden border border-[#75b4ee] bg-[#d8ecff] p-[3px] shadow-[inset_0_0_0_1px_#ffffff]">
+      <DeviceSummary indexLabel={device.category.toUpperCase()} title={device.name} value={valueText} />
+      <div className="grid min-h-0 grid-cols-[1fr_126px] gap-[3px] overflow-hidden">
+        <div className="grid min-h-0 grid-rows-[1fr_30px] overflow-hidden border border-[#75b4ee] bg-white">
+          <div className="relative flex min-h-0 items-center justify-center overflow-hidden bg-[#ffffff]">
+            <img src={device.imageSrc} alt="" className="max-h-full max-w-full object-contain" />
+            {!device.connected ? <StatusOverlay src="/failure.png" label="FAIL" /> : null}
+            {device.connected && device.fault ? <StatusOverlay src="/fault.png" label="FAULT" /> : null}
           </div>
-          <div className="flex items-center justify-center rounded-[6px] border border-[#1e5c98] bg-[#2874bf] text-[28px] font-black leading-none tracking-[-0.04em] text-white">
-            <span className="truncate px-[4px]">{valueText}</span>
-          </div>
+          <div className="flex items-center justify-center border-t border-[#75b4ee] bg-[#eef7ff] text-[16px] font-black text-[#173f69]">{device.type}</div>
+        </div>
+        <div className="grid grid-rows-3 gap-[3px] overflow-hidden">
+          <DetailMetric label={device.measuredUnit === "bar" ? "압력" : "온도"} value={valueText} />
+          <DetailMetric label="운전" value={device.runText} />
+          <DetailMetric label="통신" value={device.connected ? "정상" : "FAIL"} />
         </div>
       </div>
-      <div className="grid min-h-0 grid-rows-[1fr_32px] overflow-hidden rounded-[4px] border border-[#c8e0f4] bg-white mt-[4px]">
-        <div className="relative flex min-h-0 items-center justify-center overflow-hidden bg-[#ffffff]">
-          <img src={device.imageSrc} alt="" className="max-h-full max-w-full object-contain" />
-          {!device.connected ? <StatusOverlay src="/failure.png" label="FAIL" /> : null}
-          {device.connected && device.fault ? <StatusOverlay src="/fault.png" label="FAULT" /> : null}
-        </div>
-        <div className="flex items-center justify-center border-t border-[#d9eafa] bg-[#eef7ff] text-[19px] font-black text-[#173f69]">{device.type}</div>
-      </div>
+      <StatusRow
+        alarm={false}
+        connected={device.connected}
+        fault={device.fault}
+        modeText={device.modeText}
+        runText={device.runText}
+      />
     </article>
   );
 }
 
-function StatusColumn({
-  connected,
-  fault,
-  loadText,
-  modeText,
-  runText,
+function DeviceSummary({
+  indexLabel,
+  title,
+  value,
 }: {
-  connected: boolean;
-  fault: boolean;
-  loadText?: string;
-  modeText: string;
-  runText: string;
+  indexLabel: string;
+  title: string;
+  value: string;
 }) {
+  const valueParts = splitValueUnit(value);
+
   return (
-    <div className="grid auto-rows-[24px] gap-[2px]">
-      <StatusPill tone="label">STATUS</StatusPill>
-      <StatusPill tone="mode">{modeText}</StatusPill>
-      <StatusPill tone={!connected || fault ? "danger" : runText === "RUN" ? "run" : "ready"}>{runText}</StatusPill>
-      {loadText ? <StatusPill tone={loadText === "부하" ? "danger" : "warning"}>{loadText}</StatusPill> : null}
+    <div className="grid min-w-0 grid-cols-[62px_minmax(0,1fr)_104px] gap-[3px] overflow-hidden">
+      <div className="flex items-center justify-center border border-[#75b4ee] bg-[#3374ce] text-[18px] font-black leading-none text-white">
+        {indexLabel}
+      </div>
+      <div className="flex min-w-0 items-center justify-center overflow-hidden border border-[#75b4ee] bg-[#b9dcff] px-[6px] text-[17px] font-black leading-none text-[#0d4da5]">
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{title}</span>
+      </div>
+      <div className="flex items-center justify-center gap-[4px] overflow-hidden border border-[#1e5c98] bg-[#1e5c98] px-[5px] text-white">
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[23px] font-black leading-none">
+          {valueParts.value}
+        </span>
+        {valueParts.unit ? <span className="shrink-0 pt-[8px] text-[10px] font-black leading-none">{valueParts.unit}</span> : null}
+      </div>
     </div>
   );
 }
 
-function StatusPill({ children, tone }: { children: ReactNode; tone: "label" | "mode" | "ready" | "run" | "warning" | "danger" }) {
-  const className = {
-    label: "bg-[#9fc9fa] text-black",
-    mode: "bg-[#9bd46f] text-black",
-    ready: "bg-[#d7edf8] text-black",
-    run: "bg-[#f05b5b] text-black",
-    warning: "bg-[#ffd84b] text-black",
-    danger: "bg-[#e33131] text-white",
-  }[tone];
+function DetailMetric({ label, value }: { label: string; value: string }) {
+  const valueParts = splitValueUnit(value);
 
-  return <div className={`flex items-center justify-center rounded-[2px] border border-[#6faee7] text-[14px] font-black leading-none ${className}`}>{children}</div>;
-}
-
-function SideMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid min-h-[33px] grid-rows-[14px_1fr] overflow-hidden rounded-[3px] border border-[#a7cdef] bg-white">
-      <div className="flex items-center justify-center bg-[#e8f3fd] text-[11px] font-black leading-none text-[#1b5c96]">{label}</div>
-      <div className="flex items-center justify-center px-[2px] text-center text-[13px] font-black leading-none text-[#111827]">{value}</div>
+    <div className="grid min-h-0 grid-cols-[46px_minmax(0,1fr)] overflow-hidden border border-[#75b4ee] bg-white">
+      <div className="flex items-center justify-center border-r border-[#75b4ee] bg-[#b0d2ff] px-[2px] text-[10px] font-black leading-none text-[#174f88]">
+        {label}
+      </div>
+      <div className="flex min-w-0 items-center justify-end gap-[3px] overflow-hidden px-[6px] text-[#101827]">
+        <span className="min-w-0 overflow-hidden text-right text-[18px] font-black leading-none">{valueParts.value}</span>
+        {valueParts.unit ? <span className="shrink-0 pt-[7px] text-[10px] font-black leading-none text-[#4f6173]">{valueParts.unit}</span> : null}
+      </div>
     </div>
   );
 }
@@ -241,9 +234,51 @@ function StatusOverlay({ label, src }: { label: string; src: string }) {
   return <img src={src} alt={label} className="absolute left-[12px] right-[12px] top-1/2 h-[38px] -translate-y-1/2 object-fill" />;
 }
 
-function AlarmBadge({ alarm, fault }: { alarm: boolean; fault: boolean }) {
-  if (!alarm && !fault) return <SideMetric label="상태" value="정상" />;
-  return <SideMetric label="상태" value={fault ? "고장" : "알람"} />;
+function StatusRow({
+  alarm,
+  connected,
+  fault,
+  modeText,
+  runText,
+}: {
+  alarm: boolean;
+  connected: boolean;
+  fault: boolean;
+  modeText: string;
+  runText: string;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-[3px] overflow-hidden">
+      <StatusCell tone={connected ? "green" : "gray"}>{connected ? modeText : "---"}</StatusCell>
+      <StatusCell tone={!connected || fault ? "red" : runText === "RUN" ? "red" : "gray"}>{runText}</StatusCell>
+      <StatusCell tone={alarm ? "yellow" : "gray"}>{alarm ? "알림" : "정상"}</StatusCell>
+      <StatusCell tone={!connected || fault ? "red" : "gray"}>{!connected ? "FAIL" : fault ? "고장" : "정상"}</StatusCell>
+    </div>
+  );
+}
+
+function StatusCell({ children, tone }: { children: string; tone: "green" | "gray" | "red" | "yellow" }) {
+  const className = {
+    green: "bg-[#4eaa70] text-white",
+    gray: "bg-[#c4ccd4] text-[#111827]",
+    red: "bg-[#e42626] text-white",
+    yellow: "bg-[#ffe642] text-[#111827]",
+  }[tone];
+
+  return <div className={`flex items-center justify-center border border-[#75b4ee] text-[17px] font-black leading-none ${className}`}>{children}</div>;
+}
+
+function splitValueUnit(text: string) {
+  const value = text.trim();
+  const units = new Set(["bar", "℃", "rpm", "hr", "min", "ea"]);
+  const parts = value.split(/\s+/);
+  const unit = parts.at(-1) ?? "";
+
+  if (parts.length > 1 && units.has(unit)) {
+    return { value: parts.slice(0, -1).join(" "), unit };
+  }
+
+  return { value, unit: "" };
 }
 
 function getCompressorImage(compressor: DetailCompressor) {
@@ -257,13 +292,6 @@ function getRunText(compressor: DetailCompressor) {
   if (!compressor.connected) return "FAIL";
   if (compressor.fault) return "FAULT";
   return compressor.running ? "RUN" : "RDY";
-}
-
-function getLoadText(compressor: DetailCompressor) {
-  if (!compressor.connected || compressor.fault || !compressor.running) return undefined;
-  if (compressor.inverter) return "부하";
-  if (compressor.loadPressure > 0 && compressor.pressure >= compressor.loadPressure) return "부하";
-  return "무부하";
 }
 
 function buildAuxiliaryDevices(values: Record<string, YujinMapValue>) {
