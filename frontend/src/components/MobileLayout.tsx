@@ -249,7 +249,7 @@ function MobileCompressorCard({
 }) {
   return (
     <button
-      className="grid min-h-0 w-full snap-start scroll-mt-0 grid-rows-[auto_1fr_auto] rounded-[13px] border border-[#d9e6f0] bg-white p-[clamp(10px,1.4dvh,14px)] text-left shadow-[0_8px_20px_rgba(18,54,88,0.08)]"
+      className="grid min-h-0 w-full snap-start scroll-mt-0 grid-rows-[auto_1fr_auto] gap-[clamp(7px,1dvh,10px)] rounded-[13px] border border-[#d9e6f0] bg-white p-[clamp(10px,1.4dvh,14px)] text-left shadow-[0_8px_20px_rgba(18,54,88,0.08)]"
       onClick={() => onOpenDetail(compressor.id)}
       type="button"
     >
@@ -262,13 +262,13 @@ function MobileCompressorCard({
           {compressor.running ? "운전" : "정지"}
         </span>
       </div>
-      <div className="mt-[clamp(8px,1.1dvh,11px)] grid h-full min-h-0 grid-cols-2 grid-rows-2 gap-[clamp(6px,0.9dvh,9px)]">
+      <div className="grid h-full min-h-0 grid-cols-2 grid-rows-2 gap-[clamp(6px,0.9dvh,9px)]">
         <MobileValue prominent label="압력" unit="bar" value={formatNumber(compressor.pressure, 1)} />
         <MobileValue prominent label="온도" unit="℃" value={formatNumber(compressor.temperature, 1)} />
         <MobileValue prominent label={compressor.inverter ? "제어압력" : "무부하"} unit="bar" value={formatNumber(compressor.inverter ? compressor.controlPressure : compressor.noLoadPressure, 1)} />
         <MobileValue prominent label={compressor.inverter ? "회전수" : "부하"} unit={compressor.inverter ? "rpm" : "bar"} value={compressor.inverter ? formatInteger(compressor.rpm) : formatNumber(compressor.loadPressure, 1)} />
       </div>
-      <div className="mt-[clamp(7px,1dvh,10px)] grid grid-cols-3 gap-[clamp(6px,0.9dvh,9px)]">
+      <div className="grid grid-cols-3 gap-[clamp(6px,0.9dvh,9px)]">
         <MobileBadge icon={compressor.local ? "L" : "R"} tone="green">
           {compressor.local ? "LOCAL" : "REMOTE"}
         </MobileBadge>
