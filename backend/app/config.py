@@ -13,6 +13,18 @@ class Settings(BaseSettings):
     backend_cors_origins: str = "http://localhost,http://127.0.0.1"
     collector_token: str = "change-me"
     seed_device_codes: str = "PRESS-01,FURNACE-01,PUMP-01"
+    sms_enabled: bool = False
+    sms_disconnect_enabled: bool = True
+    sms_recovery_enabled: bool = False
+    sms_check_interval_seconds: float = 5.0
+    sms_link_grace_seconds: float = 30.0
+    sms_cooldown_seconds: float = 600.0
+    sms_watch_keys: str = "0000,0002"
+    sms_factory_name: str = "Monitoring Server"
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_from: str = ""
+    twilio_to: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -21,6 +33,14 @@ class Settings(BaseSettings):
     @property
     def seed_device_codes_list(self) -> list[str]:
         return [item.strip() for item in self.seed_device_codes.split(",") if item.strip()]
+
+    @property
+    def sms_watch_keys_list(self) -> list[str]:
+        return [item.strip().upper() for item in self.sms_watch_keys.split(",") if item.strip()]
+
+    @property
+    def twilio_to_list(self) -> list[str]:
+        return [item.strip() for item in self.twilio_to.split(",") if item.strip()]
 
 
 @lru_cache

@@ -46,6 +46,7 @@ from app.schemas import (
     YujinMapValueHistoryOut,
     YujinMapValueOut,
 )
+from app.sms import DisconnectSmsMonitor, TwilioSmsClient
 from app.ws import manager
 from app.yujin_map import build_yujin_map_schema
 
@@ -59,6 +60,7 @@ YUJIN_INGEST_SLOW_LOG_MS = 500
 YUJIN_MAP_HEARTBEATS: dict[str, tuple[datetime, str]] = {}
 YUJIN_LIVE_MAP: dict[str, tuple[str, datetime, str]] = {}
 YUJIN_LIVE_MAP_LOCK = RLock()
+sms_monitor: DisconnectSmsMonitor | None = None
 
 CONTROL_COMMAND_SOURCE_PRIORITY = {
     "group_operation": 0,
@@ -86,13 +88,41 @@ app.add_middleware(
 )
 
 
+def latest_yujin_seen_at(keys: list[str]) -> datetime | None:
+    normalized_keys = [key.upper() for key in keys]
+    timestamps: list[datetime] = []
+    with YUJIN_LIVE_MAP_LOCK:
+        if normalized_keys:
+            for key in normalized_keys:
+                live = YUJIN_LIVE_MAP.get(key)
+                heartbeat = YUJIN_MAP_HEARTBEATS.get(key)
+                if live:
+                    timestamps.append(live[1])
+                if heartbeat:
+                    timestamps.append(heartbeat[0])
+        else:
+            timestamps.extend(live[1] for live in YUJIN_LIVE_MAP.values())
+            timestamps.extend(heartbeat[0] for heartbeat in YUJIN_MAP_HEARTBEATS.values())
+
+    return max(timestamps) if timestamps else None
+
+
 @app.on_event("startup")
 def on_startup() -> None:
+    global sms_monitor
     wait_for_database()
     Base.metadata.create_all(bind=engine)
     migrate_legacy_schema()
     seed_devices()
     seed_yujin_map()
+    sms_monitor = DisconnectSmsMonitor(settings, latest_yujin_seen_at, TwilioSmsClient(settings))
+    sms_monitor.start()
+
+
+@app.on_event("shutdown")
+def on_shutdown() -> None:
+    if sms_monitor:
+        sms_monitor.stop()
 
 
 def wait_for_database() -> None:
@@ -494,11 +524,12 @@ def update_collector_settings(payload: CollectorSettingsIn, db: Session = Depend
 
 
 def remember_yujin_heartbeats(keys: list[str], recorded_at: datetime, source: str) -> None:
-    for key in keys:
-        current = YUJIN_MAP_HEARTBEATS.get(key)
-        if current and current[0] >= recorded_at:
-            continue
-        YUJIN_MAP_HEARTBEATS[key] = (recorded_at, source)
+    with YUJIN_LIVE_MAP_LOCK:
+        for key in keys:
+            current = YUJIN_MAP_HEARTBEATS.get(key)
+            if current and current[0] >= recorded_at:
+                continue
+            YUJIN_MAP_HEARTBEATS[key] = (recorded_at, source)
 
 
 def heartbeat_timestamp(key: str, stored_at: datetime | None) -> datetime | None:
