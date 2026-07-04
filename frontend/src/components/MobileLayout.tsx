@@ -124,9 +124,9 @@ function MobileSummaryTile({ label, unit = "", value }: { label: string; unit?: 
   return (
     <div className="rounded-[10px] border border-[#d9e6f0] bg-[#f8fbfd] px-[11px] py-[9px]">
       <div className="text-[11px] font-black text-[#6f879d]">{label}</div>
-      <div className="mt-[5px] flex items-end justify-between">
+      <div className="mt-[5px] flex items-end justify-end gap-[5px] text-right">
         <span className="min-w-0 truncate text-[24px] font-black leading-none text-[#173f69]">{value}</span>
-        {unit ? <span className="pb-[2px] text-[12px] font-black text-[#6f879d]">{unit}</span> : null}
+        {unit ? <span className="shrink-0 pb-[2px] text-[12px] font-black text-[#6f879d]">{unit}</span> : null}
       </div>
     </div>
   );
@@ -250,7 +250,7 @@ function MobileValue({ label, unit, value }: { label: string; unit: string; valu
   return (
     <div className="rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[8px] py-[7px]">
       <div className="text-[11px] font-black text-[#6f879d]">{label}</div>
-      <div className="mt-[4px] flex items-end justify-between gap-[4px]">
+      <div className="mt-[4px] flex items-end justify-end gap-[4px] text-right">
         <span className="min-w-0 truncate text-[18px] font-black leading-none text-[#173f69]">{value}</span>
         <span className="shrink-0 pb-[1px] text-[10px] font-black text-[#6f879d]">{unit}</span>
       </div>
