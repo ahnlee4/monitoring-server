@@ -290,7 +290,7 @@
         order: 2;
         min-height: 0;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 116px;
+        grid-template-columns: minmax(0, 1fr) 126px;
         gap: 3px;
         overflow: hidden;
       }
@@ -334,15 +334,16 @@
       .metric-list {
         min-width: 0;
         display: grid;
+        grid-template-rows: repeat(5, minmax(0, 1fr));
         align-content: start;
         gap: 3px;
         overflow: hidden;
       }
 
       .metric {
-        min-height: 25px;
+        min-height: 0;
         display: grid;
-        grid-template-columns: 46px minmax(0, 1fr);
+        grid-template-rows: 15px minmax(0, 1fr);
         overflow: hidden;
         border: 1px solid #75b4ee;
         background: #fff;
@@ -356,7 +357,7 @@
         background: #b0d2ff;
         color: #13243a;
         text-align: center;
-        font-size: 12px;
+        font-size: 10px;
         font-weight: 900;
         letter-spacing: -0.04em;
       }
@@ -367,17 +368,18 @@
         justify-content: flex-end;
         gap: 3px;
         overflow: hidden;
-        padding: 0 5px;
+        padding: 0 6px;
         background: #fff;
-        font-size: 17px;
+        font-size: 18px;
         font-weight: 900;
         white-space: nowrap;
       }
 
       .metric strong span {
+        flex: 1 1 auto;
         min-width: 0;
         overflow: hidden;
-        text-overflow: ellipsis;
+        text-align: right;
       }
 
       .metric strong small {
@@ -422,23 +424,35 @@
       }
 
       .status-cell.green strong {
-        background: #4caa70;
         color: #fff;
       }
 
       .status-cell.gray strong {
-        background: #bdbdbd;
         color: #111;
       }
 
       .status-cell.red strong {
-        background: #e42222;
         color: #fff;
       }
 
       .status-cell.yellow strong {
-        background: #ffff00;
         color: #111;
+      }
+
+      .status-cell.green {
+        background: #4caa70;
+      }
+
+      .status-cell.gray {
+        background: #bdbdbd;
+      }
+
+      .status-cell.red {
+        background: #e42222;
+      }
+
+      .status-cell.yellow {
+        background: #ffff00;
       }
 
       .status-overlay {
