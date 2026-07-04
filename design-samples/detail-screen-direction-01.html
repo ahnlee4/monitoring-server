@@ -8,25 +8,6 @@
       @font-face {
         font-family: "NotoSansKR";
         src: url("../frontend/public/NotoSansKR-Bold.ttf") format("truetype");
-        font-weight: 700 900;
-      }
-
-      :root {
-        --blue-900: #173f69;
-        --blue-800: #1e5c98;
-        --blue-700: #2874bf;
-        --blue-600: #3374ce;
-        --blue-300: #82b8ec;
-        --blue-200: #b8d9f5;
-        --blue-100: #eef7ff;
-        --line: #c8e0f4;
-        --panel: #f9fcff;
-        --surface: #ffffff;
-        --danger: #d92525;
-        --warn: #f0b429;
-        --run: #4caa70;
-        --muted: #667380;
-        --shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
       }
 
       * {
@@ -39,110 +20,172 @@
         display: grid;
         place-items: center;
         overflow: hidden;
-        background: #1d2530;
+        background: #111820;
         font-family: "NotoSansKR", "Malgun Gothic", sans-serif;
-        color: #101820;
+        color: #111;
       }
 
       .stage {
         width: 1280px;
         height: 800px;
         overflow: hidden;
-        background: #ffffff;
-        border: 1px solid #263241;
+        background: #fff;
       }
 
       .app-shell {
         height: 100%;
         display: grid;
-        grid-template-rows: 74px 1fr 148px;
+        grid-template-rows: 74px 578px 148px;
         overflow: hidden;
       }
 
+      /* Top bar: 메인화면과 동일한 영역 구조 */
       .top-bar {
         display: grid;
-        grid-template-columns: 146px 1fr 186px 188px 210px;
-        gap: 4px;
-        padding: 4px;
+        grid-template-columns: 241px 241px 241px 65px 241px 241px;
+        gap: 2px;
+        min-height: 0;
         overflow: hidden;
-        background: #eaf4fd;
       }
 
-      .top-cell {
+      .top-panel {
+        min-height: 0;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
-        min-width: 0;
         overflow: hidden;
-        border: 1px solid var(--blue-300);
-        background: var(--blue-600);
-        color: #ffffff;
+        border: 1px solid;
+        border-radius: 4px;
+        padding: 0 4px;
+        color: #fff;
         text-align: center;
-        font-size: 20px;
         font-weight: 900;
+        line-height: 1.08;
       }
 
-      .top-cell.logo {
-        background: #ffffff;
-        color: var(--blue-800);
+      .top-panel.stop {
+        border-color: #6698dd;
+        background: #6698dd;
       }
 
-      .top-cell.status {
-        flex-direction: column;
-        gap: 4px;
-        background: var(--blue-100);
-        color: var(--blue-900);
+      .top-panel.pressure {
+        border-color: #8ec3f5;
+        background: #8ec3f5;
+        color: #083f73;
       }
 
-      .top-cell.status strong {
-        color: var(--blue-700);
-        font-size: 30px;
+      .top-panel.date {
+        border-color: #3374ce;
+        background: #3374ce;
+        font-size: 22px;
+      }
+
+      .top-panel.lock {
+        border-color: #6698dd;
+        background: #6698dd;
+      }
+
+      .top-panel.title {
+        border-color: #0d4da5;
+        background: #0d4da5;
+        font-size: 23px;
+      }
+
+      .top-label {
+        font-size: 13px;
+        letter-spacing: 0.14em;
+      }
+
+      .top-run-value {
+        margin-top: 5px;
+        font-size: 31px;
+        letter-spacing: -0.04em;
+      }
+
+      .top-pressure-value {
+        margin-top: 3px;
+        display: grid;
+        grid-template-columns: 42px 1fr 42px;
+        align-items: end;
+        width: 100%;
         line-height: 1;
       }
 
-      .top-cell.run {
-        background: var(--blue-700);
-        font-size: 28px;
+      .top-pressure-value strong {
+        font-size: 38px;
+        letter-spacing: -0.07em;
       }
 
-      .main-detail {
+      .top-pressure-value small {
+        padding-bottom: 5px;
+        text-align: left;
+        font-size: 17px;
+      }
+
+      .top-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border: 0;
+        background: #fff;
+        padding: 0 3px;
+      }
+
+      .top-logo img {
+        width: 100%;
+        height: 72px;
+        object-fit: contain;
+      }
+
+      .top-panel img {
+        width: 58px;
+        height: 58px;
+        object-fit: contain;
+      }
+
+      /* Center only changes on detail screen */
+      .center-area {
+        position: relative;
         min-height: 0;
         overflow: hidden;
         background: #eaf4fd;
         padding: 4px;
       }
 
-      .detail-panel {
+      .detail-layout {
         height: 100%;
+        min-height: 0;
         display: grid;
-        grid-template-rows: 44px minmax(0, 1fr);
+        grid-template-rows: 42px minmax(0, 1fr);
         gap: 4px;
         overflow: hidden;
       }
 
-      .detail-header {
-        display: grid;
-        grid-template-columns: 150px 1fr 170px 190px;
-        gap: 4px;
+      .detail-head {
         min-height: 0;
+        display: grid;
+        grid-template-columns: 142px 1fr 160px 180px;
+        gap: 4px;
       }
 
-      .header-chip {
+      .detail-head-cell {
+        min-width: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        min-width: 0;
         overflow: hidden;
-        border: 1px solid var(--blue-300);
-        background: var(--blue-600);
+        border: 1px solid #75b4ee;
+        background: #3374ce;
         color: #fff;
+        text-align: center;
         font-size: 18px;
         font-weight: 900;
-        text-align: center;
       }
 
-      .header-chip.strong {
-        background: var(--blue-800);
+      .detail-head-cell.strong {
+        background: #1d66b1;
       }
 
       .detail-scroll {
@@ -151,8 +194,8 @@
         grid-template-columns: repeat(4, minmax(0, 1fr));
         grid-auto-rows: 262px;
         gap: 4px;
-        overflow-y: auto;
         overflow-x: hidden;
+        overflow-y: auto;
         padding-right: 2px;
       }
 
@@ -161,205 +204,103 @@
       }
 
       .detail-scroll::-webkit-scrollbar-track {
-        background: #dceefa;
+        background: #d8ecff;
       }
 
       .detail-scroll::-webkit-scrollbar-thumb {
-        background: var(--blue-300);
-        border: 2px solid #dceefa;
+        background: #75b4ee;
+        border: 2px solid #d8ecff;
       }
 
-      .device-card {
+      .detail-card {
         min-width: 0;
         min-height: 0;
         display: grid;
-        grid-template-rows: 76px minmax(0, 1fr);
-        gap: 4px;
+        grid-template-rows: 38px 1fr 34px;
+        gap: 3px;
         overflow: hidden;
-        border: 1px solid var(--blue-300);
-        background: var(--panel);
-        box-shadow: var(--shadow);
-        padding: 4px;
+        border: 1px solid #75b4ee;
+        background: #d8ecff;
+        padding: 3px;
+        box-shadow: inset 0 0 0 1px #fff;
       }
 
-      .device-card.offline {
-        border-color: #cdd9e3;
-        background: #f4f7fa;
-      }
-
-      .card-top {
+      .detail-title {
         min-width: 0;
         display: grid;
-        grid-template-columns: 68px minmax(0, 1fr);
-        gap: 4px;
-        overflow: hidden;
+        grid-template-columns: 1fr 78px;
+        gap: 3px;
       }
 
-      .status-stack {
+      .detail-title strong,
+      .detail-title span {
         min-width: 0;
-        display: grid;
-        grid-template-rows: repeat(3, 1fr);
-        gap: 2px;
-      }
-
-      .status-pill {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-width: 0;
         overflow: hidden;
-        border: 1px solid rgba(0, 0, 0, 0.12);
-        color: #101820;
-        font-size: 13px;
+        border: 1px solid #75b4ee;
         font-weight: 900;
         line-height: 1;
       }
 
-      .status-pill.mode {
-        background: #bce293;
+      .detail-title strong {
+        background: #b9dcff;
+        color: #0d4da5;
+        font-size: 20px;
       }
 
-      .status-pill.ready {
-        background: #d7edf8;
-      }
-
-      .status-pill.run {
-        background: var(--run);
-        color: #ffffff;
-      }
-
-      .status-pill.warn {
-        background: var(--warn);
-      }
-
-      .status-pill.danger {
-        background: var(--danger);
-        color: #ffffff;
-      }
-
-      .title-value {
-        min-width: 0;
-        display: grid;
-        grid-template-rows: 26px minmax(0, 1fr);
-        gap: 4px;
-      }
-
-      .device-title {
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        min-width: 0;
-        overflow: hidden;
-        background: var(--blue-700);
-        border: 1px solid var(--blue-800);
-        color: #ffffff;
+      .detail-title span {
+        background: #3374ce;
+        color: #fff;
         font-size: 16px;
-        font-weight: 900;
-        padding: 0 9px;
-        white-space: nowrap;
-        text-overflow: ellipsis;
       }
 
-      .main-value {
-        min-width: 0;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 54px;
-        overflow: hidden;
-        border: 1px solid var(--blue-800);
-        background: #ffffff;
-      }
-
-      .main-value strong {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        min-width: 0;
-        overflow: hidden;
-        padding: 0 8px;
-        background: var(--blue-700);
-        color: #ffffff;
-        font-size: 30px;
-        line-height: 1;
-        letter-spacing: -0.04em;
-      }
-
-      .main-value span {
-        display: flex;
-        align-items: flex-end;
-        justify-content: center;
-        padding-bottom: 8px;
-        background: var(--blue-800);
-        color: #ffffff;
-        font-size: 14px;
-        line-height: 1;
-      }
-
-      .card-body {
+      .detail-body {
         min-height: 0;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 106px;
-        gap: 4px;
+        grid-template-columns: minmax(0, 1fr) 116px;
+        gap: 3px;
         overflow: hidden;
       }
 
-      .visual-box {
-        min-width: 0;
+      .machine-box {
         min-height: 0;
         display: grid;
-        grid-template-rows: minmax(0, 1fr) 29px;
+        grid-template-rows: 1fr 30px;
         overflow: hidden;
-        border: 1px solid var(--line);
-        background: #ffffff;
+        border: 1px solid #75b4ee;
+        background: #fff;
       }
 
-      .visual {
+      .machine-img {
         position: relative;
+        min-height: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 0;
         overflow: hidden;
-        padding: 4px;
+        padding: 5px;
       }
 
-      .visual img {
+      .machine-img img {
         max-width: 100%;
         max-height: 100%;
         object-fit: contain;
       }
 
-      .visual-label {
+      .machine-type {
         display: flex;
         align-items: center;
         justify-content: center;
-        overflow: hidden;
-        border-top: 1px solid #d9eafa;
-        background: var(--blue-100);
-        color: var(--blue-900);
-        font-size: 17px;
+        border-top: 1px solid #75b4ee;
+        background: #eef7ff;
+        color: #173f69;
+        font-size: 16px;
         font-weight: 900;
       }
 
-      .status-overlay {
-        position: absolute;
-        inset: 0;
-        display: grid;
-        place-items: center;
-        background: rgba(244, 247, 250, 0.82);
-      }
-
-      .status-overlay span {
-        min-width: 120px;
-        border: 2px solid var(--danger);
-        background: #ffffff;
-        color: var(--danger);
-        text-align: center;
-        font-size: 24px;
-        font-weight: 900;
-        letter-spacing: 0.08em;
-      }
-
-      .metric-table {
+      .metric-list {
         min-width: 0;
         display: grid;
         align-content: start;
@@ -367,116 +308,265 @@
         overflow: hidden;
       }
 
-      .metric-row {
+      .metric {
         min-height: 25px;
         display: grid;
-        grid-template-columns: 48px minmax(0, 1fr);
+        grid-template-columns: 46px 1fr;
         overflow: hidden;
-        border: 1px solid var(--line);
-        background: #ffffff;
+        border: 1px solid #75b4ee;
+        background: #fff;
       }
 
-      .metric-row label {
+      .metric label {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-width: 0;
         overflow: hidden;
-        background: var(--blue-100);
-        color: var(--blue-900);
+        background: #b0d2ff;
+        color: #13243a;
+        text-align: center;
         font-size: 12px;
         font-weight: 900;
         letter-spacing: -0.04em;
       }
 
-      .metric-row strong {
+      .metric strong {
         display: flex;
         align-items: center;
         justify-content: flex-end;
-        min-width: 0;
         overflow: hidden;
         padding: 0 5px;
-        color: #101820;
+        background: #fff;
         font-size: 15px;
         font-weight: 900;
         white-space: nowrap;
       }
 
-      .alert-line {
-        min-height: 25px;
+      .status-row {
+        min-height: 0;
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(4, 1fr);
         gap: 3px;
       }
 
-      .alert-line span {
+      .status-cell {
         display: flex;
         align-items: center;
         justify-content: center;
-        border: 1px solid var(--line);
-        background: #edf4fa;
-        color: var(--muted);
-        font-size: 12px;
-        font-weight: 900;
-      }
-
-      .alert-line .on {
-        border-color: var(--danger);
-        background: var(--danger);
-        color: #ffffff;
-      }
-
-      .aux-card .card-body {
-        grid-template-columns: minmax(0, 1fr);
-      }
-
-      .footer {
-        display: grid;
-        grid-template-columns: 1fr 174px 174px 174px 174px 174px 174px;
-        gap: 4px;
-        padding: 4px;
         overflow: hidden;
-        background: #eaf4fd;
-      }
-
-      .footer-cell {
-        display: grid;
-        grid-template-rows: 38px 1fr;
-        min-width: 0;
-        overflow: hidden;
-        border: 1px solid var(--blue-300);
-        background: #ffffff;
-      }
-
-      .footer-cell label {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--blue-100);
-        color: var(--blue-900);
+        border: 1px solid #75b4ee;
         font-size: 17px;
         font-weight: 900;
       }
 
-      .footer-cell strong {
+      .status-cell.green {
+        background: #4caa70;
+        color: #fff;
+      }
+
+      .status-cell.gray {
+        background: #bdbdbd;
+        color: #111;
+      }
+
+      .status-cell.red {
+        background: #e42222;
+        color: #fff;
+      }
+
+      .status-cell.yellow {
+        background: #ffff00;
+        color: #111;
+      }
+
+      .status-overlay {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: #f1f3f5;
+      }
+
+      .status-overlay span {
+        width: 126px;
+        border: 2px solid #e42222;
+        background: #fff;
+        color: #e42222;
+        text-align: center;
+        font-size: 24px;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+      }
+
+      /* Footer: 메인화면과 동일한 영역 구조 */
+      .footer {
+        position: relative;
+        z-index: 40;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 45px 216px 45px 282px 45px 558px 66px;
+        gap: 2px;
+        overflow: visible;
+        background: #fff;
+        padding: 3px;
+      }
+
+      .vertical-title {
         display: flex;
         align-items: center;
         justify-content: center;
-        color: #101820;
-        font-size: 26px;
+        white-space: pre-line;
+        border: 1px solid #6698dd;
+        border-radius: 5px;
+        background: #6698dd;
+        color: #fff;
+        text-align: center;
+        font-size: 24px;
+        font-weight: 900;
+        line-height: 1.1;
+      }
+
+      .mode-panel {
+        display: grid;
+        grid-template-rows: 1fr 1fr;
+        gap: 4px;
+        min-height: 0;
+        border: 1px solid #9fc9fa;
+        background: #eef7ff;
+        padding: 3px;
+      }
+
+      .mode-row {
+        display: grid;
+        gap: 4px;
+      }
+
+      .mode-row.two {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .mode-row.three {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .mode-btn,
+      .icon-btn {
+        border: 1px solid #3374ce;
+        border-radius: 6px;
+        background: #fff;
+        color: #3374ce;
+        font-size: 22px;
+        font-weight: 900;
+        box-shadow: 1px 1px 1px #c2c2c2;
+      }
+
+      .mode-btn.active {
+        background: #3374ce;
+        color: #fff;
+      }
+
+      .icon-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-color: #9fc9fa;
+      }
+
+      .icon-btn img {
+        width: 42px;
+        height: 42px;
+        object-fit: contain;
+      }
+
+      .control-panel {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+        gap: 0;
+        border: 1px solid #75b4ee;
+        background: #fff;
+      }
+
+      .control-cell {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: 32px 1fr;
+        border: 1px solid #75b4ee;
+      }
+
+      .control-cell label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-bottom: 1px solid #75b4ee;
+        background: #8ec3f5;
+        color: #fff;
+        font-size: 16px;
         font-weight: 900;
       }
 
-      .footer-note {
+      .control-cell strong {
         display: flex;
         align-items: center;
         justify-content: center;
-        border: 1px solid var(--blue-300);
-        background: #ffffff;
-        color: var(--blue-900);
-        font-size: 20px;
+        background: #fff;
+        font-size: 22px;
         font-weight: 900;
-        text-align: center;
+      }
+
+      .option-panel {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(5, 1fr);
+        column-gap: 6px;
+        row-gap: 2px;
+        overflow: hidden;
+        border: 1px solid #9fc9fa;
+        background: #fbfdff;
+        padding: 5px 7px;
+      }
+
+      .option-panel label {
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        overflow: hidden;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.1;
+      }
+
+      .option-panel input {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+        accent-color: #3175ce;
+      }
+
+      .quick-menu {
+        position: relative;
+        display: flex;
+        align-items: end;
+        justify-content: center;
+      }
+
+      .quick-main {
+        width: 58px;
+        height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        background: transparent;
+      }
+
+      .quick-main img {
+        width: 54px;
+        height: 54px;
+        object-fit: contain;
       }
     </style>
   </head>
@@ -484,214 +574,192 @@
     <section class="stage">
       <div class="app-shell">
         <header class="top-bar">
-          <div class="top-cell logo">GLINK</div>
-          <div class="top-cell run">통합 운전 정지</div>
-          <div class="top-cell status">메인 압력 <strong>6.40</strong></div>
-          <div class="top-cell status">App <strong>0.1.100</strong></div>
-          <div class="top-cell">2026-07-04 09:42</div>
+          <div class="top-panel stop">
+            <span class="top-label">통합 운전</span>
+            <span class="top-run-value">정 지</span>
+          </div>
+          <div class="top-panel pressure">
+            <span class="top-label">메인 압력</span>
+            <span class="top-pressure-value"><span></span><strong>6.4</strong><small>bar</small></span>
+          </div>
+          <div class="top-panel date">
+            <span>2026-07-04 09:42</span>
+            <small>App 0.1.100 / Fw -</small>
+          </div>
+          <div class="top-panel lock">
+            <img src="../frontend/public/unlock.png" alt="" />
+          </div>
+          <div class="top-panel title">
+            <span>컴프레샤</span>
+            <span>통합제어 시스템</span>
+          </div>
+          <button class="top-logo" type="button">
+            <img src="../frontend/public/grid_logo3.png" alt="GRID" />
+          </button>
         </header>
 
-        <main class="main-detail">
-          <section class="detail-panel">
-            <div class="detail-header">
-              <div class="header-chip strong">상세 화면</div>
-              <div class="header-chip">컴프레샤 / DIO / AIO 상태</div>
-              <div class="header-chip">연결 8 / 12</div>
-              <div class="header-chip strong">중앙만 스크롤</div>
+        <main class="center-area">
+          <section class="detail-layout">
+            <div class="detail-head">
+              <div class="detail-head-cell strong">상세 화면</div>
+              <div class="detail-head-cell">중앙 영역만 변경 / 상단바와 하단영역은 메인과 동일</div>
+              <div class="detail-head-cell">연결 8 / 12</div>
+              <div class="detail-head-cell strong">카드 영역만 스크롤</div>
             </div>
 
             <div class="detail-scroll">
-              <article class="device-card">
-                <div class="card-top">
-                  <div class="status-stack">
-                    <div class="status-pill mode">REM</div>
-                    <div class="status-pill run">RUN</div>
-                    <div class="status-pill warn">부하</div>
+              <article class="detail-card">
+                <div class="detail-title">
+                  <strong>1호기 (Micos 75FAV)</strong>
+                  <span>INVERTER</span>
+                </div>
+                <div class="detail-body">
+                  <div class="machine-box">
+                    <div class="machine-img"><img src="../frontend/public/equip_mini.png" alt="" /></div>
+                    <div class="machine-type">OIL FREE</div>
                   </div>
-                  <div class="title-value">
-                    <div class="device-title">1호기 (OIL FREE)</div>
-                    <div class="main-value"><strong>6.42</strong><span>bar</span></div>
+                  <div class="metric-list">
+                    <div class="metric"><label>압력</label><strong>6.42 bar</strong></div>
+                    <div class="metric"><label>온도</label><strong>42.0 ℃</strong></div>
+                    <div class="metric"><label>설정</label><strong>6.80 bar</strong></div>
+                    <div class="metric"><label>회전</label><strong>1820 rpm</strong></div>
+                    <div class="metric"><label>시간</label><strong>12548 hr</strong></div>
                   </div>
                 </div>
-                <div class="card-body">
-                  <div class="visual-box">
-                    <div class="visual"><img src="../frontend/public/equip_mini.png" alt="" /></div>
-                    <div class="visual-label">INVERTER</div>
-                  </div>
-                  <div class="metric-table">
-                    <div class="metric-row"><label>온도</label><strong>42.0 ℃</strong></div>
-                    <div class="metric-row"><label>제어</label><strong>6.80 bar</strong></div>
-                    <div class="metric-row"><label>회전</label><strong>1820 rpm</strong></div>
-                    <div class="metric-row"><label>시간</label><strong>12548 hr</strong></div>
-                    <div class="alert-line"><span>알림</span><span>고장</span></div>
-                  </div>
-                </div>
-              </article>
-
-              <article class="device-card">
-                <div class="card-top">
-                  <div class="status-stack">
-                    <div class="status-pill mode">REM</div>
-                    <div class="status-pill ready">STOP</div>
-                    <div class="status-pill warn">무부하</div>
-                  </div>
-                  <div class="title-value">
-                    <div class="device-title">2호기 (STANDARD)</div>
-                    <div class="main-value"><strong>6.38</strong><span>bar</span></div>
-                  </div>
-                </div>
-                <div class="card-body">
-                  <div class="visual-box">
-                    <div class="visual"><img src="../frontend/public/injection_mini.png" alt="" /></div>
-                    <div class="visual-label">STANDARD</div>
-                  </div>
-                  <div class="metric-table">
-                    <div class="metric-row"><label>온도</label><strong>38.5 ℃</strong></div>
-                    <div class="metric-row"><label>무부하</label><strong>7.20 bar</strong></div>
-                    <div class="metric-row"><label>부하</label><strong>6.40 bar</strong></div>
-                    <div class="metric-row"><label>시간</label><strong>8920 hr</strong></div>
-                    <div class="alert-line"><span>알림</span><span>고장</span></div>
-                  </div>
+                <div class="status-row">
+                  <div class="status-cell green">리모트</div>
+                  <div class="status-cell red">부 하</div>
+                  <div class="status-cell gray">알 림</div>
+                  <div class="status-cell gray">고 장</div>
                 </div>
               </article>
 
-              <article class="device-card">
-                <div class="card-top">
-                  <div class="status-stack">
-                    <div class="status-pill mode">LOC</div>
-                    <div class="status-pill run">RUN</div>
-                    <div class="status-pill warn">부하</div>
+              <article class="detail-card">
+                <div class="detail-title">
+                  <strong>2호기 (Micos 90FAR)</strong>
+                  <span>STANDARD</span>
+                </div>
+                <div class="detail-body">
+                  <div class="machine-box">
+                    <div class="machine-img"><img src="../frontend/public/injection_mini.png" alt="" /></div>
+                    <div class="machine-type">INJECTION</div>
                   </div>
-                  <div class="title-value">
-                    <div class="device-title">3호기 (INVERTER)</div>
-                    <div class="main-value"><strong>---</strong><span>bar</span></div>
+                  <div class="metric-list">
+                    <div class="metric"><label>압력</label><strong>6.38 bar</strong></div>
+                    <div class="metric"><label>온도</label><strong>38.5 ℃</strong></div>
+                    <div class="metric"><label>무부하</label><strong>7.20 bar</strong></div>
+                    <div class="metric"><label>부하</label><strong>6.40 bar</strong></div>
+                    <div class="metric"><label>시간</label><strong>8920 hr</strong></div>
                   </div>
                 </div>
-                <div class="card-body">
-                  <div class="visual-box">
-                    <div class="visual"><img src="../frontend/public/equip_n_mini.png" alt="" /></div>
-                    <div class="visual-label">INVERTER</div>
-                  </div>
-                  <div class="metric-table">
-                    <div class="metric-row"><label>온도</label><strong>--- ℃</strong></div>
-                    <div class="metric-row"><label>제어</label><strong>6.80 bar</strong></div>
-                    <div class="metric-row"><label>회전</label><strong>--- rpm</strong></div>
-                    <div class="metric-row"><label>시간</label><strong>124 hr</strong></div>
-                    <div class="alert-line"><span class="on">알림</span><span>고장</span></div>
-                  </div>
+                <div class="status-row">
+                  <div class="status-cell green">리모트</div>
+                  <div class="status-cell gray">정 지</div>
+                  <div class="status-cell gray">알 림</div>
+                  <div class="status-cell gray">고 장</div>
                 </div>
               </article>
 
-              <article class="device-card offline">
-                <div class="card-top">
-                  <div class="status-stack">
-                    <div class="status-pill mode">REM</div>
-                    <div class="status-pill danger">FAIL</div>
-                    <div class="status-pill ready">정지</div>
+              <article class="detail-card">
+                <div class="detail-title">
+                  <strong>3호기 (Micos 110FAV)</strong>
+                  <span>INVERTER</span>
+                </div>
+                <div class="detail-body">
+                  <div class="machine-box">
+                    <div class="machine-img"><img src="../frontend/public/equip_n_mini.png" alt="" /></div>
+                    <div class="machine-type">OIL FREE</div>
                   </div>
-                  <div class="title-value">
-                    <div class="device-title">4호기 (STANDARD)</div>
-                    <div class="main-value"><strong>---</strong><span>bar</span></div>
+                  <div class="metric-list">
+                    <div class="metric"><label>압력</label><strong>--- bar</strong></div>
+                    <div class="metric"><label>온도</label><strong>--- ℃</strong></div>
+                    <div class="metric"><label>설정</label><strong>6.80 bar</strong></div>
+                    <div class="metric"><label>회전</label><strong>--- rpm</strong></div>
+                    <div class="metric"><label>시간</label><strong>124 hr</strong></div>
                   </div>
                 </div>
-                <div class="card-body">
-                  <div class="visual-box">
-                    <div class="visual">
+                <div class="status-row">
+                  <div class="status-cell green">로 컬</div>
+                  <div class="status-cell red">부 하</div>
+                  <div class="status-cell yellow">알 림</div>
+                  <div class="status-cell gray">고 장</div>
+                </div>
+              </article>
+
+              <article class="detail-card">
+                <div class="detail-title">
+                  <strong>4호기 (Micos 132FAR)</strong>
+                  <span>FAIL</span>
+                </div>
+                <div class="detail-body">
+                  <div class="machine-box">
+                    <div class="machine-img">
                       <img src="../frontend/public/injection_v_mini.png" alt="" />
                       <div class="status-overlay"><span>FAIL</span></div>
                     </div>
-                    <div class="visual-label">STANDARD</div>
+                    <div class="machine-type">INJECTION</div>
                   </div>
-                  <div class="metric-table">
-                    <div class="metric-row"><label>온도</label><strong>--- ℃</strong></div>
-                    <div class="metric-row"><label>무부하</label><strong>--- bar</strong></div>
-                    <div class="metric-row"><label>부하</label><strong>--- bar</strong></div>
-                    <div class="metric-row"><label>시간</label><strong>--- hr</strong></div>
-                    <div class="alert-line"><span>알림</span><span class="on">고장</span></div>
+                  <div class="metric-list">
+                    <div class="metric"><label>압력</label><strong>--- bar</strong></div>
+                    <div class="metric"><label>온도</label><strong>--- ℃</strong></div>
+                    <div class="metric"><label>무부하</label><strong>--- bar</strong></div>
+                    <div class="metric"><label>부하</label><strong>--- bar</strong></div>
+                    <div class="metric"><label>시간</label><strong>--- hr</strong></div>
                   </div>
+                </div>
+                <div class="status-row">
+                  <div class="status-cell green">리모트</div>
+                  <div class="status-cell gray">정 지</div>
+                  <div class="status-cell gray">알 림</div>
+                  <div class="status-cell red">고 장</div>
                 </div>
               </article>
 
-              <article class="device-card aux-card">
-                <div class="card-top">
-                  <div class="status-stack">
-                    <div class="status-pill mode">DIO</div>
-                    <div class="status-pill run">RUN</div>
-                    <div class="status-pill ready">정상</div>
+              <article class="detail-card">
+                <div class="detail-title">
+                  <strong>드라이어 #1</strong>
+                  <span>DIO</span>
+                </div>
+                <div class="detail-body">
+                  <div class="machine-box">
+                    <div class="machine-img"><img src="../frontend/public/dryer.png" alt="" /></div>
+                    <div class="machine-type">냉동식 드라이어</div>
                   </div>
-                  <div class="title-value">
-                    <div class="device-title">드라이어 #1</div>
-                    <div class="main-value"><strong>28.4</strong><span>℃</span></div>
+                  <div class="metric-list">
+                    <div class="metric"><label>온도</label><strong>28.4 ℃</strong></div>
+                    <div class="metric"><label>운전</label><strong>RUN</strong></div>
+                    <div class="metric"><label>통신</label><strong>정상</strong></div>
                   </div>
                 </div>
-                <div class="card-body">
-                  <div class="visual-box">
-                    <div class="visual"><img src="../frontend/public/dryer.png" alt="" /></div>
-                    <div class="visual-label">냉동식 드라이어</div>
-                  </div>
-                </div>
-              </article>
-
-              <article class="device-card aux-card">
-                <div class="card-top">
-                  <div class="status-stack">
-                    <div class="status-pill mode">AIO</div>
-                    <div class="status-pill run">RUN</div>
-                    <div class="status-pill ready">정상</div>
-                  </div>
-                  <div class="title-value">
-                    <div class="device-title">트랜스미터 #1</div>
-                    <div class="main-value"><strong>6.41</strong><span>bar</span></div>
-                  </div>
-                </div>
-                <div class="card-body">
-                  <div class="visual-box">
-                    <div class="visual"><img src="../frontend/public/transmeter.png" alt="" /></div>
-                    <div class="visual-label">압력 트랜스미터</div>
-                  </div>
+                <div class="status-row">
+                  <div class="status-cell green">DIO</div>
+                  <div class="status-cell red">운 전</div>
+                  <div class="status-cell gray">알 림</div>
+                  <div class="status-cell gray">고 장</div>
                 </div>
               </article>
 
-              <article class="device-card aux-card">
-                <div class="card-top">
-                  <div class="status-stack">
-                    <div class="status-pill mode">DIO</div>
-                    <div class="status-pill ready">STOP</div>
-                    <div class="status-pill ready">대기</div>
+              <article class="detail-card">
+                <div class="detail-title">
+                  <strong>트랜스미터 #1</strong>
+                  <span>AIO</span>
+                </div>
+                <div class="detail-body">
+                  <div class="machine-box">
+                    <div class="machine-img"><img src="../frontend/public/transmeter.png" alt="" /></div>
+                    <div class="machine-type">압력 트랜스미터</div>
                   </div>
-                  <div class="title-value">
-                    <div class="device-title">애프터 쿨러</div>
-                    <div class="main-value"><strong>32.1</strong><span>℃</span></div>
+                  <div class="metric-list">
+                    <div class="metric"><label>압력</label><strong>6.41 bar</strong></div>
+                    <div class="metric"><label>범위</label><strong>0-10 bar</strong></div>
+                    <div class="metric"><label>통신</label><strong>정상</strong></div>
                   </div>
                 </div>
-                <div class="card-body">
-                  <div class="visual-box">
-                    <div class="visual"><img src="../frontend/public/cooler.png" alt="" /></div>
-                    <div class="visual-label">쿨러</div>
-                  </div>
-                </div>
-              </article>
-
-              <article class="device-card aux-card">
-                <div class="card-top">
-                  <div class="status-stack">
-                    <div class="status-pill mode">DIO</div>
-                    <div class="status-pill danger">FAULT</div>
-                    <div class="status-pill ready">정지</div>
-                  </div>
-                  <div class="title-value">
-                    <div class="device-title">흡착식 드라이어</div>
-                    <div class="main-value"><strong>---</strong><span>℃</span></div>
-                  </div>
-                </div>
-                <div class="card-body">
-                  <div class="visual-box">
-                    <div class="visual">
-                      <img src="../frontend/public/adsorption_img.png" alt="" />
-                      <div class="status-overlay"><span>FAULT</span></div>
-                    </div>
-                    <div class="visual-label">흡착식 드라이어</div>
-                  </div>
+                <div class="status-row">
+                  <div class="status-cell green">AIO</div>
+                  <div class="status-cell red">운 전</div>
+                  <div class="status-cell gray">알 림</div>
+                  <div class="status-cell gray">고 장</div>
                 </div>
               </article>
             </div>
@@ -699,13 +767,47 @@
         </main>
 
         <footer class="footer">
-          <div class="footer-note">상세 화면 개선 샘플<br />카드/라벨/값 컴포넌트 통일</div>
-          <div class="footer-cell"><label>무부하</label><strong>7.20</strong></div>
-          <div class="footer-cell"><label>부하</label><strong>6.40</strong></div>
-          <div class="footer-cell"><label>압력차</label><strong>0.30</strong></div>
-          <div class="footer-cell"><label>가동대수</label><strong>3</strong></div>
-          <div class="footer-cell"><label>교환운전</label><strong>120h</strong></div>
-          <div class="footer-cell"><label>남은시간</label><strong>48m</strong></div>
+          <div class="vertical-title">모<br />드</div>
+          <div class="mode-panel">
+            <div class="mode-row two">
+              <button class="mode-btn active" type="button">설정순</button>
+              <button class="mode-btn" type="button">시간순</button>
+            </div>
+            <div class="mode-row three">
+              <button class="icon-btn" type="button"><img src="../frontend/public/arrow_back_ios_new_24dp.png" alt="" /></button>
+              <button class="icon-btn" type="button"><img src="../frontend/public/refresh_24dp.png" alt="" /></button>
+              <button class="icon-btn" type="button"><img src="../frontend/public/arrow_forward_ios_24dp.png" alt="" /></button>
+            </div>
+          </div>
+          <div class="vertical-title">통<br />합<br />제<br />어</div>
+          <div class="control-panel">
+            <div class="control-cell"><label>무부하</label><strong>7.2 bar</strong></div>
+            <div class="control-cell"><label>부하</label><strong>6.4 bar</strong></div>
+            <div class="control-cell"><label>압력차</label><strong>0.3 bar</strong></div>
+            <div class="control-cell"><label>가동대수</label><strong>3 ea</strong></div>
+            <div class="control-cell"><label>교환운전</label><strong>120 hr</strong></div>
+            <div class="control-cell"><label>남은시간</label><strong>48 min</strong></div>
+          </div>
+          <div class="vertical-title">옵<br />션</div>
+          <div class="option-panel">
+            <label><input checked type="checkbox" />고장발생시 모드 변경</label>
+            <label><input type="checkbox" />인버터 주도 절약운전 기능</label>
+            <label><input checked type="checkbox" />교환운전 기능</label>
+            <label><input checked type="checkbox" />메인압력모듈 적용</label>
+            <label><input type="checkbox" />통합운전 기타 기기 제어</label>
+            <label><input type="checkbox" />저압경보 적용</label>
+            <label><input type="checkbox" />저압경보시 예비기 가동</label>
+            <label><input checked type="checkbox" />고장발생시 예비기 가동</label>
+            <label><input type="checkbox" />리모트 모드일때만 쓰기</label>
+            <label><input type="checkbox" />로그인 했을때만 쓰기</label>
+            <label><input checked type="checkbox" />데이터 저장유무</label>
+            <label><input type="checkbox" />통합제어 정지시 정지안함</label>
+            <label><input type="checkbox" />교환운전 테스트</label>
+            <label><input type="checkbox" />에너지 절약모드</label>
+          </div>
+          <div class="quick-menu">
+            <button class="quick-main" type="button"><img src="../frontend/public/menu.png" alt="" /></button>
+          </div>
         </footer>
       </div>
     </section>
