@@ -77,7 +77,7 @@ export function MobileLayout({
   return (
     <section className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-[#eef4fa] text-[#12263a]">
       <MobileHeader dashboard={dashboard} now={now} onLogoClick={onLogoClick} />
-      <main className={`flex min-h-0 flex-1 flex-col px-[12px] pb-[92px] pt-[10px] ${activeScreen === "main" ? "overflow-hidden" : "overflow-y-auto"}`}>
+      <main className={`flex min-h-0 flex-1 flex-col px-[12px] pb-[112px] pt-[10px] ${activeScreen === "main" ? "overflow-hidden" : "overflow-y-auto"}`}>
         {connectedCompressors.length === 0 ? (
           <MobileDisconnect />
         ) : activeScreen === "detail" ? (
@@ -215,7 +215,7 @@ function MobileMainList({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-[10px]">
       {lowPressureText ? <div className="rounded-[10px] bg-[#fff0f0] px-[12px] py-[10px] text-center text-[15px] font-black text-[#d92525]">{lowPressureText}</div> : null}
-      <div className="grid min-h-0 flex-1 snap-y snap-mandatory grid-cols-1 auto-rows-[calc((100%-10px)/2)] gap-[10px] overflow-y-auto overscroll-contain scroll-smooth pr-[2px]">
+      <div className="grid min-h-0 flex-1 snap-y snap-mandatory grid-cols-1 auto-rows-[calc((100%_-_10px)/2)] gap-[10px] overflow-y-auto overscroll-contain scroll-smooth pr-[2px]">
         {compressors.map((compressor) => (
           <MobileCompressorCard key={compressor.id} compressor={compressor} onOpenDetail={onOpenCompressorDetail} />
         ))}
