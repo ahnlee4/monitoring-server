@@ -256,17 +256,17 @@
       }
 
       .device-value {
-        display: grid;
-        grid-template-rows: 1fr 14px;
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 4px;
         border: 1px solid #1e5c98;
         background: #1e5c98;
         color: #fff;
+        padding: 0 5px;
       }
 
       .device-value strong {
-        display: flex;
-        align-items: center;
-        justify-content: center;
         min-width: 0;
         overflow: hidden;
         font-size: 24px;
@@ -276,11 +276,7 @@
       }
 
       .device-value span {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-top: 1px solid rgba(255, 255, 255, 0.24);
-        background: rgba(0, 0, 0, 0.12);
+        flex: 0 0 auto;
         font-size: 10px;
         font-weight: 900;
         line-height: 1;
