@@ -126,8 +126,8 @@ export function EquipmentDetailDialog({
   };
 
   return (
-    <div className="absolute inset-0 z-[55] flex items-center justify-center bg-black/60 p-[16px]">
-      <section className="grid h-[760px] w-[576px] grid-rows-[56px_1fr_auto_48px] overflow-hidden rounded-[12px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_14px_34px_rgba(15,43,72,0.32)]">
+    <div className="absolute inset-0 z-[55] flex items-center justify-center bg-black/60 p-[16px] max-sm:p-[8px]">
+      <section className="grid h-[760px] w-[576px] grid-rows-[56px_1fr_auto_48px] overflow-hidden rounded-[12px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_14px_34px_rgba(15,43,72,0.32)] max-sm:h-[calc(100dvh-16px)] max-sm:w-full">
         <header className="grid grid-cols-[1fr_48px] border-b border-[#dbe7f1] bg-white px-[8px] py-[7px]">
           <div className="grid grid-cols-4 rounded-[8px] border border-[#d3e7f8] bg-[#edf6fe] p-[4px]">
             {TABS.map((tab) => (
@@ -222,7 +222,7 @@ function PowerTab() {
 
 function MetricGrid({ items }: { items: DetailItem[] }) {
   return (
-    <div className="grid h-full auto-rows-[82px] grid-cols-2 gap-[9px] overflow-y-auto rounded-[10px] border border-[#d9e6f0] bg-white p-[12px] pr-[8px]">
+    <div className="grid h-full auto-rows-[82px] grid-cols-2 gap-[9px] overflow-y-auto rounded-[10px] border border-[#d9e6f0] bg-white p-[12px] pr-[8px] max-sm:grid-cols-1">
       {items.map((item) => (
         <MetricCard key={item.label} item={item} />
       ))}
@@ -267,7 +267,7 @@ function OperatePanel({
 }) {
   return (
     <div className="grid gap-[8px]">
-      <div className="grid h-[58px] grid-cols-3 gap-[9px]">
+      <div className="grid h-[58px] grid-cols-3 gap-[9px] max-sm:h-auto max-sm:grid-cols-1">
         <button
           className="rounded-[8px] border border-[#237bd0] bg-[#eef7ff] text-[20px] font-black text-[#173f69] shadow-[0_5px_11px_rgba(35,123,208,0.12)] disabled:opacity-45"
           disabled={commandBusy || !connected}
