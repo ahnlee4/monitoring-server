@@ -331,13 +331,13 @@ function MobileValue({ label, prominent = false, unit, value }: { label: string;
     ? "text-[clamp(13px,1.8dvh,16px)] font-black text-[#6f879d]"
     : "text-[clamp(11px,1.4dvh,13px)] font-black text-[#6f879d]";
   const valueRowClass = prominent
-    ? "flex min-h-0 items-center justify-end gap-[5px] text-right"
+    ? "flex min-h-0 items-end justify-end gap-[5px] text-right"
     : "mt-[clamp(3px,0.6dvh,5px)] flex items-end justify-end gap-[4px] text-right";
   const valueClass = prominent
     ? "min-w-0 truncate text-[clamp(24px,3.6dvh,32px)] font-black leading-none text-[#173f69]"
     : "min-w-0 truncate text-[clamp(18px,2.4dvh,23px)] font-black leading-none text-[#173f69]";
   const unitClass = prominent
-    ? "shrink-0 pb-[2px] text-[clamp(11px,1.6dvh,14px)] font-black text-[#6f879d]"
+    ? "shrink-0 pb-0 text-[clamp(11px,1.6dvh,14px)] font-black leading-none text-[#6f879d]"
     : "shrink-0 pb-[1px] text-[clamp(10px,1.3dvh,12px)] font-black text-[#6f879d]";
 
   return (
