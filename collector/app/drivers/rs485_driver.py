@@ -144,6 +144,7 @@ class RS485Collector(BaseCollector):
         slow_address_log_ms: float = 200.0,
         publish_telemetry_frames: bool = False,
         settings_poll_interval_cycles: int = 5,
+        full_snapshot_interval_cycles: int = 5,
     ) -> None:
         self.serial_port = serial_port
         self.baudrate = baudrate
@@ -156,6 +157,7 @@ class RS485Collector(BaseCollector):
         self.slow_address_log_ms = slow_address_log_ms
         self.publish_telemetry_frames = publish_telemetry_frames
         self.settings_poll_interval_cycles = max(0, settings_poll_interval_cycles)
+        self.full_snapshot_interval_cycles = max(0, full_snapshot_interval_cycles)
         self._serial: serial.Serial | None = None
         self._serial_lock = threading.RLock()
         self._control_priority = threading.Event()
@@ -232,16 +234,24 @@ class RS485Collector(BaseCollector):
             print(f"collector-rs485 error on {self.serial_port}: {exc}")
 
         heartbeat_keys = [item.key for item in map_values]
+        force_full_snapshot = self._should_publish_full_snapshot()
         return CollectorBatch(
             source="collector-uart4",
             recorded_at=recorded_at,
             frames=frames,
-            map_values=self._filter_changed_map_values(map_values),
+            map_values=self._filter_changed_map_values(map_values, force=force_full_snapshot),
             heartbeat_keys=heartbeat_keys,
         )
 
     def _should_poll_settings_maps(self) -> bool:
         return self.settings_poll_interval_cycles > 0 and self._poll_cycle_index % self.settings_poll_interval_cycles == 0
+
+    def _should_publish_full_snapshot(self) -> bool:
+        return (
+            self.full_snapshot_interval_cycles > 0
+            and self._poll_cycle_index > 0
+            and self._poll_cycle_index % self.full_snapshot_interval_cycles == 0
+        )
 
     def _open_serial(self) -> serial.Serial:
         with self._serial_lock:
@@ -493,7 +503,12 @@ class RS485Collector(BaseCollector):
         if self.slow_address_log_ms >= 0 and elapsed_ms >= self.slow_address_log_ms:
             print(f"collector-uart4 addr 0x{mem_addr:02X} slow: {elapsed_ms:.0f}ms")
 
-    def _filter_changed_map_values(self, values: list[MapValueUpdate]) -> list[MapValueUpdate]:
+    def _filter_changed_map_values(self, values: list[MapValueUpdate], force: bool = False) -> list[MapValueUpdate]:
+        if force:
+            for item in values:
+                self._published_map_cache[item.key] = str(item.value)
+            return list(values)
+
         changed: list[MapValueUpdate] = []
         for item in values:
             current_value = str(item.value)
