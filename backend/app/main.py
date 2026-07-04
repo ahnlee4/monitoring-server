@@ -26,6 +26,8 @@ from app.models import (
 )
 from app.schemas import (
     AlarmOut,
+    CollectorSettingsIn,
+    CollectorSettingsOut,
     ControlCommandAckIn,
     ControlCommandOut,
     DeviceOut,
@@ -181,8 +183,10 @@ def seed_yujin_map() -> None:
 
 
 MODE_SETTINGS_KEY = "mode_settings"
+COLLECTOR_SETTINGS_KEY = "collector_settings"
 MODE_ALIGN_ROWS = 7
 MODE_ALIGN_COLUMNS = 4
+ALLOWED_COLLECTOR_SERIAL_PORTS = {"/dev/ttyUSB0", "/dev/ttyS7"}
 
 
 def default_mode_settings_payload() -> dict:
@@ -246,6 +250,25 @@ def load_mode_settings(db: Session) -> tuple[dict, datetime | None]:
     except json.JSONDecodeError:
         payload = default_mode_settings_payload()
     return sanitize_mode_settings_payload(payload), setting.updated_at
+
+
+def sanitize_collector_settings_payload(payload: dict | None) -> dict:
+    serial_port = payload.get("serial_port") if isinstance(payload, dict) else None
+    return {
+        "serial_port": serial_port if serial_port in ALLOWED_COLLECTOR_SERIAL_PORTS else None,
+    }
+
+
+def load_collector_settings(db: Session) -> tuple[dict, datetime | None]:
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == COLLECTOR_SETTINGS_KEY))
+    if not setting:
+        return sanitize_collector_settings_payload(None), None
+
+    try:
+        payload = json.loads(setting.value_json)
+    except json.JSONDecodeError:
+        payload = None
+    return sanitize_collector_settings_payload(payload), setting.updated_at
 
 
 @lru_cache(maxsize=1)
@@ -445,6 +468,29 @@ def update_mode_settings(payload: ModeSettingsIn, db: Session = Depends(get_db))
     db.commit()
     db.refresh(setting)
     return ModeSettingsOut(**normalized, updated_at=setting.updated_at)
+
+
+@app.get("/api/app-settings/collector-settings", response_model=CollectorSettingsOut)
+def get_collector_settings(db: Session = Depends(get_db)) -> CollectorSettingsOut:
+    payload, updated_at = load_collector_settings(db)
+    return CollectorSettingsOut(**payload, updated_at=updated_at)
+
+
+@app.put("/api/app-settings/collector-settings", response_model=CollectorSettingsOut)
+def update_collector_settings(payload: CollectorSettingsIn, db: Session = Depends(get_db)) -> CollectorSettingsOut:
+    normalized = sanitize_collector_settings_payload(payload.model_dump())
+    if normalized["serial_port"] is None:
+        raise HTTPException(status_code=422, detail="unsupported collector serial port")
+
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == COLLECTOR_SETTINGS_KEY))
+    if not setting:
+        setting = AppSetting(key=COLLECTOR_SETTINGS_KEY, value_json=json.dumps(normalized, ensure_ascii=False))
+        db.add(setting)
+    else:
+        setting.value_json = json.dumps(normalized, ensure_ascii=False)
+    db.commit()
+    db.refresh(setting)
+    return CollectorSettingsOut(**normalized, updated_at=setting.updated_at)
 
 
 def remember_yujin_heartbeats(keys: list[str], recorded_at: datetime, source: str) -> None:

@@ -127,6 +127,15 @@ class ModeSettingsOut(ModeSettingsIn):
     updated_at: datetime | None = None
 
 
+class CollectorSettingsIn(BaseModel):
+    serial_port: Literal["/dev/ttyUSB0", "/dev/ttyS7"]
+
+
+class CollectorSettingsOut(BaseModel):
+    serial_port: Literal["/dev/ttyUSB0", "/dev/ttyS7"] | None = None
+    updated_at: datetime | None = None
+
+
 class GroupOperationIn(BaseModel):
     action: Literal["run", "stop"]
 

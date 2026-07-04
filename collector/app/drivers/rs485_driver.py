@@ -171,6 +171,15 @@ class RS485Collector(BaseCollector):
     def release_control_priority(self) -> None:
         self._control_priority.clear()
 
+    def update_serial_port(self, serial_port: str) -> None:
+        serial_port = serial_port.strip()
+        if not serial_port or serial_port == self.serial_port:
+            return
+        old_port = self.serial_port
+        self.serial_port = serial_port
+        self._close_serial()
+        print(f"collector-uart4 serial port changed {old_port} -> {self.serial_port}")
+
     def poll(self) -> CollectorBatch:
         recorded_at = datetime.now(timezone.utc).isoformat()
         frames: list[TelemetryFrame] = []

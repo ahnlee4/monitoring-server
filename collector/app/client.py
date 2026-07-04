@@ -19,6 +19,14 @@ class BackendClient:
         self.request_timeout = request_timeout
         self.session = requests.Session()
 
+    def app_settings_api_url(self) -> str | None:
+        if not self.control_api_url:
+            return None
+        suffix = "/api/control"
+        if self.control_api_url.endswith(suffix):
+            return f"{self.control_api_url[: -len(suffix)]}/api/app-settings"
+        return None
+
     def publish(self, frame: TelemetryFrame) -> None:
         response = self.session.post(
             self.api_url,
@@ -57,6 +65,19 @@ class BackendClient:
             timeout=self.request_timeout,
         )
         response.raise_for_status()
+
+    def fetch_collector_settings(self) -> dict:
+        app_settings_url = self.app_settings_api_url()
+        if not app_settings_url:
+            return {}
+        response = self.session.get(
+            f"{app_settings_url}/collector-settings",
+            headers={"X-Collector-Token": self.token},
+            timeout=self.request_timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
 
     def publish_map_batch(self, batch: CollectorBatch) -> None:
         if not self.yujin_api_url or (not batch.map_values and not batch.heartbeat_keys):

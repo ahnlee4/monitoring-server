@@ -147,6 +147,7 @@ def main() -> None:
     control_command_limit = get_int_env("COLLECTOR_CONTROL_COMMAND_LIMIT", 1)
     control_command_delay = float(get_env("COLLECTOR_CONTROL_COMMAND_DELAY_SECONDS", "0.05"))
     control_poll_seconds = float(get_env("COLLECTOR_CONTROL_POLL_SECONDS", "0.1"))
+    settings_poll_seconds = float(get_env("COLLECTOR_SETTINGS_POLL_SECONDS", "2"))
     slow_poll_log_ms = float(get_env("COLLECTOR_SLOW_POLL_LOG_MS", "0"))
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
@@ -177,7 +178,18 @@ def main() -> None:
         daemon=True,
     ).start()
 
+    last_settings_poll = 0.0
     while True:
+        if settings_poll_seconds >= 0 and time.monotonic() - last_settings_poll >= settings_poll_seconds:
+            last_settings_poll = time.monotonic()
+            try:
+                collector_settings = control_client.fetch_collector_settings()
+                serial_port = str(collector_settings.get("serial_port") or "").strip()
+                if serial_port and hasattr(collector, "update_serial_port"):
+                    collector.update_serial_port(serial_port)
+            except Exception as exc:
+                print(f"collector settings fetch error: {exc}")
+
         poll_started = time.monotonic()
         batch = collector.poll()
         poll_elapsed_ms = (time.monotonic() - poll_started) * 1000

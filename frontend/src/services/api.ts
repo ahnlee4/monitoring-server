@@ -23,6 +23,11 @@ export type ModeSettings = {
   updated_at?: string | null;
 };
 
+export type CollectorSettings = {
+  serial_port: "/dev/ttyUSB0" | "/dev/ttyS7" | null;
+  updated_at?: string | null;
+};
+
 export class ControlStatusUnsupportedError extends Error {
   constructor() {
     super("명령 상태 조회 API가 없습니다. backend 이미지를 최신으로 갱신해주세요.");
@@ -108,6 +113,16 @@ export async function fetchModeSettings() {
 
 export async function updateModeSettings(settings: ModeSettings) {
   return putJson<ModeSettings>(`${apiBase()}/app-settings/mode-settings`, settings);
+}
+
+export async function fetchCollectorSettings() {
+  const response = await fetchWithTimeout(`${apiBase()}/app-settings/collector-settings`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`collector-settings ${response.status}`);
+  return (await response.json()) as CollectorSettings;
+}
+
+export async function updateCollectorSettings(settings: { serial_port: "/dev/ttyUSB0" | "/dev/ttyS7" }) {
+  return putJson<CollectorSettings>(`${apiBase()}/app-settings/collector-settings`, settings);
 }
 
 export async function enqueueMapWriteBatch(source: string, writes: MapWrite[]) {

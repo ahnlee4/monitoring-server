@@ -7,9 +7,11 @@ import { useYujinMapValues } from "./hooks/useYujinMapValues";
 import {
   ControlStatusDelayedError,
   ControlStatusUnsupportedError,
+  fetchCollectorSettings,
   enqueueGroupOperation,
   enqueueMapWriteBatch,
   fetchModeSettings,
+  updateCollectorSettings,
   updateModeSettings,
   waitForControlCommand,
 } from "./services/api";
@@ -65,7 +67,7 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.97";
+const APP_VERSION = "0.1.98";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -1674,7 +1676,10 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
   const [activeModeCell, setActiveModeCell] = useState<ModeCellTarget | null>(null);
   const [replaceNextModeInput, setReplaceNextModeInput] = useState(false);
   const [saveStatus, setSaveStatus] = useState("설정값 불러오는 중...");
+  const [collectorPort, setCollectorPort] = useState<"/dev/ttyUSB0" | "/dev/ttyS7" | null>(null);
+  const [collectorPortStatus, setCollectorPortStatus] = useState("통신 포트 설정값 불러오는 중...");
   const [saving, setSaving] = useState(false);
+  const [collectorSaving, setCollectorSaving] = useState(false);
   const isAdmin = level === USER_LEVELS.admin;
 
   useEffect(() => {
@@ -1696,6 +1701,23 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
         const nextUseModeCount = readUseUnitCount(mapValues);
         if (nextUseModeCount !== null) setUseModeCount(String(nextUseModeCount));
         setSaveStatus(`저장값 불러오기 실패: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    fetchCollectorSettings()
+      .then((settings) => {
+        if (!alive) return;
+        setCollectorPort(settings.serial_port);
+        setCollectorPortStatus(settings.serial_port ? `${settings.serial_port} 사용 중` : "저장값 없음 / .env 기본 포트 사용 중");
+      })
+      .catch((error) => {
+        if (!alive) return;
+        setCollectorPortStatus(`통신 포트 불러오기 실패: ${error instanceof Error ? error.message : String(error)}`);
       });
     return () => {
       alive = false;
@@ -1755,6 +1777,19 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
       return;
     }
     await saveModeSettings("사용모드 개수");
+  };
+  const saveCollectorPort = async (serialPort: "/dev/ttyUSB0" | "/dev/ttyS7") => {
+    setCollectorSaving(true);
+    setCollectorPortStatus(`${serialPort} 저장 중...`);
+    try {
+      const saved = await updateCollectorSettings({ serial_port: serialPort });
+      setCollectorPort(saved.serial_port);
+      setCollectorPortStatus(`${saved.serial_port} 저장 완료 / collector가 자동 적용합니다`);
+    } catch (error) {
+      setCollectorPortStatus(`통신 포트 저장 실패: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCollectorSaving(false);
+    }
   };
   const activeModeValue =
     activeModeCell?.kind === "count"
@@ -1823,6 +1858,38 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
               <div className="mt-[12px] grid gap-[8px]">
                 <SettingSummary label="BIT0" value="운전" />
                 <SettingSummary label="BIT4" value="고장" />
+              </div>
+            </div>
+            <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
+              <PanelHeading eyebrow="RS485">통신 포트</PanelHeading>
+              <div className="mt-[12px] grid gap-[8px]">
+                <button
+                  className={`h-[48px] rounded-[8px] border text-[18px] font-black ${
+                    collectorPort === "/dev/ttyUSB0"
+                      ? "border-[#237bd0] bg-[#237bd0] text-white"
+                      : "border-[#d9e6f0] bg-[#f8fbfd] text-[#173f69]"
+                  }`}
+                  disabled={collectorSaving}
+                  onClick={() => saveCollectorPort("/dev/ttyUSB0")}
+                  type="button"
+                >
+                  USB0 외장 컨버터
+                </button>
+                <button
+                  className={`h-[48px] rounded-[8px] border text-[18px] font-black ${
+                    collectorPort === "/dev/ttyS7"
+                      ? "border-[#237bd0] bg-[#237bd0] text-white"
+                      : "border-[#d9e6f0] bg-[#f8fbfd] text-[#173f69]"
+                  }`}
+                  disabled={collectorSaving}
+                  onClick={() => saveCollectorPort("/dev/ttyS7")}
+                  type="button"
+                >
+                  S7 내장 RS485
+                </button>
+                <div className="rounded-[8px] bg-[#eef7ff] px-[10px] py-[8px] text-[12px] font-black leading-tight text-[#45657f]">
+                  {collectorPortStatus}
+                </div>
               </div>
             </div>
           </aside>
