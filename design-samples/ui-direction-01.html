@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Monitoring UI Direction 01</title>
+    <style>
+      @font-face {
+        font-family: NotoKR;
+        src: url("../frontend/public/NotoSansKR-Bold.ttf") format("truetype");
+        font-weight: 800;
+      }
+
+      :root {
+        --bg: #e8f0f6;
+        --panel: #ffffff;
+        --line: #bdd1e2;
+        --line-strong: #78aee0;
+        --blue-900: #0e3763;
+        --blue-800: #124f8e;
+        --blue-700: #1d6fc5;
+        --blue-600: #2c83df;
+        --blue-100: #e8f4ff;
+        --sky: #b9dcff;
+        --text: #10243a;
+        --muted: #617992;
+        --red: #d92828;
+        --orange: #f17920;
+        --green: #36a66a;
+        --gray: #738090;
+        --shadow: 0 12px 26px rgba(16, 45, 75, 0.16);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #172333;
+        font-family: NotoKR, sans-serif;
+        color: var(--text);
+      }
+
+      input[type="radio"] {
+        position: fixed;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .stage {
+        width: 1280px;
+        height: 800px;
+        position: relative;
+        overflow: hidden;
+        background: var(--bg);
+        box-shadow: 0 20px 70px rgba(0, 0, 0, 0.48);
+      }
+
+      .switcher {
+        position: absolute;
+        z-index: 80;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 8px;
+        padding: 7px;
+        border: 1px solid rgba(255, 255, 255, 0.55);
+        border-radius: 12px;
+        background: rgba(12, 39, 68, 0.34);
+        backdrop-filter: blur(10px);
+      }
+
+      .switcher label {
+        min-width: 86px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border-radius: 8px;
+        color: #eaf5ff;
+        font-size: 13px;
+        cursor: pointer;
+      }
+
+      #view-main:checked ~ .stage label[for="view-main"],
+      #view-control:checked ~ .stage label[for="view-control"],
+      #view-settings:checked ~ .stage label[for="view-settings"],
+      #view-factory:checked ~ .stage label[for="view-factory"] {
+        background: #ffffff;
+        color: var(--blue-800);
+      }
+
+      .screen {
+        display: none;
+        width: 100%;
+        height: 100%;
+      }
+
+      #view-main:checked ~ .stage .main-screen,
+      #view-control:checked ~ .stage .control-screen,
+      #view-settings:checked ~ .stage .settings-screen,
+      #view-factory:checked ~ .stage .factory-screen {
+        display: block;
+      }
+
+      .topbar {
+        height: 74px;
+        display: grid;
+        grid-template-columns: 235px 235px 250px 70px 250px 1fr;
+        gap: 4px;
+        padding: 4px;
+        background: #f8fbfd;
+      }
+
+      .top-card {
+        border: 1px solid var(--line-strong);
+        border-radius: 6px;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        text-align: center;
+      }
+
+      .top-run {
+        background: var(--orange);
+        color: #fff;
+      }
+
+      .top-pressure {
+        background: #a8d4fb;
+        color: var(--blue-900);
+      }
+
+      .top-meta {
+        background: var(--blue-700);
+        color: #fff;
+        font-size: 18px;
+      }
+
+      .top-title {
+        background: var(--blue-900);
+        color: #fff;
+        font-size: 24px;
+        line-height: 1.2;
+      }
+
+      .logo {
+        background: #fff;
+        padding: 3px 14px;
+      }
+
+      .logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+
+      .eyebrow {
+        display: block;
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        opacity: 0.82;
+      }
+
+      .big-value {
+        display: block;
+        margin-top: 5px;
+        font-size: 34px;
+        line-height: 1;
+      }
+
+      .main-grid {
+        height: 578px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+        gap: 3px;
+        padding: 3px;
+        background: #d5e8fa;
+      }
+
+      .unit-card {
+        display: grid;
+        grid-template-rows: 42px repeat(5, 1fr);
+        gap: 3px;
+        padding: 3px;
+        border: 1px solid var(--line-strong);
+        background: #f8fbfd;
+      }
+
+      .unit-title {
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line-strong);
+        background: var(--sky);
+        color: var(--blue-800);
+        font-size: 20px;
+      }
+
+      .unit-card:nth-child(2) .unit-title {
+        background: #9fcbf7;
+      }
+
+      .unit-card:nth-child(3) .unit-title {
+        background: #82b8ec;
+        color: #063a74;
+      }
+
+      .metric {
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        gap: 3px;
+      }
+
+      .metric.two {
+        grid-template-columns: 96px 1fr 1fr;
+      }
+
+      .metric-name {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        border: 1px solid var(--line-strong);
+        background: #b4d6fb;
+        color: #172a40;
+        font-size: 16px;
+      }
+
+      .metric-value,
+      .status-cell {
+        display: grid;
+        place-items: center end;
+        padding: 0 12px;
+        border: 1px solid var(--line-strong);
+        background: #fff;
+        font-size: 23px;
+      }
+
+      .metric-value.small {
+        font-size: 18px;
+      }
+
+      .status-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 3px;
+      }
+
+      .status-cell {
+        place-items: center;
+        color: #fff;
+      }
+
+      .remote {
+        background: var(--green);
+      }
+
+      .stop {
+        color: #1a2633;
+        background: #c7ccd1;
+      }
+
+      .run {
+        background: var(--red);
+      }
+
+      .footer {
+        height: 148px;
+        display: grid;
+        grid-template-columns: 45px 216px 45px 282px 45px 558px 66px;
+        gap: 3px;
+        padding: 4px;
+        background: #fff;
+      }
+
+      .vertical {
+        display: grid;
+        place-items: center;
+        border-radius: 6px;
+        background: #5f9ad8;
+        color: #fff;
+        font-size: 24px;
+        white-space: pre-line;
+      }
+
+      .footer-panel {
+        border: 1px solid var(--line);
+        background: #f8fbfd;
+        border-radius: 6px;
+        padding: 6px;
+      }
+
+      .mode-panel {
+        display: grid;
+        grid-template-rows: 1fr 1fr;
+        gap: 6px;
+      }
+
+      .seg {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+
+      .seg span,
+      .icon-box,
+      .control-cell {
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #fff;
+        color: var(--blue-800);
+        font-size: 20px;
+      }
+
+      .seg .active {
+        background: var(--blue-700);
+        color: #fff;
+      }
+
+      .control-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+        gap: 0;
+        padding: 0;
+      }
+
+      .control-cell {
+        border-radius: 0;
+        grid-template-rows: 30px 1fr;
+        overflow: hidden;
+      }
+
+      .control-cell b {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        background: #90c4f4;
+        color: #fff;
+        font-size: 15px;
+      }
+
+      .control-cell span {
+        font-size: 20px;
+      }
+
+      .option-list {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(5, 1fr);
+        gap: 3px 8px;
+        font-size: 12px;
+        color: #273b50;
+      }
+
+      .option-list span::before {
+        content: "■";
+        margin-right: 5px;
+        color: var(--blue-700);
+      }
+
+      .quick {
+        position: relative;
+      }
+
+      .quick .bubble {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 56px;
+        height: 56px;
+        display: grid;
+        place-items: center;
+      }
+
+      .bubble img {
+        width: 56px;
+        height: 56px;
+      }
+
+      .modal-backdrop {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        background: rgba(9, 24, 42, 0.6);
+      }
+
+      .modal {
+        width: 1080px;
+        overflow: hidden;
+        border: 1px solid #d3e0eb;
+        border-radius: 12px;
+        background: #f6f9fc;
+        box-shadow: var(--shadow);
+      }
+
+      .modal-head {
+        height: 84px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 22px;
+        border-bottom: 1px solid #dbe7f1;
+        background: #fff;
+      }
+
+      .modal-title {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .modal-title img {
+        width: 38px;
+        height: 38px;
+      }
+
+      .modal-title strong {
+        display: block;
+        font-size: 27px;
+        color: var(--blue-900);
+      }
+
+      .modal-title small {
+        display: block;
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .close {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border: 1px solid #cfdde8;
+        border-radius: 8px;
+        color: #45657f;
+        background: #f3f7fa;
+        font-size: 28px;
+      }
+
+      .control-modal-body {
+        display: grid;
+        grid-template-columns: 1fr 292px;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .card {
+        border: 1px solid #d9e6f0;
+        border-radius: 10px;
+        background: #fff;
+        padding: 12px;
+      }
+
+      .card-head {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #c9e1f5;
+      }
+
+      .card-head strong {
+        color: var(--blue-900);
+        font-size: 20px;
+      }
+
+      .card-head small {
+        color: #7c97b0;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+      }
+
+      .value-grid {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+
+      .value-box,
+      .info-tile {
+        border: 1px solid #d9e6f0;
+        border-radius: 8px;
+        background: #f8fbfd;
+        padding: 10px;
+      }
+
+      .value-box b,
+      .info-tile b {
+        display: block;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .value-box span,
+      .info-tile span {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-top: 8px;
+        color: var(--blue-900);
+        font-size: 24px;
+      }
+
+      .subgrid {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .subgrid .card {
+        min-height: 168px;
+        display: grid;
+        grid-template-rows: 40px 1fr;
+      }
+
+      .inline-stack {
+        margin-top: 10px;
+        display: grid;
+        align-content: start;
+        gap: 8px;
+      }
+
+      .action-card {
+        min-height: 334px;
+        display: grid;
+        grid-template-rows: 40px auto 1fr auto;
+      }
+
+      .action-block {
+        margin-top: 11px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .action-label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .run-buttons {
+        display: grid;
+        gap: 8px;
+        padding-top: 12px;
+      }
+
+      .run-buttons button {
+        height: 68px;
+        border: none;
+        border-radius: 8px;
+        color: #fff;
+        font-family: inherit;
+        font-size: 31px;
+      }
+
+      .run-buttons .start {
+        background: var(--red);
+      }
+
+      .run-buttons .end {
+        background: var(--gray);
+      }
+
+      .modal-foot {
+        height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 18px;
+        border-top: 1px solid #dbe7f1;
+        background: #fff;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .settings-body {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        gap: 14px;
+        padding: 16px;
+      }
+
+      .settings-stack {
+        display: grid;
+        gap: 12px;
+        align-content: start;
+      }
+
+      .summary {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .summary div {
+        border: 1px solid #d9e6f0;
+        border-radius: 8px;
+        background: #f8fbfd;
+        padding: 11px;
+      }
+
+      .summary b {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .summary span {
+        display: block;
+        margin-top: 6px;
+        color: var(--blue-900);
+        font-size: 18px;
+      }
+
+      .port-buttons {
+        margin-top: 12px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .port-buttons button,
+      .apply-btn {
+        height: 48px;
+        border: 1px solid #d9e6f0;
+        border-radius: 8px;
+        background: #f8fbfd;
+        color: var(--blue-900);
+        font: inherit;
+        font-size: 18px;
+      }
+
+      .port-buttons .selected,
+      .apply-btn {
+        border-color: var(--blue-700);
+        background: var(--blue-700);
+        color: #fff;
+      }
+
+      .mode-table {
+        margin-top: 12px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .mode-row {
+        height: 38px;
+        display: grid;
+        grid-template-columns: 54px repeat(4, 1fr);
+        gap: 5px;
+      }
+
+      .mode-row span {
+        display: grid;
+        place-items: center;
+        border: 1px solid #d9e6f0;
+        border-radius: 6px;
+        background: #f8fbfd;
+        color: var(--blue-900);
+      }
+
+      .mode-row .row-no {
+        background: var(--blue-700);
+        color: #fff;
+      }
+
+      .factory-modal {
+        width: 720px;
+      }
+
+      .factory-body {
+        display: grid;
+        grid-template-columns: 190px 1fr;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .factory-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .factory-item {
+        height: 76px;
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid #d9e6f0;
+        border-radius: 9px;
+        background: #fff;
+        padding: 10px;
+      }
+
+      .factory-item.active {
+        border-color: var(--blue-700);
+        background: var(--blue-100);
+      }
+
+      .number {
+        width: 36px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        border-radius: 7px;
+        background: #eef3f7;
+        color: #5d748c;
+      }
+
+      .factory-item.active .number {
+        background: var(--blue-700);
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <input id="view-main" type="radio" name="view" checked />
+    <input id="view-control" type="radio" name="view" />
+    <input id="view-settings" type="radio" name="view" />
+    <input id="view-factory" type="radio" name="view" />
+
+    <div class="stage">
+      <nav class="switcher">
+        <label for="view-main">메인</label>
+        <label for="view-control">통합운전</label>
+        <label for="view-settings">설정</label>
+        <label for="view-factory">공장변경</label>
+      </nav>
+
+      <section class="screen main-screen">
+        <header class="topbar">
+          <div class="top-card top-run"><span><b class="eyebrow">통합 운전</b><b class="big-value">운전 중</b></span></div>
+          <div class="top-card top-pressure"><span><b class="eyebrow">메인 압력</b><b class="big-value">8.7 bar</b></span></div>
+          <div class="top-card top-meta"><span>2026-07-04 14:22<br />App 0.1.99 / Fw -</span></div>
+          <div class="top-card top-run"><img src="../frontend/public/unlock.png" width="58" height="58" alt="" /></div>
+          <div class="top-card top-title"><span>컴프레샤<br />통합제어 시스템</span></div>
+          <div class="top-card logo"><img src="../frontend/public/grid_logo3.png" alt="GRID" /></div>
+        </header>
+
+        <main class="main-grid">
+          <article class="unit-card">
+            <div class="unit-title">1호기 (Micos 75FAV)</div>
+            <div class="metric"><div class="metric-name"><span>압</span><span>력</span></div><div class="metric-value">8.5 bar</div></div>
+            <div class="metric two"><div class="metric-name">설정압력</div><div class="metric-value small">8.2 bar</div><div class="metric-value small">1,820 rpm</div></div>
+            <div class="metric"><div class="metric-name"><span>온</span><span>도</span></div><div class="metric-value">72.1 ℃</div></div>
+            <div class="status-row"><div class="status-cell remote">리모트</div><div class="status-cell run">부 하</div></div>
+            <div class="metric"><div class="metric-name">총운전시간</div><div class="metric-value">12,402 hr</div></div>
+          </article>
+          <article class="unit-card">
+            <div class="unit-title">2호기 (Micos 90FAR)</div>
+            <div class="metric"><div class="metric-name"><span>압</span><span>력</span></div><div class="metric-value">8.4 bar</div></div>
+            <div class="metric two"><div class="metric-name">무부하/부하</div><div class="metric-value small">9.0 bar</div><div class="metric-value small">7.5 bar</div></div>
+            <div class="metric"><div class="metric-name"><span>온</span><span>도</span></div><div class="metric-value">68.0 ℃</div></div>
+            <div class="status-row"><div class="status-cell remote">리모트</div><div class="status-cell stop">정 지</div></div>
+            <div class="metric"><div class="metric-name">총운전시간</div><div class="metric-value">9,812 hr</div></div>
+          </article>
+          <article class="unit-card">
+            <div class="unit-title">3호기 (Micos 110FAV)</div>
+            <div class="metric"><div class="metric-name"><span>압</span><span>력</span></div><div class="metric-value">---</div></div>
+            <div class="metric two"><div class="metric-name">설정압력</div><div class="metric-value small">8.0 bar</div><div class="metric-value small">1,640 rpm</div></div>
+            <div class="metric"><div class="metric-name"><span>온</span><span>도</span></div><div class="metric-value">---</div></div>
+            <div class="status-row"><div class="status-cell remote">리모트</div><div class="status-cell stop">정 지</div></div>
+            <div class="metric"><div class="metric-name">총운전시간</div><div class="metric-value">14,210 hr</div></div>
+          </article>
+        </main>
+
+        <footer class="footer">
+          <div class="vertical">모<br />드</div>
+          <div class="footer-panel mode-panel"><div class="seg"><span class="active">설정순</span><span>시간순</span></div><div class="seg"><span>◀</span><span>새로고침</span></div></div>
+          <div class="vertical">통<br />합<br />제<br />어</div>
+          <div class="footer-panel control-grid">
+            <div class="control-cell"><b>무부하</b><span>9.0 bar</span></div><div class="control-cell"><b>부하</b><span>7.5 bar</span></div><div class="control-cell"><b>압력차</b><span>0.4 bar</span></div>
+            <div class="control-cell"><b>가동대수</b><span>2 ea</span></div><div class="control-cell"><b>교환운전</b><span>12 hr</span></div><div class="control-cell"><b>남은시간</b><span>46 min</span></div>
+          </div>
+          <div class="vertical">옵<br />션</div>
+          <div class="footer-panel option-list">
+            <span>고장발생시 모드 변경</span><span>교환운전 기능</span><span>메인압력모듈 적용</span><span>저압경보 적용</span><span>리모트 모드일때만 쓰기</span><span>데이터 저장유무</span>
+          </div>
+          <div class="quick"><div class="bubble"><img src="../frontend/public/menu.png" alt="" /></div></div>
+        </footer>
+      </section>
+
+      <section class="screen control-screen">
+        <div class="modal-backdrop">
+          <div class="modal">
+            <header class="modal-head">
+              <div class="modal-title"><img src="../frontend/public/control.png" alt="" /><span><strong>통합운전 설정</strong><small>운전 조건과 그룹 제어를 한 화면에서 관리합니다</small></span></div>
+              <div class="close">×</div>
+            </header>
+            <div class="control-modal-body">
+              <div>
+                <div class="card">
+                  <div class="card-head"><strong>제어 기준값</strong><small>CONTROL VALUES</small></div>
+                  <div class="value-grid">
+                    <div class="value-box"><b>무부하 압력</b><span>9.0 <small>bar</small></span></div>
+                    <div class="value-box"><b>부하 압력</b><span>7.5 <small>bar</small></span></div>
+                    <div class="value-box"><b>장비별 압력차</b><span>0.4 <small>bar</small></span></div>
+                    <div class="value-box"><b>저압경보 압력 설정</b><span>6.5 <small>bar</small></span></div>
+                    <div class="value-box"><b>교환 운전 시간</b><span>12 <small>hr</small></span></div>
+                    <div class="value-box"><b>가동 대수</b><span>2 <small>ea</small></span></div>
+                  </div>
+                </div>
+                <div class="subgrid">
+                  <div class="card">
+                    <div class="card-head"><strong>운전 조건</strong><small>SORT MODE</small></div>
+                    <div class="inline-stack"><div class="seg"><span class="active">설정순</span><span>시간순</span></div><label class="status-cell stop">절약모드 □</label></div>
+                  </div>
+                  <div class="card">
+                    <div class="card-head"><strong>인버터 기준</strong><small>INVERTER</small></div>
+                    <div class="inline-stack" style="grid-template-columns:1fr 1fr;"><div class="info-tile"><b>메인 호기</b><span>0 <small>호기</small></span></div><div class="info-tile"><b>제어압력</b><span>0.0 <small>bar</small></span></div></div>
+                  </div>
+                </div>
+              </div>
+              <aside class="card action-card">
+                <div class="card-head"><strong>통합운전</strong><small>ACTION</small></div>
+                <div class="action-block">
+                  <div><span class="action-label">운전 위치</span><div class="seg"><span>LOCAL</span><span class="active">REMOTE</span></div></div>
+                  <div><span class="action-label">제어 모드</span><div class="seg"><span>개별</span><span class="active">통합</span></div></div>
+                </div>
+                <div></div>
+                <div class="run-buttons"><button class="start">운전</button><button class="end">정지</button></div>
+              </aside>
+            </div>
+            <footer class="modal-foot"><span>명령 대기 중</span><span>입력칸 선택 시 숫자 키패드가 표시됩니다</span></footer>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen settings-screen">
+        <div class="modal-backdrop">
+          <div class="modal">
+            <header class="modal-head"><div class="modal-title"><img src="../frontend/public/setting.png" alt="" /><span><strong>설정 - 관리자</strong><small>통신 포트와 정렬 설정을 관리합니다</small></span></div><div class="close">×</div></header>
+            <div class="settings-body">
+              <aside class="settings-stack">
+                <div class="card"><div class="card-head"><strong>접속 정보</strong><small>NETWORK</small></div><div class="summary"><div><b>Connect IP</b><span>121.164.120.200</span></div><div><b>Port</b><span>1502</span></div><div><b>Login PW</b><span>1234</span></div></div></div>
+                <div class="card"><div class="card-head"><strong>통신 포트</strong><small>RS485</small></div><div class="port-buttons"><button>USB0 외장 컨버터</button><button class="selected">S7 내장 RS485</button><div class="summary"><div><b>상태</b><span>/dev/ttyS7 사용 중</span></div></div></div></div>
+              </aside>
+              <main class="card"><div class="card-head"><strong>사용모드 / 정렬 설정</strong><small>MODE TABLE</small></div><div class="mode-table">
+                <div class="mode-row"><span class="row-no">1</span><span>3</span><span>2</span><span>0</span><span>2</span></div>
+                <div class="mode-row"><span>2</span><span>2</span><span>1</span><span>0</span><span>2</span></div>
+                <div class="mode-row"><span>3</span><span>1</span><span>3</span><span>0</span><span>2</span></div>
+                <div class="mode-row"><span>4</span><span>3</span><span>2</span><span>1</span><span>3</span></div>
+                <div class="mode-row"><span>5</span><span>0</span><span>0</span><span>0</span><span>0</span></div>
+              </div><div style="margin-top:12px; display:grid; grid-template-columns:1fr 120px; gap:8px;"><div class="value-box"><b>사용모드 개수</b><span>4 <small>개</small></span></div><button class="apply-btn">저장</button></div></main>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen factory-screen">
+        <div class="modal-backdrop">
+          <div class="modal factory-modal">
+            <header class="modal-head"><div class="modal-title"><img src="../frontend/public/factory.png" alt="" /><span><strong>공장 변경</strong><small>운영할 공장을 선택한 뒤 적용하세요</small></span></div><div class="close">×</div></header>
+            <div class="factory-body">
+              <aside class="card"><div class="card-head"><strong>현재 선택</strong><small>ACTIVE</small></div><div style="margin-top:18px; font-size:32px; color:var(--blue-900);">공장 1</div><div style="margin-top:14px; padding:10px; border-radius:8px; background:var(--blue-100); color:#45657f; font-size:13px;">공장 선택 대기 중</div></aside>
+              <main class="factory-list">
+                <div class="factory-item active"><span class="number">1</span><span><b>공장 1</b><br /><small>선택됨</small></span></div>
+                <div class="factory-item"><span class="number">2</span><span><b>공장 2</b><br /><small>선택 가능</small></span></div>
+                <div class="factory-item"><span class="number">3</span><span><b>공장 3</b><br /><small>선택 가능</small></span></div>
+                <div class="factory-item"><span class="number">4</span><span><b>공장 4</b><br /><small>선택 가능</small></span></div>
+                <div class="factory-item"><span class="number">5</span><span><b>공장 5</b><br /><small>선택 가능</small></span></div>
+              </main>
+            </div>
+            <footer class="modal-foot"><span></span><span>취소　　　　적용</span></footer>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
