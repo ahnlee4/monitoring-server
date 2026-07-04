@@ -269,9 +269,15 @@ function MobileCompressorCard({
         <MobileValue prominent label={compressor.inverter ? "회전수" : "부하"} unit={compressor.inverter ? "rpm" : "bar"} value={compressor.inverter ? formatInteger(compressor.rpm) : formatNumber(compressor.loadPressure, 1)} />
       </div>
       <div className="mt-[clamp(7px,1dvh,10px)] grid grid-cols-3 gap-[clamp(6px,0.9dvh,9px)]">
-        <MobileBadge tone="green">{compressor.local ? "LOCAL" : "REMOTE"}</MobileBadge>
-        <MobileBadge tone={compressor.alarm ? "yellow" : "gray"}>{compressor.alarm ? "알림" : "정상"}</MobileBadge>
-        <MobileBadge tone={compressor.fault ? "red" : "gray"}>{compressor.fault ? "고장" : "정상"}</MobileBadge>
+        <MobileBadge icon={compressor.local ? "L" : "R"} tone="green">
+          {compressor.local ? "LOCAL" : "REMOTE"}
+        </MobileBadge>
+        <MobileBadge icon="!" tone={compressor.alarm ? "yellow" : "gray"}>
+          {compressor.alarm ? "알림" : "정상"}
+        </MobileBadge>
+        <MobileBadge icon="X" tone={compressor.fault ? "red" : "gray"}>
+          {compressor.fault ? "고장" : "정상"}
+        </MobileBadge>
       </div>
     </button>
   );
@@ -345,7 +351,7 @@ function MobileValue({ label, prominent = false, unit, value }: { label: string;
   );
 }
 
-function MobileBadge({ children, tone }: { children: string; tone: "green" | "gray" | "red" | "yellow" }) {
+function MobileBadge({ children, icon, tone }: { children: string; icon?: string; tone: "green" | "gray" | "red" | "yellow" }) {
   const className = {
     green: "bg-[#4eaa70] text-white",
     gray: "bg-[#e7edf3] text-[#45657f]",
@@ -353,7 +359,12 @@ function MobileBadge({ children, tone }: { children: string; tone: "green" | "gr
     yellow: "bg-[#ffe642] text-[#173f69]",
   }[tone];
 
-  return <span className={`flex min-h-[clamp(34px,4.2dvh,42px)] items-center justify-center rounded-[8px] px-[8px] text-[clamp(13px,1.7dvh,16px)] font-black ${className}`}>{children}</span>;
+  return (
+    <span className={`flex min-h-[clamp(34px,4.2dvh,42px)] items-center justify-center gap-[5px] rounded-[8px] px-[7px] text-[clamp(13px,1.7dvh,16px)] font-black ${className}`}>
+      {icon ? <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white/55 px-[4px] text-[11px] font-black leading-none text-current">{icon}</span> : null}
+      <span className="min-w-0 truncate">{children}</span>
+    </span>
+  );
 }
 
 function MobileDisconnect() {
