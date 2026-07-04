@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 type MobileCompressor = {
   id: number;
   name: string;
@@ -105,6 +107,23 @@ function MobileHeader({
   now: Date;
   onLogoClick: () => void;
 }) {
+  const [fullscreenActive, setFullscreenActive] = useState(false);
+
+  useEffect(() => {
+    const fullscreenDocument = document as FullscreenDocument;
+    const syncFullscreenState = () => {
+      setFullscreenActive(Boolean(document.fullscreenElement || fullscreenDocument.webkitFullscreenElement));
+    };
+
+    syncFullscreenState();
+    document.addEventListener("fullscreenchange", syncFullscreenState);
+    document.addEventListener("webkitfullscreenchange", syncFullscreenState);
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreenState);
+      document.removeEventListener("webkitfullscreenchange", syncFullscreenState);
+    };
+  }, []);
+
   const handleFullscreenClick = () => {
     const fullscreenDocument = document as FullscreenDocument;
     const fullscreenElement = document.documentElement as FullscreenElement;
@@ -132,11 +151,13 @@ function MobileHeader({
             {dashboard.integratedRun ? "운전" : "정지"}
           </span>
           <button
-            className="min-h-[44px] rounded-[9px] border border-[#c9deef] bg-[#eef7ff] text-[12px] font-black text-[#173f69] shadow-[0_4px_10px_rgba(35,123,208,0.1)]"
+            aria-label={fullscreenActive ? "전체화면 축소" : "전체화면"}
+            className="flex min-h-[44px] items-center justify-center rounded-[9px] border border-[#c9deef] bg-[#eef7ff] text-[#173f69] shadow-[0_4px_10px_rgba(35,123,208,0.1)]"
             onClick={handleFullscreenClick}
+            title={fullscreenActive ? "전체화면 축소" : "전체화면"}
             type="button"
           >
-            전체
+            <FullscreenIcon active={fullscreenActive} />
           </button>
         </div>
       </div>
@@ -145,6 +166,28 @@ function MobileHeader({
         <MobileSummaryTile label="현재 시각" value={formatMobileDateTime(now)} />
       </div>
     </header>
+  );
+}
+
+function FullscreenIcon({ active }: { active: boolean }) {
+  if (active) {
+    return (
+      <span aria-hidden="true" className="relative block h-[22px] w-[22px]">
+        <span className="absolute left-[2px] top-[2px] h-[7px] w-[7px] border-b-[2px] border-r-[2px] border-[#173f69]" />
+        <span className="absolute right-[2px] top-[2px] h-[7px] w-[7px] border-b-[2px] border-l-[2px] border-[#173f69]" />
+        <span className="absolute bottom-[2px] left-[2px] h-[7px] w-[7px] border-r-[2px] border-t-[2px] border-[#173f69]" />
+        <span className="absolute bottom-[2px] right-[2px] h-[7px] w-[7px] border-l-[2px] border-t-[2px] border-[#173f69]" />
+      </span>
+    );
+  }
+
+  return (
+    <span aria-hidden="true" className="relative block h-[22px] w-[22px]">
+      <span className="absolute left-[2px] top-[2px] h-[8px] w-[8px] border-l-[2px] border-t-[2px] border-[#173f69]" />
+      <span className="absolute right-[2px] top-[2px] h-[8px] w-[8px] border-r-[2px] border-t-[2px] border-[#173f69]" />
+      <span className="absolute bottom-[2px] left-[2px] h-[8px] w-[8px] border-b-[2px] border-l-[2px] border-[#173f69]" />
+      <span className="absolute bottom-[2px] right-[2px] h-[8px] w-[8px] border-b-[2px] border-r-[2px] border-[#173f69]" />
+    </span>
   );
 }
 
