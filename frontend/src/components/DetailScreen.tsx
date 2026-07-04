@@ -79,14 +79,14 @@ export function DetailScreen({
   ).length;
 
   return (
-    <div className="grid h-full grid-rows-[42px_1fr] gap-[3px] bg-[#eef7ff] p-[3px]">
-      <div className="grid grid-cols-[170px_1fr_180px_190px] gap-[3px]">
-        <HeaderCell>상세 화면</HeaderCell>
+    <div className="grid h-full grid-rows-[44px_1fr] gap-[4px] bg-[#eaf4fd] p-[4px]">
+      <div className="grid grid-cols-[150px_1fr_170px_190px] gap-[4px]">
+        <HeaderCell tone="strong">상세 화면</HeaderCell>
         <HeaderCell>컴프레샤 / DIO / AIO 상태</HeaderCell>
         <HeaderCell>연결 {connectedCount} / {devices.length}</HeaderCell>
-        <HeaderCell>메인압력 {formatScaledValue(dashboard.mainPressure, "bar")}</HeaderCell>
+        <HeaderCell tone="strong">메인압력 {formatScaledValue(dashboard.mainPressure, "bar")}</HeaderCell>
       </div>
-      <div className="grid min-h-0 grid-cols-4 auto-rows-[263px] gap-[3px] overflow-y-auto pr-[2px]">
+      <div className="grid min-h-0 grid-cols-4 auto-rows-[263px] gap-[4px] overflow-y-auto pr-[2px]">
         {devices.map((device) =>
           device.kind === "compressor" ? (
             <DetailCompressorCard
@@ -117,33 +117,38 @@ function DetailCompressorCard({
 
   return (
     <button
-      className="grid min-h-0 grid-rows-[82px_1fr] overflow-hidden border border-[#75b4ee] bg-white p-[4px] text-left"
+      className="grid min-h-0 grid-rows-[78px_1fr] overflow-hidden rounded-[5px] border border-[#82b8ec] bg-[#f9fcff] p-[4px] text-left shadow-[inset_0_0_0_1px_#ffffff]"
       onClick={() => onOpenDetail(compressor.id)}
       type="button"
     >
-      <div className="grid grid-cols-[70px_1fr] gap-[4px]">
+      <div className="grid grid-cols-[68px_1fr] gap-[4px]">
         <StatusColumn modeText={modeText} runText={runText} loadText={getLoadText(compressor)} fault={compressor.fault} connected={compressor.connected} />
-        <div className="grid grid-rows-[28px_1fr] gap-[4px]">
-          <div className="flex min-w-0 items-center justify-start overflow-hidden rounded-[4px] bg-[#3374ce] px-[10px] text-[17px] font-black leading-none text-white">
+        <div className="grid grid-rows-[26px_1fr] gap-[4px]">
+          <div className="flex min-w-0 items-center justify-start overflow-hidden rounded-[3px] border border-[#1f65ad] bg-[#2f78c7] px-[9px] text-[16px] font-black leading-none text-white">
             <span className="truncate">{compressor.name} ({compressor.model})</span>
           </div>
-          <div className="flex items-center justify-center rounded-[10px] border border-[#173f69] bg-[#3374ce] text-[31px] font-black leading-none text-white">
-            {pressureText}
+          <div className="grid grid-cols-[1fr_54px] overflow-hidden rounded-[6px] border border-[#1e5c98] bg-white">
+            <div className="flex items-center justify-end bg-[#2874bf] px-[8px] text-[30px] font-black leading-none tracking-[-0.04em] text-white">
+              {pressureText.replace(" bar", "")}
+            </div>
+            <div className="flex items-end justify-center bg-[#1e5c98] pb-[8px] text-[14px] font-black leading-none text-white">
+              {pressureText.includes("bar") ? "bar" : ""}
+            </div>
           </div>
         </div>
       </div>
-      <div className="grid min-h-0 grid-cols-[1fr_92px] gap-[4px] pt-[4px]">
-        <div className="grid min-h-0 grid-rows-[1fr_32px]">
-          <div className="relative flex min-h-0 items-center justify-center overflow-hidden bg-white">
+      <div className="grid min-h-0 grid-cols-[1fr_98px] gap-[4px] pt-[4px]">
+        <div className="grid min-h-0 grid-rows-[1fr_28px] overflow-hidden rounded-[4px] border border-[#c8e0f4] bg-white">
+          <div className="relative flex min-h-0 items-center justify-center overflow-hidden bg-[#ffffff]">
             <img src={imageSrc} alt="" className="max-h-full max-w-full object-contain" />
             {!compressor.connected ? <StatusOverlay src="/failure.png" label="FAIL" /> : null}
             {compressor.connected && compressor.fault ? <StatusOverlay src="/fault.png" label="FAULT" /> : null}
           </div>
-          <div className="flex items-center justify-center text-[20px] font-black text-[#173f69]">
+          <div className="flex items-center justify-center border-t border-[#d9eafa] bg-[#eef7ff] text-[17px] font-black text-[#173f69]">
             {compressor.inverter ? "INVERTER" : "STANDARD"}
           </div>
         </div>
-        <div className="grid content-start gap-[4px]">
+        <div className="grid content-start gap-[3px]">
           <SideMetric label="온도" value={compressor.connected ? formatScaledValue(compressor.temperature, "℃") : "--- ℃"} />
           {compressor.inverter ? (
             <>
@@ -172,33 +177,34 @@ function AuxiliaryDeviceCard({ device }: { device: AuxiliaryDevice }) {
       : `${device.measuredValue.toFixed(device.measuredUnit === "bar" ? 2 : 1)} ${device.measuredUnit}`;
 
   return (
-    <article className="grid min-h-0 grid-rows-[82px_1fr] overflow-hidden border border-[#75b4ee] bg-white p-[4px]">
-      <div className="grid grid-cols-[70px_1fr] gap-[4px]">
+    <article className="grid min-h-0 grid-rows-[78px_1fr] overflow-hidden rounded-[5px] border border-[#82b8ec] bg-[#f9fcff] p-[4px] shadow-[inset_0_0_0_1px_#ffffff]">
+      <div className="grid grid-cols-[68px_1fr] gap-[4px]">
         <StatusColumn modeText={device.modeText} runText={device.runText} loadText={device.loadText} fault={device.fault} connected={device.connected} />
-        <div className="grid grid-rows-[28px_1fr] gap-[4px]">
-          <div className="flex items-center justify-center rounded-[4px] bg-[#3374ce] px-[10px] text-[17px] font-black leading-none text-white">
+        <div className="grid grid-rows-[26px_1fr] gap-[4px]">
+          <div className="flex items-center justify-center rounded-[3px] border border-[#1f65ad] bg-[#2f78c7] px-[10px] text-[16px] font-black leading-none text-white">
             {device.name}
           </div>
-          <div className="flex items-center justify-center rounded-[10px] border border-[#173f69] bg-[#3374ce] text-[31px] font-black leading-none text-white">
-            {valueText}
+          <div className="flex items-center justify-center rounded-[6px] border border-[#1e5c98] bg-[#2874bf] text-[28px] font-black leading-none tracking-[-0.04em] text-white">
+            <span className="truncate px-[4px]">{valueText}</span>
           </div>
         </div>
       </div>
-      <div className="grid min-h-0 grid-rows-[1fr_36px] pt-[4px]">
-        <div className="relative flex min-h-0 items-center justify-center overflow-hidden bg-white">
+      <div className="grid min-h-0 grid-rows-[1fr_32px] overflow-hidden rounded-[4px] border border-[#c8e0f4] bg-white mt-[4px]">
+        <div className="relative flex min-h-0 items-center justify-center overflow-hidden bg-[#ffffff]">
           <img src={device.imageSrc} alt="" className="max-h-full max-w-full object-contain" />
           {!device.connected ? <StatusOverlay src="/failure.png" label="FAIL" /> : null}
           {device.connected && device.fault ? <StatusOverlay src="/fault.png" label="FAULT" /> : null}
         </div>
-        <div className="flex items-center justify-center text-[21px] font-black text-[#173f69]">{device.type}</div>
+        <div className="flex items-center justify-center border-t border-[#d9eafa] bg-[#eef7ff] text-[19px] font-black text-[#173f69]">{device.type}</div>
       </div>
     </article>
   );
 }
 
-function HeaderCell({ children }: { children: ReactNode }) {
+function HeaderCell({ children, tone = "normal" }: { children: ReactNode; tone?: "normal" | "strong" }) {
+  const toneClass = tone === "strong" ? "bg-[#1d66b1]" : "bg-[#3374ce]";
   return (
-    <div className="flex items-center justify-center border border-[#75b4ee] bg-[#3374ce] px-[6px] text-center text-[19px] font-bold text-white">
+    <div className={`flex items-center justify-center rounded-[4px] border border-[#75b4ee] px-[6px] text-center text-[18px] font-bold text-white ${toneClass}`}>
       {children}
     </div>
   );
@@ -218,7 +224,7 @@ function StatusColumn({
   runText: string;
 }) {
   return (
-    <div className="grid auto-rows-[26px] gap-[2px]">
+    <div className="grid auto-rows-[24px] gap-[2px]">
       <StatusPill tone="label">STATUS</StatusPill>
       <StatusPill tone="mode">{modeText}</StatusPill>
       <StatusPill tone={!connected || fault ? "danger" : runText === "RUN" ? "run" : "ready"}>{runText}</StatusPill>
@@ -237,14 +243,14 @@ function StatusPill({ children, tone }: { children: ReactNode; tone: "label" | "
     danger: "bg-[#e33131] text-white",
   }[tone];
 
-  return <div className={`flex items-center justify-center border border-[#6faee7] text-[15px] font-black leading-none ${className}`}>{children}</div>;
+  return <div className={`flex items-center justify-center rounded-[2px] border border-[#6faee7] text-[14px] font-black leading-none ${className}`}>{children}</div>;
 }
 
 function SideMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid min-h-[34px] overflow-hidden border border-[#9fc9fa] bg-white">
-      <div className="flex items-center justify-center bg-[#eef7ff] text-[12px] font-black leading-none text-[#173f69]">{label}</div>
-      <div className="flex items-center justify-center px-[2px] text-center text-[14px] font-black leading-none text-black">{value}</div>
+    <div className="grid min-h-[33px] grid-rows-[14px_1fr] overflow-hidden rounded-[3px] border border-[#a7cdef] bg-white">
+      <div className="flex items-center justify-center bg-[#e8f3fd] text-[11px] font-black leading-none text-[#1b5c96]">{label}</div>
+      <div className="flex items-center justify-center px-[2px] text-center text-[13px] font-black leading-none text-[#111827]">{value}</div>
     </div>
   );
 }
