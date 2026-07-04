@@ -167,7 +167,7 @@
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
         grid-auto-rows: 281px;
-        gap: 4px;
+        gap: 5px;
         overflow-x: hidden;
         overflow-y: auto;
         padding-right: 2px;
@@ -191,12 +191,12 @@
         min-height: 0;
         display: grid;
         grid-template-rows: 34px 1fr 58px;
-        gap: 3px;
+        gap: 5px;
         overflow: hidden;
-        border: 1px solid #75b4ee;
-        background: #d8ecff;
-        padding: 3px;
-        box-shadow: inset 0 0 0 1px #fff;
+        border: 1px solid #a7cef0;
+        background: #edf7ff;
+        padding: 5px;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
       }
 
       .device-summary {
@@ -204,7 +204,7 @@
         min-width: 0;
         display: grid;
         grid-template-columns: 56px minmax(0, 1fr) 104px;
-        gap: 3px;
+        gap: 4px;
         overflow: hidden;
       }
 
@@ -213,7 +213,6 @@
       .device-value {
         min-width: 0;
         overflow: hidden;
-        border: 1px solid #75b4ee;
       }
 
       .device-index {
@@ -253,7 +252,6 @@
         align-items: center;
         min-width: 0;
         overflow: hidden;
-        border-top: 1px solid #d9eafa;
         background: #eef7ff;
         padding: 0 8px;
         color: #173f69;
@@ -299,7 +297,7 @@
         min-height: 0;
         display: grid;
         grid-template-columns: minmax(0, 1fr) 116px;
-        gap: 3px;
+        gap: 5px;
         overflow: hidden;
       }
 
@@ -308,7 +306,6 @@
         display: grid;
         grid-template-rows: 1fr 30px;
         overflow: hidden;
-        border: 1px solid #75b4ee;
         background: #fff;
       }
 
@@ -332,7 +329,6 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        border-top: 1px solid #75b4ee;
         background: #eef7ff;
         color: #173f69;
         font-size: 16px;
@@ -343,7 +339,7 @@
         min-width: 0;
         display: grid;
         align-content: start;
-        gap: 3px;
+        gap: 4px;
         overflow: hidden;
       }
 
@@ -352,7 +348,6 @@
         display: grid;
         grid-template-columns: 46px 1fr;
         overflow: hidden;
-        border: 1px solid #75b4ee;
         background: #fff;
       }
 
@@ -361,7 +356,7 @@
         align-items: center;
         justify-content: center;
         overflow: hidden;
-        background: #b0d2ff;
+        background: #d9ecff;
         color: #13243a;
         text-align: center;
         font-size: 12px;
@@ -401,15 +396,15 @@
         min-height: 0;
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        gap: 3px;
+        gap: 4px;
       }
 
       .status-cell {
         min-width: 0;
         display: grid;
-        grid-template-rows: 13px 1fr;
+        grid-template-columns: 1fr 1.25fr;
+        align-items: center;
         overflow: hidden;
-        border: 1px solid #75b4ee;
         background: #fff;
       }
 
@@ -419,10 +414,10 @@
         justify-content: center;
         min-width: 0;
         overflow: hidden;
-        border-bottom: 1px solid rgba(23, 63, 105, 0.12);
         background: #eef7ff;
         color: #173f69;
-        font-size: 9px;
+        align-self: stretch;
+        font-size: 8px;
         font-weight: 900;
         line-height: 1;
         letter-spacing: -0.04em;
@@ -441,7 +436,7 @@
       }
 
       .status-cell.green {
-        border-color: #4caa70;
+        background: #eaf7ef;
       }
 
       .status-cell.green strong {
@@ -450,7 +445,7 @@
       }
 
       .status-cell.gray {
-        border-color: #b8c0c7;
+        background: #f2f5f7;
       }
 
       .status-cell.gray strong {
@@ -459,7 +454,7 @@
       }
 
       .status-cell.red {
-        border-color: #e42222;
+        background: #fff0f0;
       }
 
       .status-cell.red strong {
@@ -468,7 +463,7 @@
       }
 
       .status-cell.yellow {
-        border-color: #e3c700;
+        background: #fff9d9;
       }
 
       .status-cell.yellow strong {
