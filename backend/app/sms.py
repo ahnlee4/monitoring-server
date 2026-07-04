@@ -101,6 +101,7 @@ class DisconnectSmsMonitor:
         self.thread: Thread | None = None
         self.ever_online = False
         self.disconnected = False
+        self.started_at = time.monotonic()
         self.last_disconnect_sent_at: float | None = None
 
     def start(self) -> None:
@@ -140,10 +141,10 @@ class DisconnectSmsMonitor:
             self.disconnected = False
             return
 
-        if not self.ever_online:
+        monotonic_now = time.monotonic()
+        if not self.ever_online and monotonic_now - self.started_at < self.settings.sms_link_grace_seconds:
             return
 
-        monotonic_now = time.monotonic()
         cooldown = max(60.0, self.settings.sms_cooldown_seconds)
         if self.disconnected and self.last_disconnect_sent_at is not None:
             if monotonic_now - self.last_disconnect_sent_at < cooldown:
