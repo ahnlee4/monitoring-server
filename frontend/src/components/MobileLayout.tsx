@@ -68,7 +68,7 @@ export function MobileLayout({
   return (
     <section className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-[#eef4fa] text-[#12263a]">
       <MobileHeader dashboard={dashboard} now={now} onLogoClick={onLogoClick} />
-      <main className="min-h-0 flex-1 overflow-y-auto px-[12px] pb-[92px] pt-[10px]">
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[12px] pb-[92px] pt-[10px]">
         {connectedCompressors.length === 0 ? (
           <MobileDisconnect />
         ) : activeScreen === "detail" ? (
@@ -142,9 +142,9 @@ function MobileMainList({
   onOpenCompressorDetail: (id: number) => void;
 }) {
   return (
-    <div className="grid gap-[10px]">
+    <div className="flex min-h-0 flex-1 flex-col gap-[10px]">
       {lowPressureText ? <div className="rounded-[10px] bg-[#fff0f0] px-[12px] py-[10px] text-center text-[15px] font-black text-[#d92525]">{lowPressureText}</div> : null}
-      <div className="grid grid-cols-2 gap-[8px]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 auto-rows-[calc((100%-10px)/2)] gap-[10px]">
         {compressors.map((compressor) => (
           <MobileCompressorCard key={compressor.id} compressor={compressor} onOpenDetail={onOpenCompressorDetail} />
         ))}
@@ -178,26 +178,26 @@ function MobileCompressorCard({
 }) {
   return (
     <button
-      className="w-full rounded-[13px] border border-[#d9e6f0] bg-white p-[9px] text-left shadow-[0_8px_20px_rgba(18,54,88,0.08)]"
+      className="grid min-h-0 w-full grid-rows-[auto_1fr_auto] rounded-[13px] border border-[#d9e6f0] bg-white p-[11px] text-left shadow-[0_8px_20px_rgba(18,54,88,0.08)]"
       onClick={() => onOpenDetail(compressor.id)}
       type="button"
     >
-      <div className="grid gap-[7px]">
+      <div className="grid grid-cols-[1fr_88px] items-start gap-[9px]">
         <span className="min-w-0">
-          <span className="block text-[18px] font-black leading-none text-[#173f69]">{compressor.name}</span>
+          <span className="block text-[20px] font-black leading-none text-[#173f69]">{compressor.name}</span>
           <span className="mt-[5px] block truncate text-[12px] font-black text-[#6f879d]">{compressor.model}</span>
         </span>
-        <span className={`flex min-h-[38px] items-center justify-center rounded-[8px] px-[8px] text-[14px] font-black text-white ${compressor.running ? "bg-[#d92525]" : "bg-[#667380]"}`}>
+        <span className={`flex min-h-[42px] items-center justify-center rounded-[8px] px-[8px] text-[15px] font-black text-white ${compressor.running ? "bg-[#d92525]" : "bg-[#667380]"}`}>
           {compressor.running ? "운전" : "정지"}
         </span>
       </div>
-      <div className="mt-[9px] grid grid-cols-1 gap-[6px]">
+      <div className="mt-[10px] grid min-h-0 grid-cols-2 gap-[7px]">
         <MobileValue label="압력" unit="bar" value={formatNumber(compressor.pressure, 1)} />
         <MobileValue label="온도" unit="℃" value={formatNumber(compressor.temperature, 1)} />
         <MobileValue label={compressor.inverter ? "제어압력" : "무부하"} unit="bar" value={formatNumber(compressor.inverter ? compressor.controlPressure : compressor.noLoadPressure, 1)} />
         <MobileValue label={compressor.inverter ? "회전수" : "부하"} unit={compressor.inverter ? "rpm" : "bar"} value={compressor.inverter ? formatInteger(compressor.rpm) : formatNumber(compressor.loadPressure, 1)} />
       </div>
-      <div className="mt-[8px] grid grid-cols-1 gap-[5px]">
+      <div className="mt-[9px] grid grid-cols-3 gap-[7px]">
         <MobileBadge tone="green">{compressor.local ? "LOCAL" : "REMOTE"}</MobileBadge>
         <MobileBadge tone={compressor.alarm ? "yellow" : "gray"}>{compressor.alarm ? "알림" : "정상"}</MobileBadge>
         <MobileBadge tone={compressor.fault ? "red" : "gray"}>{compressor.fault ? "고장" : "정상"}</MobileBadge>
