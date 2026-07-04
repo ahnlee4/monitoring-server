@@ -74,19 +74,10 @@ export function DetailScreen({
     ...dashboard.compressors.map((compressor) => ({ kind: "compressor" as const, compressor })),
     ...auxiliaryDevices.map((device) => ({ kind: "auxiliary" as const, device })),
   ];
-  const connectedCount = devices.filter((device) =>
-    device.kind === "compressor" ? device.compressor.connected : device.device.connected,
-  ).length;
 
   return (
-    <div className="grid h-full grid-rows-[44px_1fr] gap-[4px] bg-[#eaf4fd] p-[4px]">
-      <div className="grid grid-cols-[150px_1fr_170px_190px] gap-[4px]">
-        <HeaderCell tone="strong">상세 화면</HeaderCell>
-        <HeaderCell>컴프레샤 / DIO / AIO 상태</HeaderCell>
-        <HeaderCell>연결 {connectedCount} / {devices.length}</HeaderCell>
-        <HeaderCell tone="strong">메인압력 {formatScaledValue(dashboard.mainPressure, "bar")}</HeaderCell>
-      </div>
-      <div className="grid min-h-0 grid-cols-4 auto-rows-[263px] gap-[4px] overflow-y-auto pr-[2px]">
+    <div className="h-full bg-[#eaf4fd] p-[4px]">
+      <div className="grid h-full min-h-0 grid-cols-4 auto-rows-[281px] gap-[4px] overflow-y-auto pr-[2px]">
         {devices.map((device) =>
           device.kind === "compressor" ? (
             <DetailCompressorCard
@@ -198,15 +189,6 @@ function AuxiliaryDeviceCard({ device }: { device: AuxiliaryDevice }) {
         <div className="flex items-center justify-center border-t border-[#d9eafa] bg-[#eef7ff] text-[19px] font-black text-[#173f69]">{device.type}</div>
       </div>
     </article>
-  );
-}
-
-function HeaderCell({ children, tone = "normal" }: { children: ReactNode; tone?: "normal" | "strong" }) {
-  const toneClass = tone === "strong" ? "bg-[#1d66b1]" : "bg-[#3374ce]";
-  return (
-    <div className={`flex items-center justify-center rounded-[4px] border border-[#75b4ee] px-[6px] text-center text-[18px] font-bold text-white ${toneClass}`}>
-      {children}
-    </div>
   );
 }
 
