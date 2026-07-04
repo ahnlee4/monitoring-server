@@ -190,7 +190,7 @@
         min-width: 0;
         min-height: 0;
         display: grid;
-        grid-template-rows: 58px 1fr 34px;
+        grid-template-rows: 34px 1fr 58px;
         gap: 3px;
         overflow: hidden;
         border: 1px solid #75b4ee;
@@ -200,6 +200,7 @@
       }
 
       .device-summary {
+        order: 3;
         min-width: 0;
         display: grid;
         grid-template-columns: 56px minmax(0, 1fr) 104px;
@@ -294,6 +295,7 @@
       }
 
       .detail-body {
+        order: 2;
         min-height: 0;
         display: grid;
         grid-template-columns: minmax(0, 1fr) 116px;
@@ -371,15 +373,31 @@
         display: flex;
         align-items: center;
         justify-content: flex-end;
+        gap: 3px;
         overflow: hidden;
         padding: 0 5px;
         background: #fff;
-        font-size: 15px;
+        font-size: 16px;
         font-weight: 900;
         white-space: nowrap;
       }
 
+      .metric strong span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .metric strong small {
+        flex: 0 0 auto;
+        color: #4f6275;
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1;
+      }
+
       .status-row {
+        order: 1;
         min-height: 0;
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -692,11 +710,11 @@
                     <div class="machine-type">OIL FREE</div>
                   </div>
                   <div class="metric-list">
-                    <div class="metric"><label>압력</label><strong>6.42 bar</strong></div>
-                    <div class="metric"><label>온도</label><strong>42.0 ℃</strong></div>
-                    <div class="metric"><label>설정</label><strong>6.80 bar</strong></div>
-                    <div class="metric"><label>회전</label><strong>1820 rpm</strong></div>
-                    <div class="metric"><label>시간</label><strong>12548 hr</strong></div>
+                    <div class="metric"><label>압력</label><strong><span>6.42</span><small>bar</small></strong></div>
+                    <div class="metric"><label>온도</label><strong><span>42.0</span><small>℃</small></strong></div>
+                    <div class="metric"><label>설정</label><strong><span>6.80</span><small>bar</small></strong></div>
+                    <div class="metric"><label>회전</label><strong><span>1820</span><small>rpm</small></strong></div>
+                    <div class="metric"><label>시간</label><strong><span>12548</span><small>hr</small></strong></div>
                   </div>
                 </div>
                 <div class="status-row">
@@ -719,11 +737,11 @@
                     <div class="machine-type">INJECTION</div>
                   </div>
                   <div class="metric-list">
-                    <div class="metric"><label>압력</label><strong>6.38 bar</strong></div>
-                    <div class="metric"><label>온도</label><strong>38.5 ℃</strong></div>
-                    <div class="metric"><label>무부하</label><strong>7.20 bar</strong></div>
-                    <div class="metric"><label>부하</label><strong>6.40 bar</strong></div>
-                    <div class="metric"><label>시간</label><strong>8920 hr</strong></div>
+                    <div class="metric"><label>압력</label><strong><span>6.38</span><small>bar</small></strong></div>
+                    <div class="metric"><label>온도</label><strong><span>38.5</span><small>℃</small></strong></div>
+                    <div class="metric"><label>무부하</label><strong><span>7.20</span><small>bar</small></strong></div>
+                    <div class="metric"><label>부하</label><strong><span>6.40</span><small>bar</small></strong></div>
+                    <div class="metric"><label>시간</label><strong><span>8920</span><small>hr</small></strong></div>
                   </div>
                 </div>
                 <div class="status-row">
@@ -746,11 +764,11 @@
                     <div class="machine-type">OIL FREE</div>
                   </div>
                   <div class="metric-list">
-                    <div class="metric"><label>압력</label><strong>--- bar</strong></div>
-                    <div class="metric"><label>온도</label><strong>--- ℃</strong></div>
-                    <div class="metric"><label>설정</label><strong>6.80 bar</strong></div>
-                    <div class="metric"><label>회전</label><strong>--- rpm</strong></div>
-                    <div class="metric"><label>시간</label><strong>124 hr</strong></div>
+                    <div class="metric"><label>압력</label><strong><span>---</span><small>bar</small></strong></div>
+                    <div class="metric"><label>온도</label><strong><span>---</span><small>℃</small></strong></div>
+                    <div class="metric"><label>설정</label><strong><span>6.80</span><small>bar</small></strong></div>
+                    <div class="metric"><label>회전</label><strong><span>---</span><small>rpm</small></strong></div>
+                    <div class="metric"><label>시간</label><strong><span>124</span><small>hr</small></strong></div>
                   </div>
                 </div>
                 <div class="status-row">
@@ -776,11 +794,11 @@
                     <div class="machine-type">INJECTION</div>
                   </div>
                   <div class="metric-list">
-                    <div class="metric"><label>압력</label><strong>--- bar</strong></div>
-                    <div class="metric"><label>온도</label><strong>--- ℃</strong></div>
-                    <div class="metric"><label>무부하</label><strong>--- bar</strong></div>
-                    <div class="metric"><label>부하</label><strong>--- bar</strong></div>
-                    <div class="metric"><label>시간</label><strong>--- hr</strong></div>
+                    <div class="metric"><label>압력</label><strong><span>---</span><small>bar</small></strong></div>
+                    <div class="metric"><label>온도</label><strong><span>---</span><small>℃</small></strong></div>
+                    <div class="metric"><label>무부하</label><strong><span>---</span><small>bar</small></strong></div>
+                    <div class="metric"><label>부하</label><strong><span>---</span><small>bar</small></strong></div>
+                    <div class="metric"><label>시간</label><strong><span>---</span><small>hr</small></strong></div>
                   </div>
                 </div>
                 <div class="status-row">
@@ -803,7 +821,7 @@
                     <div class="machine-type">냉동식 드라이어</div>
                   </div>
                   <div class="metric-list">
-                    <div class="metric"><label>온도</label><strong>28.4 ℃</strong></div>
+                    <div class="metric"><label>온도</label><strong><span>28.4</span><small>℃</small></strong></div>
                     <div class="metric"><label>운전</label><strong>RUN</strong></div>
                     <div class="metric"><label>통신</label><strong>정상</strong></div>
                   </div>
@@ -828,8 +846,8 @@
                     <div class="machine-type">압력 트랜스미터</div>
                   </div>
                   <div class="metric-list">
-                    <div class="metric"><label>압력</label><strong>6.41 bar</strong></div>
-                    <div class="metric"><label>범위</label><strong>0-10 bar</strong></div>
+                    <div class="metric"><label>압력</label><strong><span>6.41</span><small>bar</small></strong></div>
+                    <div class="metric"><label>범위</label><strong><span>0-10</span><small>bar</small></strong></div>
                     <div class="metric"><label>통신</label><strong>정상</strong></div>
                   </div>
                 </div>
