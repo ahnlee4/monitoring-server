@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-
 type MobileCompressor = {
   id: number;
   name: string;
@@ -66,18 +64,6 @@ export function MobileLayout({
   onToggleScreen: () => void;
 }) {
   const connectedCompressors = dashboard.compressors.filter((compressor) => compressor.connected);
-  const [selectedCompressorId, setSelectedCompressorId] = useState<number | null>(null);
-  const selectedCompressor = connectedCompressors.find((compressor) => compressor.id === selectedCompressorId) ?? connectedCompressors[0] ?? null;
-
-  useEffect(() => {
-    if (connectedCompressors.length === 0) {
-      setSelectedCompressorId(null);
-      return;
-    }
-    if (!selectedCompressorId || !connectedCompressors.some((compressor) => compressor.id === selectedCompressorId)) {
-      setSelectedCompressorId(connectedCompressors[0].id);
-    }
-  }, [connectedCompressors, selectedCompressorId]);
 
   return (
     <section className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-[#eef4fa] text-[#12263a]">
@@ -88,13 +74,7 @@ export function MobileLayout({
         ) : activeScreen === "detail" ? (
           <MobileDetailList compressors={connectedCompressors} onOpenCompressorDetail={onOpenCompressorDetail} />
         ) : (
-          <MobileMainList
-            compressors={connectedCompressors}
-            lowPressureText={lowPressureText}
-            onOpenCompressorDetail={onOpenCompressorDetail}
-            onSelectCompressor={setSelectedCompressorId}
-            selectedCompressor={selectedCompressor}
-          />
+          <MobileMainList compressors={connectedCompressors} lowPressureText={lowPressureText} onOpenCompressorDetail={onOpenCompressorDetail} />
         )}
       </main>
       <MobileBottomActions
@@ -156,86 +136,18 @@ function MobileMainList({
   compressors,
   lowPressureText,
   onOpenCompressorDetail,
-  onSelectCompressor,
-  selectedCompressor,
 }: {
   compressors: MobileCompressor[];
   lowPressureText: string;
   onOpenCompressorDetail: (id: number) => void;
-  onSelectCompressor: (id: number) => void;
-  selectedCompressor: MobileCompressor | null;
 }) {
   return (
     <div className="grid gap-[10px]">
       {lowPressureText ? <div className="rounded-[10px] bg-[#fff0f0] px-[12px] py-[10px] text-center text-[15px] font-black text-[#d92525]">{lowPressureText}</div> : null}
-      <MobileCompressorSummaryTable
-        compressors={compressors}
-        onSelectCompressor={onSelectCompressor}
-        selectedCompressorId={selectedCompressor?.id ?? null}
-      />
-      {selectedCompressor ? (
-        <MobileSelectedCompressor compressor={selectedCompressor} onOpenDetail={onOpenCompressorDetail} />
-      ) : null}
+      {compressors.map((compressor) => (
+        <MobileCompressorCard key={compressor.id} compressor={compressor} onOpenDetail={onOpenCompressorDetail} />
+      ))}
     </div>
-  );
-}
-
-function MobileCompressorSummaryTable({
-  compressors,
-  onSelectCompressor,
-  selectedCompressorId,
-}: {
-  compressors: MobileCompressor[];
-  onSelectCompressor: (id: number) => void;
-  selectedCompressorId: number | null;
-}) {
-  return (
-    <section className="overflow-hidden rounded-[13px] border border-[#d9e6f0] bg-white shadow-[0_8px_20px_rgba(18,54,88,0.08)]">
-      <div className="grid grid-cols-[54px_1fr_1fr_48px] border-b border-[#d9e6f0] bg-[#eef7ff] px-[8px] py-[8px] text-center text-[12px] font-black text-[#45657f]">
-        <span>호기</span>
-        <span>압력</span>
-        <span>온도</span>
-        <span>상태</span>
-      </div>
-      <div className="grid">
-        {compressors.map((compressor) => {
-          const selected = compressor.id === selectedCompressorId;
-          return (
-            <button
-              key={compressor.id}
-              className={`grid grid-cols-[54px_1fr_1fr_48px] items-center border-b border-[#edf3f7] px-[8px] py-[9px] text-center last:border-b-0 ${
-                selected ? "bg-[#237bd0] text-white" : "bg-white text-[#173f69]"
-              }`}
-              onClick={() => onSelectCompressor(compressor.id)}
-              type="button"
-            >
-              <span className="text-[14px] font-black">{compressor.id}호</span>
-              <span className="text-[15px] font-black">{formatNumber(compressor.pressure, 1)}</span>
-              <span className="text-[15px] font-black">{formatNumber(compressor.temperature, 1)}</span>
-              <span className={`mx-auto h-[10px] w-[10px] rounded-full ${compressor.fault ? "bg-[#d92525]" : compressor.alarm ? "bg-[#ffe642]" : compressor.running ? "bg-[#4eaa70]" : "bg-[#9aa2aa]"}`} />
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function MobileSelectedCompressor({
-  compressor,
-  onOpenDetail,
-}: {
-  compressor: MobileCompressor;
-  onOpenDetail: (id: number) => void;
-}) {
-  return (
-    <section className="grid gap-[8px]">
-      <div className="flex items-center justify-between px-[2px]">
-        <span className="text-[13px] font-black text-[#6f879d]">선택된 호기</span>
-        <span className="text-[13px] font-black text-[#237bd0]">{compressor.name}</span>
-      </div>
-      <MobileCompressorCard compressor={compressor} onOpenDetail={onOpenDetail} />
-    </section>
   );
 }
 
