@@ -66,8 +66,9 @@ type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.100";
+const SYSTEM_LINK_GRACE_MS = 8_000;
+const DEVICE_LINK_GRACE_MS = 12_000;
+const APP_VERSION = "0.1.101";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -285,7 +286,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
   const oilfreeSelector = liveMapNumber(values, "0006", 0);
   const compressors = Array.from({ length: 8 }, (_, index) => buildCompressorFromMap(values, index, oilfreeSelector));
   const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
-  const systemOnline = hasRecentValue(values, "0000", DEVICE_LINK_GRACE_MS) || hasRecentValue(values, "0002", DEVICE_LINK_GRACE_MS);
+  const systemOnline = hasRecentValue(values, "0000", SYSTEM_LINK_GRACE_MS) || hasRecentValue(values, "0002", SYSTEM_LINK_GRACE_MS);
   const displayOrder = readRunSequence(values);
   const mainPressure = scale10(liveMapNumber(values, "0000", 0));
   const optionDevice = liveMapNumber(values, "004A", 0);

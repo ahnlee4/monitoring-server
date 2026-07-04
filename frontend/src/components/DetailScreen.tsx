@@ -2,7 +2,7 @@ import type { YujinMapValue } from "../types";
 import type { ReactNode } from "react";
 
 const INVALID_DISPLAY_RAW_VALUE = 32767;
-const LIVE_VALUE_MAX_AGE_MS = 30_000;
+const LIVE_VALUE_MAX_AGE_MS = 12_000;
 
 type DetailCompressor = {
   id: number;
