@@ -67,7 +67,7 @@ type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const DEVICE_LINK_GRACE_MS = 90_000;
-const APP_VERSION = "0.1.98";
+const APP_VERSION = "0.1.99";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -1242,9 +1242,9 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
               </div>
             </div>
             <div className="grid grid-cols-2 gap-[12px]">
-              <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[12px]">
+              <div className="grid min-h-[168px] grid-rows-[40px_1fr] rounded-[10px] border border-[#d9e6f0] bg-white p-[12px]">
                 <PanelHeading eyebrow="SORT MODE">운전 조건</PanelHeading>
-                <div className="mt-[10px] grid gap-[9px]">
+                <div className="mt-[10px] grid content-start gap-[8px]">
                   <SegmentedOption
                     items={[
                       ["setting", "설정순"],
@@ -1254,25 +1254,25 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
                     selected={sortMode}
                     onSelect={(value) => selectSortMode(value as "setting" | "time")}
                   />
-                  <label className="flex h-[50px] items-center justify-between rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] px-[14px] text-[17px] font-black text-[#244c75]">
+                  <label className="flex h-[46px] items-center justify-between rounded-[7px] border border-[#d9e6f0] bg-[#f8fbfd] px-[12px] text-[16px] font-black text-[#244c75]">
                     <span>절약모드</span>
-                    <input readOnly className="h-[24px] w-[24px] accent-[#237bd0]" type="checkbox" />
+                    <input readOnly className="h-[22px] w-[22px] accent-[#237bd0]" type="checkbox" />
                   </label>
                 </div>
               </div>
-              <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[12px]">
+              <div className="grid min-h-[168px] grid-rows-[40px_1fr] rounded-[10px] border border-[#d9e6f0] bg-white p-[12px]">
                 <PanelHeading eyebrow="INVERTER">인버터 기준</PanelHeading>
-                <div className="mt-[10px] grid grid-cols-2 gap-[9px]">
+                <div className="mt-[10px] grid grid-cols-2 content-start gap-[8px]">
                   <InfoTile label="메인 호기" unit="호기" value="0" />
                   <InfoTile label="제어압력" unit="bar" value="0.0" />
                 </div>
               </div>
             </div>
           </div>
-          <aside className="flex flex-col rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
+          <aside className="grid min-h-[334px] grid-rows-[40px_auto_1fr_auto] rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <PanelHeading eyebrow="ACTION">통합운전</PanelHeading>
-            <div className="mt-[12px] grid gap-[12px]">
-              <div className="grid gap-[7px]">
+            <div className="mt-[11px] grid content-start gap-[10px]">
+              <div className="grid gap-[6px]">
                 <span className="text-[13px] font-black text-[#6f879d]">운전 위치</span>
                 <SegmentedOption
                   items={[
@@ -1284,7 +1284,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
                   onSelect={(value) => selectOperationMode(value as "local" | "remote")}
                 />
               </div>
-              <div className="grid gap-[7px]">
+              <div className="grid gap-[6px]">
                 <span className="text-[13px] font-black text-[#6f879d]">제어 모드</span>
                 <SegmentedOption
                   items={[
@@ -1297,9 +1297,10 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
                 />
               </div>
             </div>
-            <div className="mt-auto grid gap-[10px] pt-[18px]">
-              <button className="h-[86px] rounded-[9px] bg-[#d92525] text-[34px] font-black text-white shadow-[0_6px_13px_rgba(208,31,38,0.2)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("run")} type="button">운전</button>
-              <button className="h-[86px] rounded-[9px] bg-[#667380] text-[34px] font-black text-white shadow-[0_6px_13px_rgba(70,82,94,0.16)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("stop")} type="button">정지</button>
+            <div />
+            <div className="grid gap-[8px] pt-[12px]">
+              <button className="h-[68px] rounded-[8px] bg-[#d92525] text-[31px] font-black text-white shadow-[0_5px_11px_rgba(208,31,38,0.18)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("run")} type="button">운전</button>
+              <button className="h-[68px] rounded-[8px] bg-[#667380] text-[31px] font-black text-white shadow-[0_5px_11px_rgba(70,82,94,0.14)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("stop")} type="button">정지</button>
             </div>
           </aside>
         </div>
