@@ -360,9 +360,9 @@ function MobileBadge({ children, icon, tone }: { children: string; icon?: string
   }[tone];
 
   return (
-    <span className={`flex min-h-[clamp(34px,4.2dvh,42px)] items-center justify-center gap-[5px] rounded-[8px] px-[7px] text-[clamp(13px,1.7dvh,16px)] font-black ${className}`}>
-      {icon ? <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white/55 px-[4px] text-[11px] font-black leading-none text-current">{icon}</span> : null}
-      <span className="min-w-0 truncate">{children}</span>
+    <span className={`relative flex min-h-[clamp(34px,4.2dvh,42px)] items-center justify-center rounded-[8px] px-[7px] text-[clamp(13px,1.7dvh,16px)] font-black ${icon ? "pl-[31px]" : ""} ${className}`}>
+      {icon ? <span className="absolute left-[7px] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white/55 px-[4px] text-[11px] font-black leading-none text-current">{icon}</span> : null}
+      <span className="min-w-0 truncate text-center">{children}</span>
     </span>
   );
 }
