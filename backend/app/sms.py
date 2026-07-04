@@ -145,10 +145,8 @@ class DisconnectSmsMonitor:
         if not self.ever_online and monotonic_now - self.started_at < self.settings.sms_link_grace_seconds:
             return
 
-        cooldown = max(60.0, self.settings.sms_cooldown_seconds)
-        if self.disconnected and self.last_disconnect_sent_at is not None:
-            if monotonic_now - self.last_disconnect_sent_at < cooldown:
-                return
+        if self.disconnected:
+            return
 
         last_seen_text = latest.astimezone(KST).strftime("%m-%d %H:%M:%S") if latest else "없음"
         self._send(f"[{self.settings.sms_factory_name}] DISCONNECT 최근수신 {last_seen_text}")
