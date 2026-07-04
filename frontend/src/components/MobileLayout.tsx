@@ -206,26 +206,26 @@ function MobileCompressorCard({
 }) {
   return (
     <button
-      className="grid min-h-0 w-full snap-start scroll-mt-0 grid-rows-[auto_1fr_auto] rounded-[13px] border border-[#d9e6f0] bg-white p-[clamp(11px,1.8dvh,18px)] text-left shadow-[0_8px_20px_rgba(18,54,88,0.08)]"
+      className="grid min-h-0 w-full snap-start scroll-mt-0 grid-rows-[auto_1fr_auto] rounded-[13px] border border-[#d9e6f0] bg-white p-[clamp(10px,1.4dvh,14px)] text-left shadow-[0_8px_20px_rgba(18,54,88,0.08)]"
       onClick={() => onOpenDetail(compressor.id)}
       type="button"
     >
-      <div className="grid grid-cols-[1fr_clamp(88px,24vw,116px)] items-start gap-[clamp(9px,1.5dvh,14px)]">
+      <div className="grid grid-cols-[1fr_clamp(82px,22vw,100px)] items-start gap-[clamp(8px,1.1dvh,11px)]">
         <span className="min-w-0">
-          <span className="block text-[clamp(20px,3.2dvh,30px)] font-black leading-none text-[#173f69]">{compressor.name}</span>
-          <span className="mt-[clamp(5px,0.8dvh,8px)] block truncate text-[clamp(12px,1.8dvh,16px)] font-black text-[#6f879d]">{compressor.model}</span>
+          <span className="block text-[clamp(20px,2.5dvh,24px)] font-black leading-none text-[#173f69]">{compressor.name}</span>
+          <span className="mt-[clamp(4px,0.6dvh,6px)] block truncate text-[clamp(12px,1.4dvh,14px)] font-black text-[#6f879d]">{compressor.model}</span>
         </span>
-        <span className={`flex min-h-[clamp(42px,6dvh,58px)] items-center justify-center rounded-[8px] px-[8px] text-[clamp(15px,2.4dvh,22px)] font-black text-white ${compressor.running ? "bg-[#d92525]" : "bg-[#667380]"}`}>
+        <span className={`flex min-h-[clamp(38px,4.8dvh,46px)] items-center justify-center rounded-[8px] px-[8px] text-[clamp(15px,1.9dvh,18px)] font-black text-white ${compressor.running ? "bg-[#d92525]" : "bg-[#667380]"}`}>
           {compressor.running ? "운전" : "정지"}
         </span>
       </div>
-      <div className="mt-[clamp(10px,1.6dvh,16px)] grid min-h-0 grid-cols-2 gap-[clamp(7px,1.1dvh,12px)]">
+      <div className="mt-[clamp(8px,1.1dvh,11px)] grid min-h-0 grid-cols-2 gap-[clamp(6px,0.9dvh,9px)]">
         <MobileValue label="압력" unit="bar" value={formatNumber(compressor.pressure, 1)} />
         <MobileValue label="온도" unit="℃" value={formatNumber(compressor.temperature, 1)} />
         <MobileValue label={compressor.inverter ? "제어압력" : "무부하"} unit="bar" value={formatNumber(compressor.inverter ? compressor.controlPressure : compressor.noLoadPressure, 1)} />
         <MobileValue label={compressor.inverter ? "회전수" : "부하"} unit={compressor.inverter ? "rpm" : "bar"} value={compressor.inverter ? formatInteger(compressor.rpm) : formatNumber(compressor.loadPressure, 1)} />
       </div>
-      <div className="mt-[clamp(9px,1.4dvh,14px)] grid grid-cols-3 gap-[clamp(7px,1.1dvh,12px)]">
+      <div className="mt-[clamp(7px,1dvh,10px)] grid grid-cols-3 gap-[clamp(6px,0.9dvh,9px)]">
         <MobileBadge tone="green">{compressor.local ? "LOCAL" : "REMOTE"}</MobileBadge>
         <MobileBadge tone={compressor.alarm ? "yellow" : "gray"}>{compressor.alarm ? "알림" : "정상"}</MobileBadge>
         <MobileBadge tone={compressor.fault ? "red" : "gray"}>{compressor.fault ? "고장" : "정상"}</MobileBadge>
@@ -276,11 +276,11 @@ function MobileDetailCard({
 
 function MobileValue({ label, unit, value }: { label: string; unit: string; value: string }) {
   return (
-    <div className="rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[clamp(8px,1.4dvh,13px)] py-[clamp(7px,1.3dvh,12px)]">
-      <div className="text-[clamp(11px,1.7dvh,15px)] font-black text-[#6f879d]">{label}</div>
-      <div className="mt-[clamp(4px,0.8dvh,8px)] flex items-end justify-end gap-[4px] text-right">
-        <span className="min-w-0 truncate text-[clamp(18px,3.1dvh,30px)] font-black leading-none text-[#173f69]">{value}</span>
-        <span className="shrink-0 pb-[1px] text-[clamp(10px,1.5dvh,14px)] font-black text-[#6f879d]">{unit}</span>
+    <div className="rounded-[9px] border border-[#d9e6f0] bg-[#f8fbfd] px-[clamp(8px,1.1dvh,11px)] py-[clamp(6px,1dvh,9px)]">
+      <div className="text-[clamp(11px,1.4dvh,13px)] font-black text-[#6f879d]">{label}</div>
+      <div className="mt-[clamp(3px,0.6dvh,5px)] flex items-end justify-end gap-[4px] text-right">
+        <span className="min-w-0 truncate text-[clamp(18px,2.4dvh,23px)] font-black leading-none text-[#173f69]">{value}</span>
+        <span className="shrink-0 pb-[1px] text-[clamp(10px,1.3dvh,12px)] font-black text-[#6f879d]">{unit}</span>
       </div>
     </div>
   );
@@ -294,7 +294,7 @@ function MobileBadge({ children, tone }: { children: string; tone: "green" | "gr
     yellow: "bg-[#ffe642] text-[#173f69]",
   }[tone];
 
-  return <span className={`flex min-h-[clamp(38px,5.2dvh,54px)] items-center justify-center rounded-[8px] px-[8px] text-[clamp(13px,2.1dvh,19px)] font-black ${className}`}>{children}</span>;
+  return <span className={`flex min-h-[clamp(34px,4.2dvh,42px)] items-center justify-center rounded-[8px] px-[8px] text-[clamp(13px,1.7dvh,16px)] font-black ${className}`}>{children}</span>;
 }
 
 function MobileDisconnect() {
