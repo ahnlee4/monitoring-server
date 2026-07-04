@@ -32,6 +32,7 @@ type EquipmentCompressor = {
 };
 
 type DetailTab = "setting" | "status" | "error" | "power";
+type DetailItem = { label: string; value: string; alarm?: boolean };
 
 const TABS: Array<{ key: DetailTab; label: string }> = [
   { key: "setting", label: "SETTING" },
@@ -58,6 +59,7 @@ export function EquipmentDetailDialog({
   const repairActive = Boolean(repairMask & (1 << (compressor.id - 1)));
   const statusItems = buildStatusItems(compressor, mapValues);
   const errorItems = buildErrorItems(compressor, mapValues);
+  const visibleItems = activeTab === "setting" ? buildSettingItems(compressor) : activeTab === "status" ? statusItems : [];
 
   const sendWrites = async (label: string, source: string, writes: MapWrite[]) => {
     let commandId: number | null = null;
@@ -124,15 +126,15 @@ export function EquipmentDetailDialog({
   };
 
   return (
-    <div className="absolute inset-0 z-[55] flex items-center justify-center bg-black/55 p-[22px]">
-      <section className="grid h-[742px] w-[620px] grid-rows-[58px_1fr_116px] overflow-hidden rounded-[10px] border border-[#c7dceb] bg-[#f6f9fc] shadow-[0_18px_40px_rgba(14,39,65,0.38)]">
-        <header className="grid grid-cols-[1fr_50px] border-b border-[#d9e6f0] bg-white">
-          <div className="grid grid-cols-4">
+    <div className="absolute inset-0 z-[55] flex items-center justify-center bg-black/55 p-[16px]">
+      <section className="grid h-[760px] w-[576px] grid-rows-[50px_1fr_auto_44px] overflow-hidden border border-[#75b4ee] bg-[#eaf4fd] shadow-[0_18px_40px_rgba(14,39,65,0.38)]">
+        <header className="grid grid-cols-[1fr_48px] border-b border-[#75b4ee] bg-white">
+          <div className="grid grid-cols-4 gap-[1px] bg-[#75b4ee]">
             {TABS.map((tab) => (
               <button
                 key={tab.key}
-                className={`text-[17px] font-black ${
-                  activeTab === tab.key ? "bg-[#237bd0] text-white" : "bg-white text-[#237bd0]"
+                className={`text-[16px] font-black ${
+                  activeTab === tab.key ? "bg-[#237bd0] text-white" : "bg-[#ffffff] text-[#237bd0]"
                 }`}
                 onClick={() => setActiveTab(tab.key)}
                 type="button"
@@ -143,7 +145,7 @@ export function EquipmentDetailDialog({
           </div>
           <button
             aria-label="닫기"
-            className="flex items-center justify-center border-l border-[#d9e6f0] text-[30px] font-black text-[#45657f]"
+            className="flex items-center justify-center border-l border-[#75b4ee] bg-white text-[30px] font-black leading-none text-[#45657f]"
             onClick={onClose}
             type="button"
           >
@@ -151,126 +153,174 @@ export function EquipmentDetailDialog({
           </button>
         </header>
 
-        <div className="min-h-0 overflow-hidden p-[12px]">
-          <EquipmentSummary compressor={compressor} repairActive={repairActive} />
-          <div className="mt-[12px] h-[538px] overflow-y-auto rounded-[8px] border border-[#d9e6f0] bg-white">
-            {activeTab === "setting" ? <SettingTab compressor={compressor} /> : null}
-            {activeTab === "status" ? <StatusTab items={statusItems} /> : null}
-            {activeTab === "error" ? <ErrorTab items={errorItems} /> : null}
-            {activeTab === "power" ? <PowerTab /> : null}
-          </div>
+        <div className="min-h-0 overflow-hidden p-[8px]">
+          {activeTab === "error" ? <ErrorTab items={errorItems} compressorName={compressor.name} /> : null}
+          {activeTab === "power" ? <PowerTab /> : null}
+          {activeTab === "setting" || activeTab === "status" ? <MetricGrid items={visibleItems} /> : null}
         </div>
 
-        <footer className="grid grid-rows-[1fr_32px] border-t border-[#d9e6f0] bg-white px-[14px] py-[10px]">
-          <div className="grid grid-cols-[1fr_1fr_1fr] gap-[10px]">
-            <button
-              className="rounded-[8px] bg-[#d92525] text-[26px] font-black text-white disabled:opacity-45"
-              disabled={commandBusy || !compressor.connected}
-              onClick={() => sendOperate(true)}
-              type="button"
-            >
-              운전
-            </button>
-            <button
-              className="rounded-[8px] bg-[#667380] text-[26px] font-black text-white disabled:opacity-45"
-              disabled={commandBusy || !compressor.connected}
-              onClick={() => sendOperate(false)}
-              type="button"
-            >
-              정지
-            </button>
-            <button
-              className="rounded-[8px] border border-[#237bd0] bg-[#eef7ff] text-[22px] font-black text-[#173f69] disabled:opacity-45"
-              disabled={commandBusy || !compressor.connected}
-              onClick={toggleRepair}
-              type="button"
-            >
-              {repairActive ? "정비 해제" : "정비 설정"}
-            </button>
-          </div>
-          <div className="flex items-end justify-between text-[13px] font-black">
-            <span className="truncate text-[#237bd0]">{commandStatus}</span>
-            <span className="text-[#6f879d]">원본 EquipActivity 기준 개별 장비 상세</span>
-          </div>
-        </footer>
+        <div className="border-t border-[#75b4ee] bg-white px-[8px] py-[6px]">
+          {activeTab === "setting" ? (
+            <OperatePanel
+              commandBusy={commandBusy}
+              commandStatus={commandStatus}
+              connected={compressor.connected}
+              onOperate={sendOperate}
+              onToggleRepair={toggleRepair}
+              repairActive={repairActive}
+            />
+          ) : (
+            <div className="flex h-[28px] items-center justify-center text-[13px] font-black text-[#6f879d]">{commandStatus}</div>
+          )}
+        </div>
+
+        <button className="bg-[#237bd0] text-[22px] font-black text-white disabled:opacity-45" onClick={onClose} type="button">
+          닫기
+        </button>
       </section>
     </div>
   );
 }
 
-function EquipmentSummary({ compressor, repairActive }: { compressor: EquipmentCompressor; repairActive: boolean }) {
-  const stateText = !compressor.connected ? "FAIL" : compressor.fault ? "FAULT" : compressor.running ? "RUN" : "RDY";
-  const stateClass = compressor.fault ? "bg-[#ff4f4f]" : compressor.running ? "bg-[#d92525]" : "bg-[#8ec3f5]";
-
-  return (
-    <div className="grid h-[84px] grid-cols-[112px_1fr_116px] gap-[8px]">
-      <div className={`flex items-center justify-center rounded-[8px] text-[26px] font-black text-white ${stateClass}`}>{stateText}</div>
-      <div className="rounded-[8px] border border-[#d9e6f0] bg-white px-[14px] py-[10px]">
-        <div className="text-[27px] font-black leading-none text-[#173f69]">
-          {compressor.name} ({compressor.model})
-        </div>
-        <div className="mt-[9px] flex gap-[8px] text-[13px] font-black text-[#6f879d]">
-          <span>{compressor.isOilfree ? "OILFREE" : "INJECTION"}</span>
-          <span>{compressor.inverter ? "INVERTER" : "STANDARD"}</span>
-          <span>{compressor.local ? "LOCAL" : "REMOTE"}</span>
-          {repairActive ? <span className="text-[#d92525]">정비 중</span> : null}
-        </div>
-      </div>
-      <div className="rounded-[8px] border border-[#d9e6f0] bg-[#eef7ff] px-[10px] py-[9px] text-right">
-        <div className="text-[13px] font-black text-[#6f879d]">압력</div>
-        <div className="mt-[6px] text-[28px] font-black leading-none text-[#173f69]">{formatScaledValue(compressor.pressure, "bar")}</div>
-      </div>
-    </div>
-  );
-}
-
-function SettingTab({ compressor }: { compressor: EquipmentCompressor }) {
-  const items = compressor.inverter
+function buildSettingItems(compressor: EquipmentCompressor): DetailItem[] {
+  return compressor.inverter
     ? [
+        { label: "장비명", value: `${compressor.name} (${compressor.model})` },
+        { label: "형식", value: compressor.isOilfree ? "OILFREE" : "INJECTION" },
+        { label: "운전 위치", value: compressor.local ? "LOCAL" : "REMOTE" },
+        { label: "운전 상태", value: compressor.running ? "운전" : "정지" },
         { label: "제어 압력", value: formatScaledValue(compressor.controlPressure, "bar") },
         { label: "회전수", value: formatIntegerValue(compressor.rpm, "rpm") },
+        { label: "현재 압력", value: formatScaledValue(compressor.pressure, "bar") },
+        { label: "현재 온도", value: formatScaledValue(compressor.temperature, "℃") },
         { label: "총 운전 시간", value: formatIntegerValue(compressor.totalHours, "hr") },
       ]
     : [
+        { label: "장비명", value: `${compressor.name} (${compressor.model})` },
+        { label: "형식", value: compressor.isOilfree ? "OILFREE" : "INJECTION" },
+        { label: "운전 위치", value: compressor.local ? "LOCAL" : "REMOTE" },
+        { label: "운전 상태", value: compressor.running ? "운전" : "정지" },
         { label: "무부하 압력", value: formatScaledValue(compressor.noLoadPressure, "bar") },
         { label: "부하 압력", value: formatScaledValue(compressor.loadPressure, "bar") },
+        { label: "현재 압력", value: formatScaledValue(compressor.pressure, "bar") },
+        { label: "현재 온도", value: formatScaledValue(compressor.temperature, "℃") },
         { label: "총 운전 시간", value: formatIntegerValue(compressor.totalHours, "hr") },
       ];
-
-  return <KeyValueGrid items={items} />;
 }
 
-function StatusTab({ items }: { items: Array<{ label: string; value: string; alarm?: boolean }> }) {
-  return <KeyValueGrid items={items} />;
-}
-
-function ErrorTab({ items }: { items: Array<{ label: string; value: string; alarm?: boolean }> }) {
+function ErrorTab({ compressorName, items }: { compressorName: string; items: DetailItem[] }) {
   if (items.length === 0) {
-    return <EmptyTab title="고장/알림 없음" description="현재 수신된 알림 또는 고장 비트가 없습니다" />;
+    return <EmptyTab title={`${compressorName} 고장/알림 없음`} description="현재 수신된 알림 또는 고장 비트가 없습니다" />;
   }
 
-  return <KeyValueGrid items={items} />;
+  return <MetricGrid items={items} />;
 }
 
 function PowerTab() {
   return <EmptyTab title="전력 로그 없음" description="현재 backend에 장비별 POWER 이력 API가 연결되어 있지 않습니다" />;
 }
 
-function KeyValueGrid({ items }: { items: Array<{ label: string; value: string; alarm?: boolean }> }) {
+function MetricGrid({ items }: { items: DetailItem[] }) {
   return (
-    <div className="grid grid-cols-2 gap-[8px] p-[10px]">
+    <div className="grid h-full auto-rows-[76px] grid-cols-2 gap-[6px] overflow-y-auto pr-[2px]">
       {items.map((item) => (
-        <div key={item.label} className="grid min-h-[54px] grid-cols-[1fr_1.1fr] overflow-hidden rounded-[6px] border border-[#c9e1f5]">
-          <div className={`flex items-center justify-center px-[8px] text-center text-[15px] font-black ${item.alarm ? "bg-[#ff4f4f] text-white" : "bg-[#8ec3f5] text-white"}`}>
-            {item.label}
-          </div>
-          <div className={`flex items-center justify-end px-[10px] text-right text-[20px] font-black ${item.alarm ? "text-[#d92525]" : "text-[#173f69]"}`}>
-            {item.value}
-          </div>
-        </div>
+        <MetricCard key={item.label} item={item} />
       ))}
     </div>
   );
+}
+
+function MetricCard({ item }: { item: DetailItem }) {
+  const valueParts = splitValueUnit(item.value);
+
+  return (
+    <div className="grid min-h-0 grid-rows-[30px_1fr] overflow-hidden border border-[#75b4ee] bg-white">
+      <div
+        className={`flex items-center justify-center px-[6px] text-center text-[15px] font-black leading-none ${
+          item.alarm ? "bg-[#e42626] text-white" : "bg-[#3374ce] text-white"
+        }`}
+      >
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{item.label}</span>
+      </div>
+      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_56px] border-t border-[#75b4ee]">
+        <div className={`flex min-w-0 items-center justify-end px-[8px] text-right text-[22px] font-black leading-none ${item.alarm ? "text-[#e42626]" : "text-[#173f69]"}`}>
+          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{valueParts.value}</span>
+        </div>
+        <div className={`flex items-center justify-start px-[4px] text-[14px] font-black leading-none ${item.alarm ? "text-[#e42626]" : "text-[#173f69]"}`}>
+          {valueParts.unit}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OperatePanel({
+  commandBusy,
+  commandStatus,
+  connected,
+  onOperate,
+  onToggleRepair,
+  repairActive,
+}: {
+  commandBusy: boolean;
+  commandStatus: string;
+  connected: boolean;
+  onOperate: (nextRunning: boolean) => void;
+  onToggleRepair: () => void;
+  repairActive: boolean;
+}) {
+  return (
+    <div className="grid gap-[6px]">
+      <div className="grid grid-cols-[1fr_150px] gap-[8px]">
+        <div className="flex items-center justify-center border border-[#75b4ee] bg-[#eaf4fd] px-[8px] text-[18px] font-black text-[#237bd0]">
+          정비 장비 설정 / 해제
+        </div>
+        <button
+          className="border border-[#237bd0] bg-[#eef7ff] text-[20px] font-black text-[#173f69] disabled:opacity-45"
+          disabled={commandBusy || !connected}
+          onClick={onToggleRepair}
+          type="button"
+        >
+          {repairActive ? "정비 해제" : "정비 설정"}
+        </button>
+      </div>
+      <div className="grid grid-cols-[1fr_150px_150px] gap-[8px]">
+        <div className="flex items-center justify-center border border-[#75b4ee] bg-[#eaf4fd] px-[8px] text-[18px] font-black text-[#237bd0]">
+          OPERATE / STOP BUTTON
+        </div>
+        <button
+          className="bg-[#d92525] text-[22px] font-black text-white disabled:opacity-45"
+          disabled={commandBusy || !connected}
+          onClick={() => onOperate(true)}
+          type="button"
+        >
+          운전
+        </button>
+        <button
+          className="bg-[#667380] text-[22px] font-black text-white disabled:opacity-45"
+          disabled={commandBusy || !connected}
+          onClick={() => onOperate(false)}
+          type="button"
+        >
+          정지
+        </button>
+      </div>
+      <div className="h-[18px] truncate text-[12px] font-black text-[#237bd0]">{commandStatus}</div>
+    </div>
+  );
+}
+
+function splitValueUnit(text: string) {
+  const value = text.trim();
+  const units = new Set(["bar", "℃", "rpm", "hr", "min", "ea", "mbar"]);
+  const parts = value.split(/\s+/);
+  const unit = parts.at(-1) ?? "";
+
+  if (parts.length > 1 && units.has(unit)) {
+    return { value: parts.slice(0, -1).join(" "), unit };
+  }
+
+  return { value, unit: "" };
 }
 
 function EmptyTab({ description, title }: { description: string; title: string }) {
@@ -282,7 +332,7 @@ function EmptyTab({ description, title }: { description: string; title: string }
   );
 }
 
-function buildStatusItems(compressor: EquipmentCompressor, values: Record<string, YujinMapValue>) {
+function buildStatusItems(compressor: EquipmentCompressor, values: Record<string, YujinMapValue>): DetailItem[] {
   const prefix = getMapPrefix(compressor);
   const readWord = (offset: number) => liveMapNumber(values, `${prefix}${offset.toString(16).padStart(2, "0")}`, Number.NaN);
   const baseItems = [
@@ -311,10 +361,10 @@ function buildStatusItems(compressor: EquipmentCompressor, values: Record<string
   ];
 }
 
-function buildErrorItems(compressor: EquipmentCompressor, values: Record<string, YujinMapValue>) {
+function buildErrorItems(compressor: EquipmentCompressor, values: Record<string, YujinMapValue>): DetailItem[] {
   const prefix = getMapPrefix(compressor);
   const readWord = (offset: number) => liveMapNumber(values, `${prefix}${offset.toString(16).padStart(2, "0")}`, 0);
-  const items = [];
+  const items: DetailItem[] = [];
   if (compressor.alarm) {
     items.push({ label: "알림", value: formatRawWord(readWord(compressor.isOilfree ? 0x28 : 0x0a)), alarm: true });
   }
