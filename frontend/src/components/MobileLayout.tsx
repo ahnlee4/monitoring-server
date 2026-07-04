@@ -68,7 +68,7 @@ export function MobileLayout({
   return (
     <section className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-[#eef4fa] text-[#12263a]">
       <MobileHeader dashboard={dashboard} now={now} onLogoClick={onLogoClick} />
-      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[12px] pb-[92px] pt-[10px]">
+      <main className={`flex min-h-0 flex-1 flex-col px-[12px] pb-[92px] pt-[10px] ${activeScreen === "main" ? "overflow-hidden" : "overflow-y-auto"}`}>
         {connectedCompressors.length === 0 ? (
           <MobileDisconnect />
         ) : activeScreen === "detail" ? (
@@ -144,7 +144,7 @@ function MobileMainList({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-[10px]">
       {lowPressureText ? <div className="rounded-[10px] bg-[#fff0f0] px-[12px] py-[10px] text-center text-[15px] font-black text-[#d92525]">{lowPressureText}</div> : null}
-      <div className="grid min-h-0 flex-1 grid-cols-1 auto-rows-[calc((100%-10px)/2)] gap-[10px]">
+      <div className="grid min-h-0 flex-1 snap-y snap-mandatory grid-cols-1 auto-rows-[calc((100%-10px)/2)] gap-[10px] overflow-y-auto overscroll-contain scroll-smooth pr-[2px]">
         {compressors.map((compressor) => (
           <MobileCompressorCard key={compressor.id} compressor={compressor} onOpenDetail={onOpenCompressorDetail} />
         ))}
@@ -178,7 +178,7 @@ function MobileCompressorCard({
 }) {
   return (
     <button
-      className="grid min-h-0 w-full grid-rows-[auto_1fr_auto] rounded-[13px] border border-[#d9e6f0] bg-white p-[11px] text-left shadow-[0_8px_20px_rgba(18,54,88,0.08)]"
+      className="grid min-h-0 w-full snap-start scroll-mt-0 grid-rows-[auto_1fr_auto] rounded-[13px] border border-[#d9e6f0] bg-white p-[11px] text-left shadow-[0_8px_20px_rgba(18,54,88,0.08)]"
       onClick={() => onOpenDetail(compressor.id)}
       type="button"
     >
