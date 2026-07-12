@@ -1,0 +1,256 @@
+#include "stm32f4xx_hal.h"
+#include "memory_map.h"
+#include "delay.h"
+#include "uart3.h"
+
+extern UART_HandleTypeDef huart3;       // 장비 데이터 수집.
+
+void USART3_ISR(void)
+{
+    unsigned short rcv_length;
+    unsigned char RxData, buf;
+    
+    if( Uart_Info[UART3_422].Rx_Timeout == 0 )
+    {
+        Uart_Info[UART3_422].Rx_Cnt = 0;
+        Uart_Info[UART3_422].Rx_First_Second = UPPER;       // 아스키 상위 받을준비
+    }
+    if( Uart_Info[UART3_422].Rx_Cnt > 275 )
+    {
+        Uart_Info[UART3_422].Rx_Cnt = 0;
+        Uart_Info[UART3_422].Rx_First_Second = UPPER;       // 아스키 상위 받을준비
+    }
+    
+    Uart_Info[UART3_422].Rx_Timeout = 100;
+
+    buf = USART3->DR;
+    
+    if( Uart_Info[UART3_422].Rx_Cnt == 0 )
+    {
+        if( buf == ':' )
+        {
+            Uart_Info[UART3_422].Ascii_Start = buf;
+            return;
+        }
+    }
+    
+    if( buf == 0x0D || buf == 0x0A )
+    {
+        Uart_Info[UART3_422].Ascii_Rx_Buf = buf;
+    }
+    else if( Uart_Info[UART3_422].Rx_First_Second == UPPER )
+    {
+        if( buf >= '0' && buf <= '9' )       Uart_Info[UART3_422].Ascii_Rx_Buf = buf - '0';
+        else if( buf >= 'a' && buf <= 'f' )   Uart_Info[UART3_422].Ascii_Rx_Buf = buf - 'a' + 10;
+        else if( buf >= 'A' && buf <= 'F' )   Uart_Info[UART3_422].Ascii_Rx_Buf = buf - 'A' + 10;
+        
+        Uart_Info[UART3_422].Ascii_Rx_Buf <<= 4;
+        
+        Uart_Info[UART3_422].Rx_First_Second = LOWER;
+        
+        return;
+    }
+    else if( Uart_Info[UART3_422].Rx_First_Second == LOWER )
+    {
+        if( buf >= '0' && buf <= '9' )       Uart_Info[UART3_422].Ascii_Rx_Buf |= buf - '0';
+        else if( buf >= 'a' && buf <= 'f' )   Uart_Info[UART3_422].Ascii_Rx_Buf |= buf - 'a' + 10;
+        else if( buf >= 'A' && buf <= 'F' )   Uart_Info[UART3_422].Ascii_Rx_Buf |= buf - 'A' + 10;
+        
+        Uart_Info[UART3_422].Rx_First_Second = UPPER;
+    }
+    else
+    {
+        Uart_Info[UART3_422].Rx_First_Second = UPPER;
+        return;
+    }
+    
+    RxData = Uart_Info[UART3_422].Ascii_Rx_Buf;
+    
+    if( Uart_Info[UART3_422].Rx_Cnt == 0 && RxData == 0x01 )
+    {
+        Uart_Info[UART3_422].Rx_Buf[Uart_Info[UART3_422].Rx_Cnt++] = RxData;
+    }
+    else if( Uart_Info[UART3_422].Rx_Cnt == 1 && RxData == 0x03 )       // 읽기
+    {
+        Uart_Info[UART3_422].Rx_Buf[Uart_Info[UART3_422].Rx_Cnt++] = RxData;
+    }
+    else if( Uart_Info[UART3_422].Rx_Buf[1] == 0x03 )
+    {
+        if( Uart_Info[UART3_422].Rx_Cnt == 2 )
+        {
+            Uart_Info[UART3_422].Rx_Buf[Uart_Info[UART3_422].Rx_Cnt++] = RxData;
+        }
+        else if( Uart_Info[UART3_422].Rx_Cnt >= 3 )
+        {
+            Uart_Info[UART3_422].Rx_Buf[Uart_Info[UART3_422].Rx_Cnt++] = RxData;
+            
+            if( (Uart_Info[UART3_422].Rx_Buf[2] + 6) == Uart_Info[UART3_422].Rx_Cnt )
+                Uart_Info[UART3_422].Rcv_Pkt = SET;
+        }
+    }
+    else if( Uart_Info[UART3_422].Rx_Buf[1] == 0x10 )
+    {
+        if( Uart_Info[UART3_422].Rx_Cnt >= 2 )
+        {
+            Uart_Info[UART3_422].Rx_Buf[Uart_Info[UART3_422].Rx_Cnt++] = RxData;
+            
+            if( Uart_Info[UART3_422].Rx_Cnt == 9 )
+                Uart_Info[UART3_422].Rcv_Pkt = SET;
+        }
+    }
+}
+
+void Uart3_Rcv_0x03_Data(unsigned char *pData)
+{
+    unsigned short word_buf, *pWord, *pWord2, word_cnt, byte_cnt, i, cnt, addr, cal_crc;
+    unsigned char upper_addr, lower_addr, *p;
+    
+    upper_addr = 0;
+    lower_addr = 0;
+    
+    word_cnt = pData[2] / 2;
+    byte_cnt = pData[2];
+    
+    if( upper_addr == 0 )
+    {
+        pData += 3;
+        lower_addr = 0;
+        
+        while( lower_addr < 10 && word_cnt > 0 )
+        {
+            word_buf = *pData++;
+            word_buf <<= 8;
+            word_buf |= *pData++;
+            
+            EXT_CH1_Info.INPUT_STATUS[lower_addr++] = word_buf;
+            
+            word_cnt--;
+        }
+	//memcpy(&p2, &p1, sizeof(struct Point2D));    // Point2D 구조체 크기만큼 p1의 내용을 p2로 복사
+	//EXT_61850_Info.FIRE_RECEPTION_STATUS[10]= EXT_CH1_Info.INPUT_STATUS[10];
+	if(Total_Info.TEST_MODE==0)
+	{
+	        memcpy((unsigned char*)&EXT_61850_Info.FIRE_RECEPTION_STATUS[0],(unsigned char*)&EXT_CH1_Info.INPUT_STATUS[0],byte_cnt);   // 10 word, 20 byte
+	}
+    }
+}
+
+void Uart3_Rcv_0x10_Data(unsigned char *pData)
+{
+    unsigned short word_buf, *pWord, *pWord2, word_cnt, byte_cnt, i, cnt, addr, cal_crc;
+    unsigned char upper_addr, lower_addr, *p;
+    
+    ;
+}
+
+void Uart3_Rcv_0x06_Data(unsigned char *pData)
+{
+    unsigned short word_buf, *pWord, *pWord2, word_cnt, byte_cnt, i, cnt, addr, cal_crc;
+    unsigned char upper_addr, lower_addr, *p, buf;
+    
+    ;
+}
+
+void Uart3_Tx_Process(void)
+{
+    unsigned short cal_crc;
+    
+    if( Uart_Info[UART3_422].Tx_Timeout > 1 )   return;
+
+    if(Main_Info.Comp_Connect_Cnt[0])	Main_Info.Comp_Connect_Cnt[0] --;
+
+    if( Uart_Info[UART3_422].Tx_Enable == SET )
+    {
+        Uart_Info[UART3_422].Tx_Enable = CLR;
+        
+        Uart_Info[UART3_422].Tx_Buf[0] = 0x01;
+        Uart_Info[UART3_422].Tx_Buf[1] = 0x06;
+		
+        Uart_Info[UART3_422].Tx_Buf[2] = 0x0;
+	if(Uart_Info[UART3_422].Load_Addr==0x70)
+        	Uart_Info[UART3_422].Tx_Buf[3] = 0x09;
+	
+        Uart_Info[UART3_422].Tx_Buf[4] = Uart_Info[UART3_422].Load_Buf >> 8;
+        Uart_Info[UART3_422].Tx_Buf[5] = Uart_Info[UART3_422].Load_Buf;
+        
+        Uart_Info[UART3_422].Tx_Length = 6;
+        
+        cal_crc = lrc(&Uart_Info[UART3_422].Tx_Buf[0],Uart_Info[UART3_422].Tx_Length);
+        Uart_Info[UART3_422].Tx_Buf[Uart_Info[UART3_422].Tx_Length++] = cal_crc;
+        
+        Modbus_Hex_To_Ascii(Uart_Info[UART3_422].Ascii_Tx_Buf,Uart_Info[UART3_422].Tx_Buf,Uart_Info[UART3_422].Tx_Length);  // hex to ascii
+        Uart_Info[UART3_422].Ascii_Tx_Length = Uart_Info[UART3_422].Tx_Length * 2;
+        
+        Uart_Info[UART3_422].Ascii_Tx_Buf[Uart_Info[UART3_422].Ascii_Tx_Length++] = 0x0D;
+        Uart_Info[UART3_422].Ascii_Tx_Buf[Uart_Info[UART3_422].Ascii_Tx_Length++] = 0x0A;
+        
+        USART3_TX;	Uart_Info[UART3_422].TxOn_Sig=20;
+        HAL_UART_Transmit(&huart3,":",1,1000);
+        HAL_UART_Transmit_IT(&huart3,Uart_Info[UART3_422].Ascii_Tx_Buf,Uart_Info[UART3_422].Ascii_Tx_Length);
+        
+        Uart_Info[UART3_422].Tx_Timeout = 500;
+    }
+    else
+    {
+        Uart_Info[UART3_422].Tx_Buf[0] = 0x01;
+        Uart_Info[UART3_422].Tx_Buf[1] = 0x03;
+        Uart_Info[UART3_422].Tx_Buf[2] = 0x00;
+        Uart_Info[UART3_422].Tx_Buf[3] = 0x00;
+        Uart_Info[UART3_422].Tx_Buf[4] = 0x00;
+        Uart_Info[UART3_422].Tx_Buf[5] = 0x09;
+
+        Uart_Info[UART3_422].Tx_Length = 6;
+        
+        cal_crc = lrc(&Uart_Info[UART3_422].Tx_Buf[0],Uart_Info[UART3_422].Tx_Length);
+        Uart_Info[UART3_422].Tx_Buf[Uart_Info[UART3_422].Tx_Length++] = cal_crc;
+        
+        Modbus_Hex_To_Ascii(Uart_Info[UART3_422].Ascii_Tx_Buf,Uart_Info[UART3_422].Tx_Buf,Uart_Info[UART3_422].Tx_Length);  // hex to ascii
+        Uart_Info[UART3_422].Ascii_Tx_Length = Uart_Info[UART3_422].Tx_Length * 2;
+        
+        Uart_Info[UART3_422].Ascii_Tx_Buf[Uart_Info[UART3_422].Ascii_Tx_Length++] = 0x0D;
+        Uart_Info[UART3_422].Ascii_Tx_Buf[Uart_Info[UART3_422].Ascii_Tx_Length++] = 0x0A;
+        
+        USART3_TX;	Uart_Info[UART3_422].TxOn_Sig=20;
+        HAL_UART_Transmit(&huart3,":",1,1000);
+        HAL_UART_Transmit_IT(&huart3,Uart_Info[UART3_422].Ascii_Tx_Buf,Uart_Info[UART3_422].Ascii_Tx_Length);
+        
+        Uart_Info[UART3_422].Tx_Timeout = 500;
+    }
+}
+
+void Uart3_Rx_Process(void)
+{
+    unsigned short cal_crc, rcv_crc;
+    
+    if( Uart_Info[UART3_422].Rcv_Pkt == SET )
+    {
+        Uart_Info[UART3_422].Rcv_Pkt = CLR;
+
+        cal_crc = lrc((unsigned char*)Uart_Info[UART3_422].Rx_Buf, Uart_Info[UART3_422].Rx_Cnt - 3);
+        rcv_crc = Uart_Info[UART3_422].Rx_Buf[Uart_Info[UART3_422].Rx_Cnt - 3];
+
+        if( cal_crc == rcv_crc )                            // 패킷수신.
+        {
+	      	Uart_Info[UART3_422].Link_Time = 3000;
+			
+		Main_Info.Comp_Connect_Cnt[0] = 5;
+		
+            if( Uart_Info[UART3_422].Rx_Buf[1] == 0x03 )           // 0x03 수신. 멀티리드
+            {
+            	Uart3_Rcv_0x03_Data(&Uart_Info[UART3_422].Rx_Buf[0]);
+            }
+            else if( Uart_Info[UART3_422].Rx_Buf[1] == 0x10 )      // 0x10 수신. 멀티라이트
+            {
+                Uart3_Rcv_0x10_Data(&Uart_Info[UART3_422].Rx_Buf[0]);
+            }
+            else if( Uart_Info[UART3_422].Rx_Buf[1] == 0x06 )      // 0x06 수신. 싱글라이트
+            {
+                Uart3_Rcv_0x06_Data(&Uart_Info[UART3_422].Rx_Buf[0]);
+            }
+            
+            else return;
+        }
+    }
+}
+	
+

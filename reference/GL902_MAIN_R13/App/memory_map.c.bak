@@ -1,0 +1,276 @@
+#include "stm32f1xx_hal.h"
+#include "memory_map.h"
+#include "delay.h"
+#include "sst25vf.h"
+#include "i2c.h"
+#include "mcp3427.h"
+
+
+_TICK_INFO Tick_Info;
+_TOTAL_INFO Total_Info, Total_Info_2;
+_UART_INFO Uart_Info[5];
+_MAIN_INFO Main_Info;
+_SYSTEM_INFO System_Info, System_Info_2;
+_COMP_INFO Comp_Info[8], Comp_Info_2[8];
+_IO_INFO IO_Info[16], IO_Info_2[16];
+_AI_INFO AI_Info[16], AI_Info_2[16];
+_MCP3427_INFO Mcp3427_Info;
+ _PT100_INFO Pt100_Info;
+
+_KEY_INFO Ext_Key_Info, Sw_Key_Info;
+
+unsigned short crc16(unsigned char *data_p, unsigned short length)
+{
+    unsigned short i;
+    unsigned short data;
+    unsigned short crc = 0xffff;
+    
+    if (length == 0)
+        return (~crc);
+    
+    do
+    {
+        for (i=0, data=(unsigned char)0xff & *data_p++;
+             i < 8; 
+             i++, data >>= 1)
+        {
+              if ((crc & 0x0001) ^ (data & 0x0001))
+                    crc = (crc >> 1) ^ POLY;
+              else  crc >>= 1;
+        }
+    } while (--length);
+    
+    //     crc = ~crc;
+    data = crc;
+    crc = (crc << 8) | (data >> 8 & 0xff);
+    
+    return (crc);
+}
+
+unsigned long Big_To_Little(unsigned char *pData, unsigned char length)     // 엔디안 변경.
+{
+    unsigned long long_buf;
+    
+    if( length == 2 )
+    {
+        long_buf = *pData++;
+        long_buf <<= 8;
+        long_buf |= *pData++;
+    }
+    else if( length == 4 )
+    {
+        long_buf = *pData++;
+        long_buf <<= 8;
+        long_buf |= *pData++;
+        long_buf <<= 8;
+        long_buf |= *pData++;
+        long_buf <<= 8;
+        long_buf |= *pData++;
+    }
+    
+    return long_buf;
+}
+
+void Copy_Buf(unsigned char *pData1, unsigned char *pData2, unsigned char length)
+{
+    while( length-- )
+    {
+        *pData2 = *pData1;
+        
+        pData1++;
+        pData2++;
+    }
+}
+
+void Total_Data_Init(void)
+{
+    unsigned short word_temp, i;
+    
+    Read_Fram(TOTAL_DATA_ADDRESS + 0xFE,(unsigned char*)&word_temp,2);
+
+    if( word_temp == 4958 )
+    {
+        Read_Fram(TOTAL_DATA_ADDRESS,(unsigned char*)&Total_Info,sizeof(Total_Info));
+        
+        return;
+    }
+    
+    memset(&Total_Info, 0, sizeof(Total_Info));
+    
+    word_temp = 4958;
+    Write_Fram(TOTAL_DATA_ADDRESS + 0xFE,(unsigned char*)&word_temp,2);                 // 초기화코드 0xFE ~ 0xFF 에 배치. 256 바이트의 제일 마지막.
+
+    Total_Info.TOUCH_ENABLE = 60;
+    Total_Info.TIMER1 = 60;
+    Total_Info.TIMER2 = 30;
+    
+    Total_Info.USE_DEVICE = 0x0004;        // 상위 AI모듈, 하위 DIO 모듈  연결개수 
+	
+    Total_Info.USE_COMP_QTY = 3;		//comp연결대수 
+	        
+    for(i=0;i<10;i++)
+        Total_Info.RUN_SEQUENCE[i] = i+1;	
+    
+    Write_Fram(TOTAL_DATA_ADDRESS,(unsigned char*)&Total_Info,sizeof(Total_Info));
+}
+
+//////////////////////////////////////////////////////////////////////////
+//
+// 메모리맵 상위 0x01 초기화
+//
+//////////////////////////////////////////////////////////////////////////
+void System_DaTaType_Init(void)
+{
+    unsigned short i, word_temp;
+
+    Read_Fram(SYSTEM_DATA_ADDRESS + 0xE0,(unsigned char*)&word_temp,2);        // SYSTEM_DATA_ADDRESS 은 초기화코드를 0xFE(254) 가 아니라 0xE0 에 위치시킨다. 시간메모리맵 0xF0 와 주소 충돌있기때문.
+    
+    if( word_temp == 4957 )
+    {
+        Read_Fram(SYSTEM_DATA_ADDRESS,(unsigned char*)&System_Info,sizeof(System_Info));
+
+	System_Info.COMPANY_ID = Company_ID;
+	System_Info.PRODUCT_ID = Product_ID;
+	System_Info.MODEL = System_Model;
+	System_Info.VERSION = System_Ver;
+	System_Info.VERSION_NUM = System_VerNum;
+        
+        return;
+    }
+    
+    memset(&System_Info, 0, sizeof(System_Info));
+    
+    word_temp = 4957;
+    Write_Fram(SYSTEM_DATA_ADDRESS + 0xE0,(unsigned char*)&word_temp,2);
+    
+    System_Info.ETH_SERVER_ADDRESS[0] = 117;
+    System_Info.ETH_SERVER_ADDRESS[1] = 52;
+    System_Info.ETH_SERVER_ADDRESS[2] = 91;
+    System_Info.ETH_SERVER_ADDRESS[3] = 211;
+    
+    System_Info.ETH_SERVER_PORT = 7777;
+    
+    System_Info.ETH_MAC_ADDRESS[0] = 0x70;
+    System_Info.ETH_MAC_ADDRESS[1] = 0xC7;
+    System_Info.ETH_MAC_ADDRESS[2] = 0x6F;
+    System_Info.ETH_MAC_ADDRESS[3] = 0x84;
+    System_Info.ETH_MAC_ADDRESS[4] = 0x00;
+    System_Info.ETH_MAC_ADDRESS[5] = 0x02;
+    
+    System_Info.WIFI_SERVER_ADDRESS[0] = 117;
+    System_Info.WIFI_SERVER_ADDRESS[1] = 52;
+    System_Info.WIFI_SERVER_ADDRESS[2] = 91;
+    System_Info.WIFI_SERVER_ADDRESS[3] = 211;
+    
+    System_Info.WIFI_SERVER_PORT = 7777;
+    
+    System_Info.WIFI_MAC_ADDRESS[0] = 0x70;
+    System_Info.WIFI_MAC_ADDRESS[1] = 0xC7;
+    System_Info.WIFI_MAC_ADDRESS[2] = 0x6F;
+    System_Info.WIFI_MAC_ADDRESS[3] = 0x84;
+    System_Info.WIFI_MAC_ADDRESS[4] = 0x00;
+    System_Info.WIFI_MAC_ADDRESS[5] = 0x02;
+    
+    System_Info.ETH_LOCAL_ADDRESS[0] = 192;
+    System_Info.ETH_LOCAL_ADDRESS[1] = 168;
+    System_Info.ETH_LOCAL_ADDRESS[2] = 0;
+    System_Info.ETH_LOCAL_ADDRESS[3] = 10;
+    
+    System_Info.ETH_LOCAL_SUBNETMASK[0] = 255;
+    System_Info.ETH_LOCAL_SUBNETMASK[1] = 255;
+    System_Info.ETH_LOCAL_SUBNETMASK[2] = 254;
+    System_Info.ETH_LOCAL_SUBNETMASK[3] = 0;
+    
+    System_Info.ETH_LOCAL_GATEWAY[0] = 192;
+    System_Info.ETH_LOCAL_GATEWAY[1] = 168;
+    System_Info.ETH_LOCAL_GATEWAY[2] = 0;
+    System_Info.ETH_LOCAL_GATEWAY[3] = 1;
+/*    
+    for(i=0;i<16;i++)
+        System_Info.WIFI_AP[i] = 0;
+    
+    System_Info.WIFI_AP[0] = 'j';
+    System_Info.WIFI_AP[1] = 'h';
+    System_Info.WIFI_AP[2] = 'c';
+    System_Info.WIFI_AP[3] = 'h';
+    System_Info.WIFI_AP[4] = 'o';
+    System_Info.WIFI_AP[5] = 'i';
+    
+    for(i=0;i<16;i++)
+        System_Info.WIFI_PASSWORD[i] = 0;
+*/    
+    System_Info.ETH_WIFI_SELECT = 1;    // 1 = 유선, 2 = 무선
+    System_Info.DHCP_ON_OFF = 1;
+    System_Info.DATA_SEND_DUTY = 1;
+    System_Info.GROUP_ID = 1;
+    System_Info.SYSTEM_USER_ID = 1;
+    System_Info.COMP_COUNT_QTY = 3;
+    
+    System_Info.COMPANY_ID = Company_ID;
+    System_Info.PRODUCT_ID = Product_ID;
+    System_Info.MODEL = System_Model;
+    System_Info.VERSION = System_Ver;
+    System_Info.VERSION_NUM = System_VerNum;
+
+    Write_Fram(SYSTEM_DATA_ADDRESS,(unsigned char*)&System_Info,sizeof(System_Info));
+}
+
+
+void AI_DataType_Init(void)
+{
+    unsigned short word_temp, i;
+    
+    Read_Fram(AI_DATA_ADDRESS + 0xFE,(unsigned char*)&word_temp,2);
+
+    if( word_temp == 4958 )
+    {
+        Read_Fram(AI_DATA_ADDRESS,(unsigned char*)&AI_Info[8],sizeof(AI_Info[8]));
+        
+        return;
+    }
+    
+    memset((unsigned char*)&AI_Info[8],0,sizeof(AI_Info[8]));
+	
+    word_temp = 4958;
+    Write_Fram(AI_DATA_ADDRESS + 0xFE,(unsigned char*)&word_temp,2);                 // 초기화코드 0xFE ~ 0xFF 에 배치. 256 바이트의 제일 마지막.
+    
+        AI_Info[8].MIN_CH1 = 0;
+        AI_Info[8].MAX_CH1 = 1600;
+        AI_Info[8].MIN_CH2 = -200;
+        AI_Info[8].MAX_CH2 = 2000;
+        AI_Info[8].CAL_CH1 = 0;
+        AI_Info[8].CAL_CH2= 0;
+		
+        AI_Info[8].LOW_POINT_CH1= 6505;
+        AI_Info[8].HIGH_POINT_CH1= 32060;
+		
+        AI_Info[8].LOW_POINT_CH2= 6271;
+        AI_Info[8].HIGH_POINT_CH2= 31195;
+		
+    Write_Fram(AI_DATA_ADDRESS,(unsigned char*)&AI_Info[0],sizeof(AI_Info[0]));    
+}
+
+void Reg_Init(void)
+{
+    unsigned short i;
+
+    memset((unsigned char*)&Tick_Info,0,sizeof(Tick_Info));
+    memset((unsigned char*)&Main_Info,0,sizeof(Main_Info));
+    memset((unsigned char*)&Uart_Info,0,sizeof(Uart_Info));
+	
+    memset((unsigned char*)&Total_Info,0,sizeof(Total_Info));	
+	Total_Info_2=Total_Info;
+    memset((unsigned char*)&System_Info,0,sizeof(System_Info));	
+	System_Info_2=System_Info;
+    memset((unsigned char*)&Comp_Info,0,sizeof(Comp_Info));		
+	//Comp_Info_2=Comp_Info;
+    memset((unsigned char*)&AI_Info,0,sizeof(AI_Info));	
+	//AI_Info_2=AI_Info;
+    memset((unsigned char*)&IO_Info,0,sizeof(IO_Info));	
+	//IO_Info_2=IO_Info;
+	
+    Total_Data_Init();
+    System_DaTaType_Init();
+    AI_DataType_Init();
+    
+}

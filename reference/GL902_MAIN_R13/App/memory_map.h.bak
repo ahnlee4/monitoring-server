@@ -1,0 +1,607 @@
+#include "stm32f4xx_hal.h"
+
+#define  MODBUS_ASCII
+
+#define     UPPER   0
+#define     LOWER   1
+
+#ifndef     SET
+#define     SET     1
+#endif
+
+#ifndef     CLR
+#define     CLR     0
+#endif
+
+#ifndef     ON
+#define     ON     1
+#endif
+
+#ifndef     OFF
+#define     OFF     0
+#endif
+
+#define     POLY    0xA001
+
+#define     FRAM_L     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET)
+#define     FRAM_H    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET)
+
+#define     FLASH_L     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, GPIO_PIN_RESET)
+#define     FLASH_H    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, GPIO_PIN_SET)
+
+#define     LED1_OFF     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET)
+#define     LED1_ON     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET)
+
+#define     LED2_OFF     HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4, GPIO_PIN_SET)
+#define     LED2_ON     HAL_GPIO_WritePin(GPIOD, GPIO_PIN_4, GPIO_PIN_RESET)
+
+#define     LED3_OFF     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET)
+#define     LED3_ON     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET)
+
+#define     LED4_OFF     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET)
+#define     LED4_ON     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET)
+
+#define     USART1_TX     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET)
+#define     USART1_RX     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET)
+
+#define     USART2_TX     HAL_GPIO_WritePin(GPIOD, GPIO_PIN_3, GPIO_PIN_SET)
+#define     USART2_RX     HAL_GPIO_WritePin(GPIOD, GPIO_PIN_3, GPIO_PIN_RESET)
+
+#define     USART3_TX     HAL_GPIO_WritePin(GPIOD, GPIO_PIN_7, GPIO_PIN_SET)
+#define     USART3_RX     HAL_GPIO_WritePin(GPIOD, GPIO_PIN_7, GPIO_PIN_RESET)
+
+#define     USART4_TX     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET)
+#define     USART4_RX     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET)
+
+#define     USART5_TX     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_SET)
+#define     USART5_RX     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET)
+/*
+#define     USART6_TX     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET)
+#define     USART6_RX     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET)
+
+#define     USART7_TX     HAL_GPIO_WritePin(GPIOD, GPIO_PIN_3, GPIO_PIN_SET)
+#define     USART7_RX     HAL_GPIO_WritePin(GPIOD, GPIO_PIN_3, GPIO_PIN_RESET)
+
+#define     USART8_TX     HAL_GPIO_WritePin(GPIOD, GPIO_PIN_7, GPIO_PIN_SET)
+#define     USART8_RX     HAL_GPIO_WritePin(GPIOD, GPIO_PIN_7, GPIO_PIN_RESET)
+
+#define     USART9_TX     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET)
+#define     USART9_RX     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET)
+
+#define     USART10_TX     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_SET)
+#define     USART10_RX     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET)
+*/
+
+
+#define     RELAY1_ON     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_4, GPIO_PIN_SET)
+#define     RELAY1_OFF     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_4, GPIO_PIN_RESET)
+
+#define     RELAY2_ON     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_SET)
+#define     RELAY2_OFF     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_RESET)
+
+#define     RELAY3_ON     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_10, GPIO_PIN_SET)
+#define     RELAY3_OFF     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_10, GPIO_PIN_RESET)
+
+#define     RELAY4_ON     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_11, GPIO_PIN_SET)
+#define     RELAY4_OFF     HAL_GPIO_WritePin(GPIOE, GPIO_PIN_11, GPIO_PIN_RESET)
+
+
+#define Company_ID       	0x01	//0x01
+#define Product_ID       	0x15	//0x01
+#define System_Model      	901
+#define System_Ver       	21
+#define System_VerNum           1015
+
+#define WifiDataWriteType     			0xFA
+#define FirmwareUpDate_START     	0xFE
+#define FirmwareUpDate_ING         	0xFF
+#define FirmwareUpDate_END        		0xF0
+#define FirmwareUpDate_CLR        		0
+
+#define     UART9_LTE     	8
+
+#define     UART6_TEST     	5
+#define     UART5_D_IO     	4
+#define     UART4_485     	3
+#define     UART3_422     	2
+#define     UART2_485     	1
+#define     UART_GLINK     	0
+
+#define     ADDR_G_LINK    				0x00
+#define     ADDR_FIRE_RECEPTION     		0x01
+#define     ADDR_FIRE_REMOTE_CONTROL    	0x02
+#define     ADDR_UNMANNED_SECURITY     	0x03
+#define     ADDR_LTE_MEMORY     			0x04
+
+#define     MEM_ADDR_TOTAL     	0x00
+#define     MEM_ADDR_SYSTEM     	0x01
+#define     MEM_ADDR_TIME     		0xFF
+#define     MEM_ADDR_COMP1     	0x11
+#define     MEM_ADDR_COMP2     	0x12
+#define     MEM_ADDR_COMP3     	0x13
+#define     MEM_ADDR_COMP4     	0x14
+#define     MEM_ADDR_COMP5     	0x15
+#define     MEM_ADDR_COMP6     	0x16
+#define     MEM_ADDR_COMP7     	0x17
+#define     MEM_ADDR_COMP8     	0x18
+
+#define     MEM_ADDR_IO_0xE0         0xE0
+#define     MEM_ADDR_IO_0xE1         0xE1
+#define     MEM_ADDR_IO_0xE2         0xE2
+#define     MEM_ADDR_IO_0xE3         0xE3
+#define     MEM_ADDR_IO_0xE4         0xE4
+#define     MEM_ADDR_IO_0xE5         0xE5
+#define     MEM_ADDR_IO_0xE6         0xE6
+#define     MEM_ADDR_IO_0xE7         0xE7
+#define     MEM_ADDR_IO_0xE8         0xE8
+#define     MEM_ADDR_IO_0xE9         0xE9
+#define     MEM_ADDR_IO_0xEA         0xEA
+#define     MEM_ADDR_IO_0xEB         0xEB
+#define     MEM_ADDR_IO_0xEC         0xEC
+#define     MEM_ADDR_IO_0xED         0xED
+#define     MEM_ADDR_IO_0xEE         0xEE
+#define     MEM_ADDR_IO_0xEF         0xEF
+
+#define     MEM_ADDR_20mA_0xF0         0xF0
+#define     MEM_ADDR_20mA_0xF1         0xF1
+#define     MEM_ADDR_20mA_0xF2         0xF2
+#define     MEM_ADDR_20mA_0xF3         0xF3
+#define     MEM_ADDR_20mA_0xF4         0xF4
+#define     MEM_ADDR_20mA_0xF5         0xF5
+#define     MEM_ADDR_20mA_0xF6         0xF6
+#define     MEM_ADDR_20mA_0xF7         0xF7
+#define     MEM_ADDR_20mA_0xF8         0xF8
+#define     MEM_ADDR_20mA_0xF9         0xF9
+#define     MEM_ADDR_20mA_0xFA         0xFA
+#define     MEM_ADDR_20mA_0xFB         0xFB
+#define     MEM_ADDR_20mA_0xFC         0xFC
+#define     MEM_ADDR_20mA_0xFD         0xFD
+#define     MEM_ADDR_20mA_0xFE         0xFE
+#define     MEM_ADDR_20mA_0xFF         0xFF
+
+#define     TOTAL_DATA_ADDRESS    	0
+#define     SYSTEM_DATA_ADDRESS    	0x100
+#define     AI_DATA_ADDRESS    		0x200
+#define     PHONE_DATA_ADDRESS    	0x300
+
+#define     SCAN_MAP_0xE0   0x01
+#define     SCAN_MAP_0xE1   0x02
+#define     SCAN_MAP_0xE2   0x03
+#define     SCAN_MAP_0xE3   0x04
+
+#define     SCAN_MAP_0x20   0x10
+
+#define     COMM_G_LINK       0
+#define     COMM_MODBUS     1
+
+#define     MCP3427_STATE_STOP  0
+#define     MCP3427_STATE_WRITE  1
+#define     MCP3427_STATE_READ  2
+#define     MCP3427_STATE_ERROR  3
+
+#define BV(bit)			(1<<(bit))		/* bit processing */
+#define CLR_Bit(reg,bit)	reg &= ~(BV(bit))
+#define SET_Bit(reg,bit)	reg |= (BV(bit))
+
+typedef struct _TICK_INFO_
+{
+    unsigned long Loop_Cnt;
+    unsigned long Ready_Time;
+    
+    unsigned short Ms60000_Cnt;
+    unsigned short Ms1000_Cnt;
+    unsigned short Ms500_Cnt;
+    unsigned short Ms100_Cnt;
+    unsigned short Ms50_Cnt;
+    unsigned short Ms10_Cnt;
+    
+    unsigned char Ms60000_Flag;
+    unsigned char Ms1000_Flag;
+    unsigned char Ms500_Flag;
+    unsigned char Ms100_Flag;
+    unsigned char Ms50_Flag;
+    unsigned char Ms10_Flag;
+    unsigned char Ms1_Flag;
+    unsigned short UsbRx_LongCounter;
+    unsigned char Update_Rtc;
+    unsigned char Enable;
+    unsigned char Sec_05Flag;
+    
+}_TICK_INFO;
+
+extern _TICK_INFO Tick_Info;
+
+typedef struct _PT100_INFO_
+{
+    unsigned long Avg_Buf[10];
+    unsigned long Read_Buf;
+    unsigned long Index;
+    unsigned long Avg_Value;
+    unsigned long R;
+    
+    signed short Value;
+    
+}_PT100_INFO;
+
+extern _PT100_INFO Pt100_Info;
+
+typedef struct _KEY_INFO_
+{
+    unsigned short Hold_Cnt;
+    unsigned short Input_State;
+    unsigned short Prev_Keyin;
+    unsigned short Keyin;
+    unsigned char Lock;
+    
+}_KEY_INFO;
+extern _KEY_INFO Ext_Key_Info, Sw_Key_Info;
+////////////////////////////////////////////////////////////////////////
+
+typedef struct _EXT_61850_
+{
+    unsigned short G_LINK_STATUS[5];
+    unsigned short FIRE_RECEPTION_STATUS[10];
+    unsigned short FIRE_REMOTE_CONTROL_STATUS[4];
+    unsigned short UNMANNED_SECURITY[2];
+}_EXT_61850;
+
+extern _EXT_61850 EXT_61850_Info, EXT_61850_Info_2;
+
+typedef struct _GLINK_INFO_
+{
+    unsigned short COMMUNICATION_STATUS;
+    unsigned short POWER24_STATUS;
+    unsigned short TIMER1;
+    unsigned short TIMER2;
+    unsigned short SPARE;
+}_GLINK_INFO;
+
+extern _GLINK_INFO Glink_info, Glink_info_2;
+
+typedef struct _IO_INFO_
+{
+    unsigned short INPUT_STATUS;
+    unsigned short OUTPUT_STATUS;
+    unsigned short EXT_CMD;
+}_IO_INFO;
+
+extern _IO_INFO IO_Info[16], IO_Info_2[16];
+
+typedef struct _EXT_CH1_
+{
+    unsigned short INPUT_STATUS[9];
+    unsigned short OUTPUT_STATUS;
+}_EXT_CH1;
+
+extern _EXT_CH1 EXT_CH1_Info, EXT_CH1_Info_2;
+
+typedef struct _EXT_CH2_
+{
+    unsigned short INPUT_STATUS[2];
+    unsigned short OUTPUT_STATUS;
+}_EXT_CH2;
+
+extern _EXT_CH2 EXT_CH2_Info, EXT_CH2_Info_2;
+
+
+typedef struct _AI_INFO_
+{
+    signed short CH1_DATA;
+    signed short CH2_DATA;
+    signed short MIN_CH1;
+    signed short MAX_CH1;
+    signed short MIN_CH2;
+    signed short MAX_CH2;
+    signed short CAL_CH1;
+    signed short CAL_CH2;
+	
+    signed short LOW_POINT_CH1;
+    signed short HIGH_POINT_CH1;
+    signed short LOW_POINT_CH2;
+    signed short HIGH_POINT_CH2;
+	
+    signed short DAC_DATA_CH1;
+    signed short DAC_DATA_CH2;
+    signed short DAC_CAL_CH1;
+    signed short DAC_CAL_CH2;
+    signed short DAC_CONTROL;
+    
+}_AI_INFO;
+
+extern _AI_INFO AI_Info[16], AI_Info_2[16];
+
+typedef struct _MAIN_INFO_
+{
+    unsigned short IO_Conn;
+    unsigned short AI_Conn;
+    
+    unsigned short Comp_Comm_Type;      // G-LINK or MODBUS
+    
+    unsigned short Comp_Connect_Cnt[16];
+    unsigned short Dio_Connect_Cnt[16];
+    unsigned short Ma420_Connect_Cnt[16];
+
+    unsigned short COM_WORD_BUFF;		// 6
+    unsigned short TIMER2_COUNTER;		// 8
+	
+    unsigned short bRUN_STOP_STATE;
+    unsigned short bTOUCH_CONTROL;
+	
+    unsigned short bTIMER2_RUN_SIG;
+    unsigned char bTIMER2_ON_SIG;
+    unsigned char bTIMER2_OFF_SIG;
+
+    unsigned char bRUN_STOP_STATE_SIG;    
+    unsigned char bRUN_STOP_STATE_RUNSIG;    
+    unsigned char bRUN_STOP_STATE_STOPSIG;  
+    unsigned short bTEST_MODE;    
+	
+}_MAIN_INFO;
+
+extern _MAIN_INFO Main_Info;
+
+typedef struct _TOTAL_INFO_
+{
+    unsigned short TOUCH_ENABLE;	// 0
+    unsigned short COMP_CONNECT;	// 2
+    unsigned short RESET_STATE;	// 4
+	
+    unsigned short TIMER1;		// 6
+    unsigned short TIMER2;		// 8
+    unsigned short ON_CH;		// 10
+    unsigned short RUN_STOP_STATE;		// 12
+    unsigned short TIMER1_RUN_SIG;		// 14
+    unsigned short TIMER2_RUN_SIG;		// 16
+    unsigned short TEST_MODE;		// 18
+    unsigned short TOUTCH_TIME;		// 18
+    unsigned short MUJANG_STATUS;		//20
+	
+    unsigned short MUJANG_SW_STATUS;	//22
+//    unsigned short LOAD_PRESSURE;		//24
+    unsigned short COMP_PRESSURE_LEVEL;         //26 
+    unsigned short LOW_ALARM_PRESSURE;          // 28
+    
+    unsigned short DIO_CONNECT;        // 30
+    unsigned short DEVICE_CONNECT;         // 32
+    
+    unsigned short TOTAL_INDIVIDUAL_MODE;    //34           
+    unsigned short COMP_SORT_MODE;                  // 36
+    
+    unsigned short COMP_START_QTY;           	// 38
+    unsigned short RUN_SEQUENCE[9];		// 40	
+    
+    unsigned short START_COMP;                  // 60
+    
+    unsigned short RUN_DELAY_TIME_SEC;          // 62
+    
+    unsigned short MAIN_PRESS_CHOICE_PART;   //64
+    
+    unsigned short AUTOSTOP_TIME_MIN;           // 66
+    unsigned short CHANGE_TIME_HOUR;            //68
+    
+    unsigned short EXT_RUN_STOP;				//70
+    
+    unsigned short CHANGE_TIMER_HOUR;                 //72
+    unsigned short CHANGE_TIMER_MIN;
+	
+    unsigned short OPTION_DEVICE;			//74
+    unsigned short USE_DEVICE;                  	// 76
+    unsigned short USE_COMP_QTY;			//78
+    unsigned short TOTAL_RUN_STOP_L_R;		            // 80
+    unsigned short ALARM_BIT_CONTROL_BIT;				//82
+    unsigned short LOW_ALARM_PRESSURE_STEP;			//84
+    unsigned short DATA_STORAGE_COMP;				//86
+    unsigned short REV_88;								//88
+    unsigned short SYSTEM_CONT;						//90
+    unsigned short Year_Week;
+    unsigned short Month_Date;
+    unsigned short Hour_Min;
+    unsigned short Seconds;
+    
+}_TOTAL_INFO;
+
+extern _TOTAL_INFO Total_Info, Total_Info_2;
+
+typedef struct _SYSTEM_INFO_
+{
+    unsigned char   ETH_MAC_ADDRESS[6];
+    unsigned char   ETH_SERVER_ADDRESS[4];
+    unsigned short  ETH_SERVER_PORT;
+    unsigned char   WIFI_MAC_ADDRESS[6];
+    unsigned char   WIFI_AP[16];
+    unsigned char   WIFI_PASSWORD[16];
+    unsigned char   WIFI_SERVER_ADDRESS[4];
+    unsigned short  WIFI_SERVER_PORT;
+    unsigned char   ETH_WIFI_SELECT;
+    unsigned char   DHCP_ON_OFF;
+    unsigned char   ETH_LOCAL_ADDRESS[4];
+    unsigned char   ETH_LOCAL_SUBNETMASK[4];
+    unsigned char   ETH_LOCAL_GATEWAY[4];
+    unsigned char   ETH_AUTO_IP_ADDRESS[4];
+    unsigned char   WIFI_AUTO_IP_ADDRESS[4];
+    unsigned short   DATA_SEND_DUTY;
+    unsigned short   GROUP_ID;
+    unsigned short   SYSTEM_USER_ID_H;
+    unsigned short   SYSTEM_USER_ID;
+    unsigned short   COMP_COUNT_QTY;
+    unsigned short   MODEL;
+    unsigned short  VERSION;
+    unsigned short  VERSION_NUM;
+    unsigned char   PRODUCT_ID;
+    unsigned char   COMPANY_ID;
+    unsigned short   DB_SEND_DUTY;
+}_SYSTEM_INFO;
+
+extern _SYSTEM_INFO System_Info, System_Info_2;
+
+typedef struct _COMP_INFO_
+{
+    signed short 	SERVICE_PRESSURE;
+    signed short 	P2;
+    signed short 	P3;
+    signed short 	P4;
+    signed short 	P5;
+    signed short 	P6;
+    signed short 	T1;
+    signed short 	T2;
+    signed short 	T3;
+    signed short 	T4;
+    signed short 	T5;
+    signed short 	T6;
+    signed short 	T7;
+    signed short 	T8;
+    signed short 	T9;
+    signed short 	T10;
+    signed short 	T11;
+    signed short 	T12;
+    signed short 	T13;
+    signed short 	T14;
+    unsigned short 	mALARM_FLAG;
+    unsigned short 	mFAULT_FLG_L;
+    unsigned short 	mFAULT_FLG_H;
+    unsigned short 	mFAULT_INV;
+    unsigned short 	mCP_STATUS;
+    unsigned short 	mOUTPUT_STATUS;
+    unsigned short 	mINPUT_STATUS;
+    unsigned short 	mCOUNT_STATUS;
+    unsigned short 	mINV_RPM;
+    unsigned short 	mRUN_MODE;
+    unsigned short 	mREAL_YEARWEEK;
+    unsigned short 	mREAL_MONTHDAY;	
+    unsigned short 	mREAL_HOURMIN;
+    unsigned short 	mREAL_SEC;
+    unsigned short 	mEXT_RUN_STOP;
+    unsigned short 	mINV_TargetP;
+    unsigned short 	mINV_InDirectP;
+    unsigned short 	mINV_DirectP;
+    unsigned short 	mEMER_STOP_P;
+    unsigned short 	mUNLOAD_P;
+    unsigned short 	mLOAD_P;
+    unsigned short 	mAUTO_STOP_MIN;
+    unsigned short 	mALARM_FLAG_H;
+    unsigned short 	mYD_CONVERSION_SEC;
+    unsigned short 	mSYSTEM_ID;
+    unsigned short 	mDRIVE_SET_MODE;
+    unsigned short 	mMANUAL_UNLOAD_MODE;
+    unsigned short 	mREMOTE_TYPE;
+    unsigned short 	mTOUT1_FAULT_TEMP;
+    unsigned short 	mTOUT2_FAULT_TEMP;
+    unsigned short 	mTOIL_FAULT_TEMP;
+    unsigned short 	mPMAX_LIMIT;
+    unsigned short 	mP2IN_FAULT;
+    unsigned short 	mPOIL_FAULT;
+    signed short 	mPAIRFILTER_DEF_ALARM;
+    unsigned short 	mLOAD_DELAY_SEC;
+    unsigned short 	mSTOP_DELAY_SEC;
+    unsigned short 	mAIRFILTER_USE_LIMIT;
+    unsigned short 	mOILFILTER_USE_LIMIT;
+    unsigned short 	mOIL_USE_LIMIT;
+    unsigned short 	mGRESS_USE_LIMIT;
+    signed short 	mLOAD_TEMP;
+    unsigned short 	mMODEL_1;
+    unsigned short 	mVERSION_1;
+    unsigned short 	mVERSION_2;
+    unsigned short 	mVERSION_NUM;
+    unsigned short 	mINV_FREQ;
+    unsigned short 	mINV_MAX_RPM;
+    unsigned short 	mINV_MIN_RPM;
+    unsigned short 	mTOTAL_AIR_FILT_TIME;
+    unsigned short 	mTOTAL_OIL_FILT_TIME;
+    unsigned short 	mTOTAL_OIL_TIME;
+    unsigned short 	mTOTAL_GRESS_TIME;
+    unsigned short 	mTOTAL_UNLOAD_TIME;
+    unsigned short 	mTOTAL_LOAD_TIME;
+    unsigned short 	mTOTAL_AUTOSTOP_TIME;
+    unsigned short 	mTOTAL_STOP_TIME;
+    unsigned short 	mTOTAL_RUN_TIME_L;
+    unsigned short 	mTOTAL_RUN_TIME_H;
+    unsigned short 	mTOTAL_RUN_COUNT_L;
+    unsigned short 	mTOTAL_RUN_COUNT_H;
+    unsigned short 	mSERIAL_YEAR;
+    unsigned short 	mEXT_SERVICE_P;
+
+}_COMP_INFO;
+
+extern _COMP_INFO Comp_Info[8], Comp_Info_2[8];
+
+typedef struct _TIME_INFO_
+{
+    unsigned char Year;
+    unsigned char Month;
+    unsigned char Date;
+    unsigned char WeekDay;
+    unsigned char Hour;
+    unsigned char Min;
+    unsigned char Sec;
+    
+}_TIME_INFO;
+
+extern _TIME_INFO Time_Info;
+
+typedef struct _UART_INFO_
+{
+    unsigned char Ascii_Tx_Buf[300];
+    unsigned char Tx_Buf[300];
+    unsigned char Rx_Buf[300];
+    unsigned short Rx_Timeout;
+    unsigned short Tx_Timeout;
+    
+    unsigned short Ascii_Tx_Length;
+    unsigned short Tx_Length;
+    unsigned short Rx_Cnt;
+    unsigned short Link_Time;
+    unsigned short Load_Addr;
+    unsigned short Load_Buf;
+    unsigned short ReapetTimer;
+
+    unsigned char Rcv_Pkt;
+    unsigned char Call_Id;
+    unsigned char Tx_Enable;
+    unsigned char Tx_Repeat;
+    unsigned char Ack_Flag;
+    unsigned char TxOn_Sig;
+	
+    unsigned char Ascii_Rx_Buf;
+    unsigned char Rx_First_Second;
+    unsigned char Ascii_Start;
+    unsigned char Tx_On;
+    
+}_UART_INFO;
+
+extern _UART_INFO Uart_Info[10];
+
+typedef struct _MCP3427_INFO_
+{
+    unsigned short Conv_Time;
+    unsigned short Ch;
+    unsigned short Data[2];
+    unsigned short Err_Counter;
+    unsigned char Rcv_Data[4];
+    unsigned char State;
+    unsigned char Rcv_Pkt;
+    unsigned char Access;
+    
+}_MCP3427_INFO;
+
+extern _MCP3427_INFO Mcp3427_Info;
+
+typedef struct _PHONE_INFO_
+{	
+    unsigned char ERR_MSG_SEND_PNUM[5][16];
+    unsigned char ACCESS_PNUM[10][16];
+    unsigned char ERR_MSG_CONTENTS[10][32];
+	
+    unsigned short ERR_MSG_SEND_PQTY;
+    unsigned short ACCESS_PQTY;
+	
+    unsigned short USE_DEVICE_QTY;
+	
+    unsigned short DEVICE_CONNECT;		//conect status
+    unsigned short SPARE[4];
+    
+}_PHONE_INFO;
+
+extern _PHONE_INFO Phone_Info, Phone_Info_2;
+
+unsigned short crc16(unsigned char *data_p, unsigned short length);
+void Reg_Init(void);

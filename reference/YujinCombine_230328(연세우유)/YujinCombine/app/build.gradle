@@ -1,0 +1,75 @@
+plugins {
+    id 'com.android.application'
+}
+repositories {
+    maven{
+        url 'https://raw.github.com/zeeshanejaz/unirest-android/mvn-repo'
+    }
+    google()
+    mavenCentral()
+}
+
+android {
+    compileSdkVersion 32
+    defaultConfig {
+        applicationId "yeong.gstech.com.yujincombine"
+        minSdkVersion 24
+        targetSdkVersion 29
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/io.netty.versions.properties']
+        }
+    }
+
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    buildFeatures{
+        viewBinding = true
+    }
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation 'androidx.appcompat:appcompat:1.5.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'com.google.android.datatransport:transport-api:3.0.0'
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.3'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+    implementation 'com.android.support:design:+'
+    implementation 'androidx.cardview:cardview:1.+'
+    implementation 'io.netty:netty-buffer:4.1.16.Final'
+    implementation 'com.jakewharton:butterknife:10.0.0'
+    implementation 'com.github.bumptech.glide:glide:4.+'
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.8.8'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.8.8.1'
+    implementation 'androidx.recyclerview:recyclerview:1.2.1'
+    implementation 'com.mashape.unirest:unirest-android:1.+'
+    implementation 'com.google.code.gson:gson:2.8.+'
+    implementation 'com.github.prolificinteractive:material-calendarview:2.0.0'
+    implementation 'androidx.room:room-runtime:2.2.6'
+    implementation 'me.jahnen:libaums:0.8.0'
+    implementation group: 'com.squareup.okhttp3', name: 'okhttp', version: '3.14.9'
+    implementation 'androidx.work:work-runtime:2.7.1'
+    annotationProcessor 'com.jakewharton:butterknife-compiler:10.0.0'
+    annotationProcessor 'androidx.room:room-compiler:2.2.6'
+}

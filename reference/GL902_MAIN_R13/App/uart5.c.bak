@@ -1,0 +1,762 @@
+#include "stm32f4xx_hal.h"
+#include "memory_map.h"
+#include "delay.h"
+#include "uart5.h"
+
+extern UART_HandleTypeDef huart5;           // 통합제어 모니터.
+
+void USART5_ISR(void)
+{
+    unsigned short rcv_length;
+    unsigned char RxData;
+
+    RxData = UART5->DR;
+
+    if( Uart_Info[UART5_D_IO].Rx_Timeout == 0 )   Uart_Info[UART5_D_IO].Rx_Cnt = 0;
+    if( Uart_Info[UART5_D_IO].Rx_Cnt > 275 )   Uart_Info[UART5_D_IO].Rx_Cnt = 0;
+    
+    if( Uart_Info[UART5_D_IO].Rx_Cnt == 0  && RxData == 0x65 )			// ID 검사
+    {
+        Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+    }
+    else if( Uart_Info[UART5_D_IO].Rx_Cnt == 1 && (RxData == 0x13 || RxData == 0x15 || RxData == 0x03 || RxData == 0x10) )					// 쓰기, 읽기 명령. 0x03, 0x10 은 모드버스.
+    {
+        Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+    }
+    else if( Uart_Info[UART5_D_IO].Rx_Cnt >= 2 )
+    {
+        if( Uart_Info[UART5_D_IO].Rx_Buf[1] == 0x13 )
+        {
+            if( Uart_Info[UART5_D_IO].Rx_Cnt == 2 )					// 상위 주소
+            {
+                Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART5_D_IO].Rx_Cnt == 3 )					// 하위 주소
+            {
+                Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART5_D_IO].Rx_Cnt == 4 )					// 데이터 길이
+            {
+                Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART5_D_IO].Rx_Cnt == 5 )					// 데이터 길이
+            {
+                Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART5_D_IO].Rx_Cnt >= 6 )
+            {
+                rcv_length = (Uart_Info[UART5_D_IO].Rx_Buf[4] << 8 | Uart_Info[UART5_D_IO].Rx_Buf[5]);
+
+                Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+
+                if( Uart_Info[UART5_D_IO].Rx_Cnt == (6 + rcv_length + 2) )		// 헤더 + 데이터 + CRC
+                    Uart_Info[UART5_D_IO].Rcv_Pkt = SET;
+            }
+            else
+            {
+                Uart_Info[UART5_D_IO].Rx_Cnt = 0;
+            }
+        }
+        else if( Uart_Info[UART5_D_IO].Rx_Buf[1] == 0x15 )
+        {
+            if( Uart_Info[UART5_D_IO].Rx_Cnt == 2 )					// 상위 주소
+            {
+                Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART5_D_IO].Rx_Cnt == 3 )					// 하위 주소
+            {
+                Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART5_D_IO].Rx_Cnt >= 4 )					// 데이터 길이
+            {
+                rcv_length = (Uart_Info[UART5_D_IO].Rx_Buf[2] << 8 | Uart_Info[UART5_D_IO].Rx_Buf[3]);
+
+                Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+
+                if( Uart_Info[UART5_D_IO].Rx_Cnt == (4 + rcv_length + 2) )		// 헤더 + 데이터 + CRC
+                    Uart_Info[UART5_D_IO].Rcv_Pkt = SET;
+            }
+            else
+            {
+                Uart_Info[UART5_D_IO].Rx_Cnt = 0;
+            }
+        }
+        else if( Uart_Info[UART5_D_IO].Rx_Buf[1] == 0x03 )
+        {
+            if( Uart_Info[UART5_D_IO].Rx_Cnt == 2 )
+            {
+                Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+                rcv_length = RxData;
+            }
+            else if( Uart_Info[UART5_D_IO].Rx_Cnt >= 3 )
+            {
+                Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt++] = RxData;
+
+                if( Uart_Info[UART5_D_IO].Rx_Cnt == (3 + rcv_length + 2) )
+                    Uart_Info[UART5_D_IO].Rcv_Pkt = SET;
+            }
+        }
+        else
+            Uart_Info[UART5_D_IO].Rx_Cnt = 0;
+    }
+    else
+        Uart_Info[UART5_D_IO].Rx_Cnt = 0;
+    
+    Uart_Info[UART5_D_IO].Rx_Timeout = 10;
+}
+
+void Uart5_Rcv_0x13_Data(unsigned char *pData)
+{
+    unsigned short word_buf, *pWord, word_cnt, byte_cnt, i, cnt, addr;
+    unsigned char upper_addr, lower_addr;
+    
+    addr = pData[2];
+    addr <<= 8;
+    addr |= pData[3];
+    
+    upper_addr = pData[2];
+    lower_addr = pData[3];
+    
+    if( Uart_Info[UART5_D_IO].Call_Id >= MEM_ADDR_IO_0xE1 && Uart_Info[UART5_D_IO].Call_Id <= MEM_ADDR_IO_0xEF )      // 0xE0
+    {
+        byte_cnt = pData[4];
+        byte_cnt <<= 8;
+        byte_cnt |= pData[5];
+
+        word_cnt = byte_cnt / 2;
+
+        pWord = (unsigned short*)&IO_Info[Uart_Info[UART5_D_IO].Call_Id - MEM_ADDR_IO_0xE0];
+
+        pWord += lower_addr / 2;
+
+        cnt = 6;
+
+        for(i=0;i<word_cnt;i++)
+        {
+            word_buf = pData[cnt++];
+            word_buf <<= 8;
+            word_buf |= pData[cnt++];
+            
+            *pWord++ = word_buf;
+            
+            lower_addr += 2;
+        }
+	if(Total_Info.TEST_MODE==0)
+	{
+		//0xe1
+//		if(IO_Info[1].INPUT_STATUS & 0x0001) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0001;	//bit set
+//		else if(!(IO_Info[1].INPUT_STATUS & 0x0001)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0001;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0002) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0002;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0002)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0002;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0004) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0004;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0004)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0004;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0008) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0008;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0008)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0008;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0010) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0010;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0010)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0010;	//bit clr
+
+		if(IO_Info[1].INPUT_STATUS & 0x0020) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0020;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0020)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0020;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0040) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0040;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0040)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0040;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0080) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0080;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0080)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0080;	//bit clr
+		
+		//0xe2
+		if(IO_Info[2].INPUT_STATUS & 0x0001) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0100;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0001)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0100;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0002) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0200;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0002)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0200;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0004) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0400;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0004)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0400;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0008) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0800;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0008)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0800;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0010) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x1000;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0010)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x1000;	//bit clr
+
+		if(IO_Info[2].INPUT_STATUS & 0x0020) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x2000;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0020)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x2000;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0040) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x4000;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0040)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x4000;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0080) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x8000;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0080)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x8000;	//bit clr
+
+		//0xe3
+		if(IO_Info[3].INPUT_STATUS & 0x0001) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0001;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0001)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0001;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0002) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0002;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0002)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0002;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0004) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0004;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0004)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0004;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0008) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0008;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0008)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0008;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0010) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0010;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0010)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0010;	//bit clr
+
+		if(IO_Info[3].INPUT_STATUS & 0x0020) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0020;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0020)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0020;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0040) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0040;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0040)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0040;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0080) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0080;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0080)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0080;	//bit clr
+
+		//0xe4
+		if(IO_Info[4].INPUT_STATUS & 0x0001) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0100;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0001)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0100;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0002) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0200;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0002)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0200;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0004) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0400;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0004)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0400;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0008) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0800;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0008)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0800;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0010) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x1000;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0010)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x1000;	//bit clr
+
+		if(IO_Info[4].INPUT_STATUS & 0x0020) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x2000;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0020)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x2000;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0040) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x4000;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0040)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x4000;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0080) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x8000;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0080)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x8000;	//bit clr
+	
+	}	
+//        memcpy((unsigned char*)&EXT_61850_Info.FIRE_REMPTE_CONTROL_STATUS[0],(unsigned char*)&IO_Info[1].INPUT_STATUS,1);   // 10 word, 20 byte
+		
+    }
+}
+
+void Uart5_Rcv_0x15_Data(unsigned char *pData)
+{
+    unsigned short word_buf, *pWord, byte_cnt, i;
+    unsigned char upper_addr, lower_addr;
+    
+    byte_cnt = pData[2];
+    byte_cnt <<= 8;
+    byte_cnt |= pData[3];
+	
+	pData += 4;
+	
+    if( Uart_Info[UART5_D_IO].Call_Id >= MEM_ADDR_IO_0xE1 && Uart_Info[UART5_D_IO].Call_Id <= MEM_ADDR_IO_0xEF )      // 0xE0
+    {
+        while( byte_cnt > 0 )
+        {
+            upper_addr = *pData++;
+            lower_addr = *pData++;
+            
+            byte_cnt -= 2;			// 주소길이감소
+
+            word_buf = *pData++;
+            word_buf <<= 8;
+            word_buf |= *pData++;
+            
+            pWord = (unsigned short*)&IO_Info[Uart_Info[UART5_D_IO].Call_Id - MEM_ADDR_IO_0xE0];
+            
+            pWord += lower_addr / 2;
+            
+            *pWord = word_buf;
+            
+            byte_cnt -= 2;		// 데이터길이감소
+        }
+	if(Total_Info.TEST_MODE==0)
+	{
+		//0xe1
+//		if(IO_Info[1].INPUT_STATUS & 0x0001) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0001;	//bit set
+//		else if(!(IO_Info[1].INPUT_STATUS & 0x0001)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0001;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0002) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0002;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0002)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0002;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0004) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0004;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0004)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0004;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0008) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0008;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0008)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0008;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0010) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0010;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0010)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0010;	//bit clr
+
+		if(IO_Info[1].INPUT_STATUS & 0x0020) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0020;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0020)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0020;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0040) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0040;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0040)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0040;	//bit clr
+		
+		if(IO_Info[1].INPUT_STATUS & 0x0080) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0080;	//bit set
+		else if(!(IO_Info[1].INPUT_STATUS & 0x0080)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0080;	//bit clr
+		
+		//0xe2
+		if(IO_Info[2].INPUT_STATUS & 0x0001) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0100;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0001)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0100;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0002) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0200;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0002)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0200;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0004) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0400;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0004)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0400;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0008) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x0800;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0008)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x0800;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0010) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x1000;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0010)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x1000;	//bit clr
+
+		if(IO_Info[2].INPUT_STATUS & 0x0020) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x2000;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0020)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x2000;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0040) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x4000;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0040)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x4000;	//bit clr
+		
+		if(IO_Info[2].INPUT_STATUS & 0x0080) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] |= 0x8000;	//bit set
+		else if(!(IO_Info[2].INPUT_STATUS & 0x0080)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0] &= ~0x8000;	//bit clr
+
+		//0xe3
+		if(IO_Info[3].INPUT_STATUS & 0x0001) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0001;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0001)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0001;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0002) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0002;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0002)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0002;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0004) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0004;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0004)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0004;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0008) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0008;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0008)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0008;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0010) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0010;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0010)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0010;	//bit clr
+
+		if(IO_Info[3].INPUT_STATUS & 0x0020) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0020;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0020)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0020;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0040) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0040;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0040)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0040;	//bit clr
+		
+		if(IO_Info[3].INPUT_STATUS & 0x0080) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0080;	//bit set
+		else if(!(IO_Info[3].INPUT_STATUS & 0x0080)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0080;	//bit clr
+
+		//0xe4
+		if(IO_Info[4].INPUT_STATUS & 0x0001) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0100;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0001)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0100;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0002) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0200;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0002)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0200;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0004) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0400;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0004)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0400;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0008) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x0800;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0008)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x0800;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0010) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x1000;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0010)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x1000;	//bit clr
+
+		if(IO_Info[4].INPUT_STATUS & 0x0020) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x2000;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0020)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x2000;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0040) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x4000;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0040)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x4000;	//bit clr
+		
+		if(IO_Info[4].INPUT_STATUS & 0x0080) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] |= 0x8000;	//bit set
+		else if(!(IO_Info[4].INPUT_STATUS & 0x0080)) EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[1] &= ~0x8000;	//bit clr
+	
+	}	
+//        memcpy((unsigned char*)&EXT_61850_Info.FIRE_REMPTE_CONTROL_STATUS[0],(unsigned char*)&IO_Info[1].INPUT_STATUS,1);   // 10 word, 20 byte
+		
+    }
+}
+
+void Uart5_Tx_Process(void)
+{
+    unsigned short cal_crc;
+    unsigned char comp_device, io_device, i;
+    
+    if( Uart_Info[UART5_D_IO].Tx_Timeout > 1 )   return;
+    
+    if( Uart_Info[UART5_D_IO].Tx_Timeout == 1 )      // 응답없음. 연결비트 클리어.
+    {
+        if( Uart_Info[UART5_D_IO].Ack_Flag == CLR )
+        {
+	     if( Uart_Info[UART5_D_IO].Call_Id >= MEM_ADDR_IO_0xE1 && Uart_Info[UART5_D_IO].Call_Id <= MEM_ADDR_IO_0xEF )
+            {				
+		  if( Main_Info.Dio_Connect_Cnt[Uart_Info[UART5_D_IO].Call_Id - MEM_ADDR_IO_0xE0] > 0 )     
+		  	Main_Info.Dio_Connect_Cnt[Uart_Info[UART5_D_IO].Call_Id - MEM_ADDR_IO_0xE0]--;
+            }
+        }
+    }
+    
+	if( Uart_Info[UART5_D_IO].Tx_Enable == SET )
+	{
+		if(Main_Info.bTIMER2_ON_SIG)
+		{
+			switch(Total_Info.ON_CH)
+			{	//0xe1
+				case 1:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE1;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE1;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x02;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE1;	// 2=on
+					break;
+				case 2:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE1;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE1;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x04;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE1;	// 2=on
+					break;
+				case 3:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE1;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE1;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x08;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE1;			// 2=on
+					break;
+				case 4:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE1;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE1;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x10;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE1;			// 2=on
+					break;
+				case 5:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE1;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE1;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x20;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE1;			// 2=on
+					break;
+				case 6:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE1;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE1;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x40;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE1;		// 2=on
+					break;
+				case 7:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE1;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE1;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x80;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE1;			// 2=on
+					break;
+				//oxe2	
+				case 8:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE2;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE2;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x01;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE2;			// 2=on
+					break;
+				case 9:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE2;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE2;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x02;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE2;				// 2=on
+					break;
+				case 10:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE2;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE2;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x04;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE2;				// 2=on
+					break;
+				case 11:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE2;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE2;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x08;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE2;				// 2=on
+					break;
+				case 12:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE2;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE2;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x10;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE2;				// 2=on
+					break;
+				case 13:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE2;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE2;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x20;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE2;				// 2=on
+					break;
+				case 14:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE2;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE2;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x40;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE2;				// 2=on
+					break;
+				case 15:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE2;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE2;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x80;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE2;				// 2=on
+					break;
+				//0xe3
+				case 16:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE3;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE3;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x01;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE3;				// 2=on
+					break;
+				case 17:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE3;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE3;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x02;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE3;				// 2=on
+					break;
+				case 18:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE3;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE3;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x04;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE3;				// 2=on
+					break;
+				case 19:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE3;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE3;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x08;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE3;				// 2=on
+					break;
+				case 20:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE3;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE3;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x10;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE3;				// 2=on
+					break;
+				case 21:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE3;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE3;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x20;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE3;				// 2=on
+					break;
+				case 22:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE3;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE3;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x40;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE3;				// 2=on
+					break;
+				case 23:
+					Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE3;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE3;
+
+					Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x80;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE3;				// 2=on
+					break;
+
+					
+					
+			}
+
+			if(Total_Info.RUN_STOP_STATE && (Uart_Info[UART5_D_IO].Tx_Buf[0] == 0xE1))
+				Uart_Info[UART5_D_IO].Tx_Buf[7] |= 0x01;
+			
+			Uart_Info[UART5_D_IO].Tx_Buf[1] = 0x20;	//command
+			Uart_Info[UART5_D_IO].Tx_Buf[3] = 0x02;	//lower addr
+
+			Uart_Info[UART5_D_IO].Tx_Buf[4] = 0;
+			Uart_Info[UART5_D_IO].Tx_Buf[5] = 2;		//data 길이 
+			Uart_Info[UART5_D_IO].Tx_Buf[6] = 0;		//data high byte
+
+			
+			Uart_Info[UART5_D_IO].Tx_Length = 8;
+			Uart_Info[UART5_D_IO].Tx_Repeat = 3;
+		    
+			cal_crc = crc16(Uart_Info[UART5_D_IO].Tx_Buf,Uart_Info[UART5_D_IO].Tx_Length);
+
+			Uart_Info[UART5_D_IO].Tx_Buf[8] = cal_crc >> 8;
+			Uart_Info[UART5_D_IO].Tx_Buf[9] = cal_crc;
+
+			USART5_TX;	Uart_Info[UART5_D_IO].TxOn_Sig=20;
+			HAL_UART_Transmit_IT(&huart5,Uart_Info[UART5_D_IO].Tx_Buf,Uart_Info[UART5_D_IO].Tx_Length+2);
+
+			Uart_Info[UART5_D_IO].Tx_Enable = CLR;
+		}
+	}
+	else if(Total_Info.RESET_STATE || (Main_Info.bTIMER2_OFF_SIG && (Uart_Info[UART5_D_IO].ReapetTimer==1)))
+	{
+		if(IO_Info[1].OUTPUT_STATUS & 0xFFFE)
+		{
+			Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE1;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE1;
+
+			Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x0;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE1;				// 2=on
+		}
+		else if(IO_Info[2].OUTPUT_STATUS)
+		{
+			Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE2;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE2;
+
+			Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x0;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE2;				// 2=on
+		}
+		else if(IO_Info[3].OUTPUT_STATUS)
+		{
+			Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE3;	Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE3;
+
+			Uart_Info[UART5_D_IO].Tx_Buf[7] = 0x0;	Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE3;				// 2=on
+		}			
+		
+		if(((IO_Info[1].OUTPUT_STATUS & 0xFFFE)==0) && (IO_Info[2].OUTPUT_STATUS==0) && (IO_Info[3].OUTPUT_STATUS==0))
+		{
+			Main_Info.bTIMER2_ON_SIG=CLR;
+			Main_Info.bTIMER2_OFF_SIG=CLR;
+			Uart_Info[UART5_D_IO].ReapetTimer=0;
+
+			Total_Info.ON_CH=0;		Total_Info.TIMER1_RUN_SIG=CLR;	Total_Info.TIMER2_RUN_SIG=CLR;
+			
+			Read_Fram(TOTAL_DATA_ADDRESS + ((unsigned char*)&Total_Info.TIMER1 - (unsigned char*)&Total_Info),(unsigned char*)&Total_Info.TIMER1,4);
+		}
+		else
+		{		
+			if(Total_Info.RUN_STOP_STATE && (Uart_Info[UART5_D_IO].Tx_Buf[0] == 0xE1))
+				Uart_Info[UART5_D_IO].Tx_Buf[7] |= 0x01;
+			
+			Uart_Info[UART5_D_IO].Tx_Buf[1] = 0x20;	//command
+			Uart_Info[UART5_D_IO].Tx_Buf[3] = 0x02;	//lower addr
+
+			Uart_Info[UART5_D_IO].Tx_Buf[4] = 0;
+			Uart_Info[UART5_D_IO].Tx_Buf[5] = 2;		//data 길이 
+			Uart_Info[UART5_D_IO].Tx_Buf[6] = 0;		//data high byte
+
+			
+			Uart_Info[UART5_D_IO].Tx_Length = 8;
+			Uart_Info[UART5_D_IO].Tx_Repeat = 3;
+		    
+			cal_crc = crc16(Uart_Info[UART5_D_IO].Tx_Buf,Uart_Info[UART5_D_IO].Tx_Length);
+
+			Uart_Info[UART5_D_IO].Tx_Buf[8] = cal_crc >> 8;
+			Uart_Info[UART5_D_IO].Tx_Buf[9] = cal_crc;
+
+			USART5_TX;	Uart_Info[UART5_D_IO].TxOn_Sig=20;
+			HAL_UART_Transmit_IT(&huart5,Uart_Info[UART5_D_IO].Tx_Buf,Uart_Info[UART5_D_IO].Tx_Length+2);
+			
+			Uart_Info[UART5_D_IO].ReapetTimer=500;
+
+		}
+	}
+	else if(Total_Info.RUN_STOP_STATE != (IO_Info[1].OUTPUT_STATUS & 0x0001))
+	{
+		Uart_Info[UART5_D_IO].Call_Id = 0xE1;	
+
+		Uart_Info[UART5_D_IO].Tx_Buf[0] = 0xE1;			// - 0x10;         // 0x11 -> 0x01
+		Uart_Info[UART5_D_IO].Tx_Buf[1] = 0x20;
+		Uart_Info[UART5_D_IO].Tx_Buf[2] = 0xE1;
+		Uart_Info[UART5_D_IO].Tx_Buf[3] = 0x04;
+
+		Uart_Info[UART5_D_IO].Tx_Buf[4] = 0;
+		Uart_Info[UART5_D_IO].Tx_Buf[5] = 2;		// word
+
+		Uart_Info[UART5_D_IO].Tx_Buf[6] = 0;
+
+		if(Total_Info.RUN_STOP_STATE)
+		{
+			Uart_Info[UART5_D_IO].Tx_Buf[7] = 2;		// 2=on
+			IO_Info[1].OUTPUT_STATUS |= 0x0001;
+		}
+		else
+		{
+			Uart_Info[UART5_D_IO].Tx_Buf[7] = 1;		// 1=off
+			IO_Info[1].OUTPUT_STATUS &= ~0x0001;		//재진입 방지 
+		}
+		
+		Uart_Info[UART5_D_IO].Tx_Length = 8;
+//		Uart_Info[UART5_D_IO].Tx_Enable = SET;
+		Uart_Info[UART5_D_IO].Tx_Repeat = 3;
+	    
+		cal_crc = crc16(Uart_Info[UART5_D_IO].Tx_Buf,Uart_Info[UART5_D_IO].Tx_Length);
+
+		Uart_Info[UART5_D_IO].Tx_Buf[8] = cal_crc >> 8;
+		Uart_Info[UART5_D_IO].Tx_Buf[9] = cal_crc;
+
+		USART5_TX;	Uart_Info[UART5_D_IO].TxOn_Sig=20;
+		HAL_UART_Transmit_IT(&huart5,Uart_Info[UART5_D_IO].Tx_Buf,Uart_Info[UART5_D_IO].Tx_Length+2);
+	}
+	else
+	{
+		io_device = (Total_Info.USE_DEVICE >> 0) & 0xFF;
+
+		switch( Uart_Info[UART5_D_IO].Call_Id )
+		{
+		//            case MEM_ADDR_IO_0xE0 :
+		    case MEM_ADDR_IO_0xE1 :
+		    case MEM_ADDR_IO_0xE2 :
+		    case MEM_ADDR_IO_0xE3 :
+		    case MEM_ADDR_IO_0xE4 :
+		    case MEM_ADDR_IO_0xE5 :
+		    case MEM_ADDR_IO_0xE6 :
+		    case MEM_ADDR_IO_0xE7 :
+		    case MEM_ADDR_IO_0xE8 :
+		    case MEM_ADDR_IO_0xE9 :
+		    case MEM_ADDR_IO_0xEA :
+		    case MEM_ADDR_IO_0xEB :
+		    case MEM_ADDR_IO_0xEC :
+		    case MEM_ADDR_IO_0xED :
+		    case MEM_ADDR_IO_0xEE :
+		    case MEM_ADDR_IO_0xEF :
+		        
+			Uart_Info[UART5_D_IO].Call_Id++;
+
+			if( io_device <= (Uart_Info[UART5_D_IO].Call_Id - 0xE0) )
+			        Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE1;
+
+			break;
+		                        
+		    default :
+		                Uart_Info[UART5_D_IO].Call_Id = MEM_ADDR_IO_0xE1;
+			break;
+		}
+
+		if( Uart_Info[UART5_D_IO].Call_Id >= MEM_ADDR_IO_0xE1 && Uart_Info[UART5_D_IO].Call_Id <= MEM_ADDR_IO_0xEF )
+		{
+		    Uart_Info[UART5_D_IO].Tx_Buf[0] = Uart_Info[UART5_D_IO].Call_Id;
+		                
+		    Uart_Info[UART5_D_IO].Tx_Buf[1] = 0x13;
+		}
+
+		Uart_Info[UART5_D_IO].Ack_Flag = CLR;
+
+		Uart_Info[UART5_D_IO].Tx_Buf[2] = Uart_Info[UART5_D_IO].Call_Id;
+		Uart_Info[UART5_D_IO].Tx_Buf[3] = 0;
+		Uart_Info[UART5_D_IO].Tx_Buf[4] = 0;
+		Uart_Info[UART5_D_IO].Tx_Buf[5] = 0;
+
+		cal_crc = crc16(&Uart_Info[UART5_D_IO].Tx_Buf[0],6);
+
+		Uart_Info[UART5_D_IO].Tx_Buf[6] = cal_crc >> 8;
+		Uart_Info[UART5_D_IO].Tx_Buf[7] = cal_crc & 0xFF;
+
+		USART5_TX;	Uart_Info[UART5_D_IO].TxOn_Sig=20;
+		HAL_UART_Transmit_IT(&huart5,Uart_Info[UART5_D_IO].Tx_Buf,8);
+	}
+    
+    	Uart_Info[UART5_D_IO].Tx_Timeout = 300;
+}
+
+void Uart5_Check_Board_Conn(void)
+{
+    if( Uart_Info[UART5_D_IO].Rx_Buf[2] >= MEM_ADDR_IO_0xE1 && Uart_Info[UART5_D_IO].Rx_Buf[2] <= MEM_ADDR_IO_0xEF )
+        Main_Info.Dio_Connect_Cnt[Uart_Info[UART5_D_IO].Rx_Buf[2] - MEM_ADDR_IO_0xE0] = 5;
+}
+
+void Uart5_Rx_Process(void)
+{
+    unsigned short cal_crc, rcv_crc;
+    
+    if( Uart_Info[UART5_D_IO].Rcv_Pkt == SET )
+    {
+        Uart_Info[UART5_D_IO].Rcv_Pkt = CLR;
+        
+        cal_crc = crc16((unsigned char*)Uart_Info[UART5_D_IO].Rx_Buf, Uart_Info[UART5_D_IO].Rx_Cnt - 2);
+        rcv_crc = Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt - 2];
+        rcv_crc <<= 8;
+        rcv_crc |= Uart_Info[UART5_D_IO].Rx_Buf[Uart_Info[UART5_D_IO].Rx_Cnt - 1];
+        
+        if( cal_crc == rcv_crc )                            // 패킷수신.
+        {
+            Uart_Info[UART5_D_IO].Link_Time = 3000;
+            
+            Uart5_Check_Board_Conn();
+            
+            if( Uart_Info[UART5_D_IO].Rx_Buf[1] == 0x13 )           // 0x13 수신. 전체
+            {
+		if(Total_Info.TEST_MODE==0)            
+                	Uart5_Rcv_0x13_Data(&Uart_Info[UART5_D_IO].Rx_Buf[0]);
+            }
+            else if( Uart_Info[UART5_D_IO].Rx_Buf[1] == 0x15 )      // 0x15 수신. 변화
+            {
+		if(Total_Info.TEST_MODE==0)            
+                	Uart5_Rcv_0x15_Data(&Uart_Info[UART5_D_IO].Rx_Buf[0]);
+            }
+            
+            Uart_Info[UART5_D_IO].Rx_Timeout = 0;
+            Uart_Info[UART5_D_IO].Tx_Timeout = 20;                   // 패킷수신 후 다음번 명령까지의 TX 딜레이는 상대측 보드의 내부 지연시간을 고려해서 50ms 후에 전송함.
+            Uart_Info[UART5_D_IO].Ack_Flag = SET;                    // 패킷요청 때 CLR. 정상수신되고 CRC 문제 없으면 SET.
+        }
+    }
+}

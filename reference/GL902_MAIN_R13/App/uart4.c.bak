@@ -1,0 +1,321 @@
+#include "stm32f4xx_hal.h"
+#include "memory_map.h"
+#include "delay.h"
+#include "uart4.h"
+
+extern UART_HandleTypeDef huart4;       // 장비 데이터 수집.
+
+void USART4_ISR(void)
+{
+    unsigned short rcv_length;
+    unsigned char RxData;
+    
+    if( Uart_Info[UART4_485].Rx_Timeout == 0 )   Uart_Info[UART4_485].Rx_Cnt = 0;
+    if( Uart_Info[UART4_485].Rx_Cnt > 275 )   Uart_Info[UART4_485].Rx_Cnt = 0;
+    
+    RxData = UART4->DR;
+    
+    if( Uart_Info[UART4_485].Rx_Cnt == 0  && RxData == 0x65 )			// ID 검사
+    {
+        Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+    }
+    else if( Uart_Info[UART4_485].Rx_Cnt == 1 && (RxData == 0x13 || RxData == 0x15 || RxData == 0x03 || RxData == 0x10) )					// 쓰기, 읽기 명령. 0x03, 0x10 은 모드버스.
+    {
+        Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+    }
+    else if( Uart_Info[UART4_485].Rx_Cnt >= 2 )
+    {
+        if( Uart_Info[UART4_485].Rx_Buf[1] == 0x13 )
+        {
+            if( Uart_Info[UART4_485].Rx_Cnt == 2 )					// 상위 주소
+            {
+                Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART4_485].Rx_Cnt == 3 )					// 하위 주소
+            {
+                Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART4_485].Rx_Cnt == 4 )					// 데이터 길이
+            {
+                Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART4_485].Rx_Cnt == 5 )					// 데이터 길이
+            {
+                Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART4_485].Rx_Cnt >= 6 )
+            {
+                rcv_length = (Uart_Info[UART4_485].Rx_Buf[4] << 8 | Uart_Info[UART4_485].Rx_Buf[5]);
+
+                Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+
+                if( Uart_Info[UART4_485].Rx_Cnt == (6 + rcv_length + 2) )		// 헤더 + 데이터 + CRC
+                    Uart_Info[UART4_485].Rcv_Pkt = SET;
+            }
+            else
+            {
+                Uart_Info[UART4_485].Rx_Cnt = 0;
+            }
+        }
+        else if( Uart_Info[UART4_485].Rx_Buf[1] == 0x15 )
+        {
+            if( Uart_Info[UART4_485].Rx_Cnt == 2 )					// 상위 주소
+            {
+                Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART4_485].Rx_Cnt == 3 )					// 하위 주소
+            {
+                Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART4_485].Rx_Cnt >= 4 )					// 데이터 길이
+            {
+                rcv_length = (Uart_Info[UART4_485].Rx_Buf[2] << 8 | Uart_Info[UART4_485].Rx_Buf[3]);
+
+                Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+
+                if( Uart_Info[UART4_485].Rx_Cnt == (4 + rcv_length + 2) )		// 헤더 + 데이터 + CRC
+                    Uart_Info[UART4_485].Rcv_Pkt = SET;
+            }
+            else
+            {
+                Uart_Info[UART4_485].Rx_Cnt = 0;
+            }
+        }
+        else if( Uart_Info[UART4_485].Rx_Buf[1] == 0x03 )
+        {
+            if( Uart_Info[UART4_485].Rx_Cnt == 2 )
+            {
+                Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+                rcv_length = RxData;
+            }
+            else if( Uart_Info[UART4_485].Rx_Cnt >= 3 )
+            {
+                Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt++] = RxData;
+
+                if( Uart_Info[UART4_485].Rx_Cnt == (3 + rcv_length + 2) )
+                    Uart_Info[UART4_485].Rcv_Pkt = SET;
+            }
+        }
+        else
+            Uart_Info[UART4_485].Rx_Cnt = 0;
+    }
+    else
+        Uart_Info[UART4_485].Rx_Cnt = 0;
+    
+    Uart_Info[UART4_485].Rx_Timeout = 10;
+}
+
+void Uart4_Rcv_0x13_Data(unsigned char *pData)
+{
+    unsigned short word_buf, *pWord, word_cnt, byte_cnt, i, cnt, addr;
+    unsigned char upper_addr, lower_addr;
+    
+    addr = pData[2];
+    addr <<= 8;
+    addr |= pData[3];
+    
+    upper_addr = pData[2];
+    lower_addr = pData[3];
+    if( Uart_Info[UART4_485].Call_Id >= MEM_ADDR_IO_0xE8 && Uart_Info[UART4_485].Call_Id <= MEM_ADDR_IO_0xE9 )      // 0xE0
+    {
+        byte_cnt = pData[4];
+        byte_cnt <<= 8;
+        byte_cnt |= pData[5];
+
+        word_cnt = byte_cnt / 2;
+
+        pWord = (unsigned short*)&IO_Info[Uart_Info[UART4_485].Call_Id -MEM_ADDR_IO_0xE0];
+
+        pWord += lower_addr / 2;
+
+        cnt = 6;
+
+        for(i=0;i<word_cnt;i++)
+        {
+            word_buf = pData[cnt++];
+            word_buf <<= 8;
+            word_buf |= pData[cnt++];
+            
+            *pWord++ = word_buf;
+            
+            lower_addr += 2;
+        }
+	if(Total_Info.TEST_MODE==0)
+	{
+		if(IO_Info[8].INPUT_STATUS & 0x0001) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0002;	//bit set
+		else if(!(IO_Info[8].INPUT_STATUS & 0x0001))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0002;	//bit1 clr
+		if(IO_Info[8].INPUT_STATUS & 0x0002) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0004;	//bit set
+		else if(!(IO_Info[8].INPUT_STATUS & 0x0002))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0004;	//bit2 clr
+		if(IO_Info[8].INPUT_STATUS & 0x0004) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0008;	//bit set
+		else if(!(IO_Info[8].INPUT_STATUS & 0x0004))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0008;	//bit3 clr
+		if(IO_Info[8].INPUT_STATUS & 0x0008) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0010;	//bit set
+		else if(!(IO_Info[8].INPUT_STATUS & 0x0008))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0010;	//bit4 clr
+
+		if(IO_Info[8].INPUT_STATUS & 0x0010) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0020;	//bit set
+		else if(!(IO_Info[8].INPUT_STATUS & 0x0010))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0020;	//bit5 clr
+		if(IO_Info[8].INPUT_STATUS & 0x0020) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0040;	//bit set
+		else if(!(IO_Info[8].INPUT_STATUS & 0x0020))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0040;	//bit6 clr
+		if(IO_Info[8].INPUT_STATUS & 0x0040) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0080;	//bit set
+		else if(!(IO_Info[8].INPUT_STATUS & 0x0040))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0080;	//bit7 clr
+		if(IO_Info[8].INPUT_STATUS & 0x0080) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0100;	//bit set
+		else if(!(IO_Info[8].INPUT_STATUS & 0x0080))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0100;	//bit8 clr
+
+		if(IO_Info[9].INPUT_STATUS & 0x0001) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0200;	//bit set
+		else if(!(IO_Info[9].INPUT_STATUS & 0x0001))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0200;	//bit9 clr
+		if(IO_Info[9].INPUT_STATUS & 0x0002) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0400;	//bit set
+		else if(!(IO_Info[9].INPUT_STATUS & 0x0002))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0400;	//bit10 clr
+		if(IO_Info[9].INPUT_STATUS & 0x0004) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0800;	//bit set
+		else if(!(IO_Info[9].INPUT_STATUS & 0x0004))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0800;	//bit11 clr
+		if(IO_Info[9].INPUT_STATUS & 0x0008) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x1000;	//bit set
+		else if(!(IO_Info[9].INPUT_STATUS & 0x0008))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x1000;	//bit12 clr
+
+		if(IO_Info[9].INPUT_STATUS & 0x0010) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x0001;	//bit set
+		else if(!(IO_Info[9].INPUT_STATUS & 0x0010))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x0001;	//bit0 clr
+		
+		if(IO_Info[9].INPUT_STATUS & 0x0020) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x2000;	//bit set
+		else if(!(IO_Info[9].INPUT_STATUS & 0x0020))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x2000;	//bit13 clr
+/*		
+		if(EXT_CH2_Info.INPUT_STATUS[1] & 0x0040) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x4000;	//bit set
+		else if(!(EXT_CH2_Info.INPUT_STATUS[1] & 0x0040))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x4000;	//bit clr
+		if(EXT_CH2_Info.INPUT_STATUS[1] & 0x0080) EXT_61850_Info.UNMANNED_SECURITY[0] |= 0x8000;	//bit set
+		else if(!(EXT_CH2_Info.INPUT_STATUS[1] & 0x0080))	EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x8000;	//bit clr
+*/	
+		EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x4000;	//bit clr
+		EXT_61850_Info.UNMANNED_SECURITY[0] &= ~0x8000;	//bit clr
+		
+	}
+    }    
+}
+
+void Uart4_Rcv_0x15_Data(unsigned char *pData)
+{
+    unsigned short word_buf, *pWord, byte_cnt, i;
+    unsigned char upper_addr, lower_addr;
+    
+    byte_cnt = pData[2];
+    byte_cnt <<= 8;
+    byte_cnt |= pData[3];
+	
+	pData += 4;
+	
+    if( Uart_Info[UART4_485].Call_Id >= MEM_ADDR_IO_0xE8 && Uart_Info[UART4_485].Call_Id <= MEM_ADDR_IO_0xE9 )      // 0xE0
+    {
+        while( byte_cnt > 0 )
+        {
+            upper_addr = *pData++;
+            lower_addr = *pData++;
+            
+            byte_cnt -= 2;			// 주소길이감소
+
+            word_buf = *pData++;
+            word_buf <<= 8;
+            word_buf |= *pData++;
+            
+            pWord = (unsigned short*)&IO_Info[Uart_Info[UART4_485].Call_Id - MEM_ADDR_IO_0xE0];
+            
+            pWord += lower_addr / 2;
+            
+            *pWord = word_buf;
+            
+            byte_cnt -= 2;		// 데이터길이감소
+        }
+    }		
+}
+
+void Uart4_Tx_Process(void)
+{
+    unsigned short cal_crc;
+    unsigned char comp_device, io_device, i;
+    
+	if( Uart_Info[UART4_485].Tx_Timeout > 1 )   return;
+
+	if(Main_Info.Comp_Connect_Cnt[2])	Main_Info.Comp_Connect_Cnt[2] --;
+	
+	if( Uart_Info[UART4_485].Tx_Enable )
+	{
+	       Uart_Info[UART4_485].Call_Id = MEM_ADDR_IO_0xE9;         // 0x11 -> 0x01
+	       
+		Uart_Info[UART4_485].Tx_Buf[0] = Uart_Info[UART4_485].Call_Id;       
+		Uart_Info[UART4_485].Tx_Buf[1] = 0x20;
+		
+        	Uart_Info[UART4_485].Tx_Buf[2] = Uart_Info[UART4_485].Call_Id;
+		Uart_Info[UART4_485].Tx_Buf[3] = 04;
+		
+		Uart_Info[UART4_485].Tx_Buf[4] = 0;
+		Uart_Info[UART4_485].Tx_Buf[5] = 2;		//data 길이 
+		
+		Uart_Info[UART4_485].Tx_Buf[6] = 0;		//data high byte
+		Uart_Info[UART4_485].Tx_Buf[7] = 14;		//data low byte
+
+		Uart_Info[UART4_485].Tx_Length = 8;
+		Uart_Info[UART4_485].Tx_Repeat = 3;
+
+		cal_crc = crc16(&Uart_Info[UART4_485].Tx_Buf[0],Uart_Info[UART4_485].Tx_Length);
+
+		Uart_Info[UART4_485].Tx_Buf[8] = cal_crc >> 8;
+		Uart_Info[UART4_485].Tx_Buf[9] = cal_crc & 0xFF;
+	
+		USART4_TX;	Uart_Info[UART4_485].TxOn_Sig=20;
+		HAL_UART_Transmit_IT(&huart4,Uart_Info[UART4_485].Tx_Buf,Uart_Info[UART4_485].Tx_Length+2);
+
+		Uart_Info[UART4_485].Tx_Enable = CLR;	
+	}
+	else
+	{
+		if(Uart_Info[UART4_485].Call_Id==MEM_ADDR_IO_0xE8)
+			Uart_Info[UART4_485].Call_Id=MEM_ADDR_IO_0xE9;
+		else
+			Uart_Info[UART4_485].Call_Id=MEM_ADDR_IO_0xE8;
+
+		Uart_Info[UART4_485].Tx_Buf[0] = Uart_Info[UART4_485].Call_Id;       
+		Uart_Info[UART4_485].Tx_Buf[1] = 0x13;
+        	Uart_Info[UART4_485].Tx_Buf[2] = Uart_Info[UART4_485].Call_Id;
+		Uart_Info[UART4_485].Tx_Buf[3] = 0;
+		Uart_Info[UART4_485].Tx_Buf[4] = 0;
+		Uart_Info[UART4_485].Tx_Buf[5] = 0;
+
+		cal_crc = crc16(&Uart_Info[UART4_485].Tx_Buf[0],6);
+
+		Uart_Info[UART4_485].Tx_Buf[6] = cal_crc >> 8;
+		Uart_Info[UART4_485].Tx_Buf[7] = cal_crc & 0xFF;
+
+		USART4_TX;	Uart_Info[UART4_485].TxOn_Sig=20;
+		HAL_UART_Transmit_IT(&huart4,Uart_Info[UART4_485].Tx_Buf,8);
+	}	
+	Uart_Info[UART4_485].Tx_Timeout=300;
+}
+
+void Uart4_Rx_Process(void)
+{
+    unsigned short cal_crc, rcv_crc;
+    
+    if( Uart_Info[UART4_485].Rcv_Pkt == SET )
+    {
+        Uart_Info[UART4_485].Rcv_Pkt = CLR;
+        
+        cal_crc = crc16((unsigned char*)Uart_Info[UART4_485].Rx_Buf, Uart_Info[UART4_485].Rx_Cnt - 2);
+        rcv_crc = Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt - 2];
+        rcv_crc <<= 8;
+        rcv_crc |= Uart_Info[UART4_485].Rx_Buf[Uart_Info[UART4_485].Rx_Cnt - 1];
+        
+        if( cal_crc == rcv_crc )                            // 패킷수신.
+        {
+            Uart_Info[UART4_485].Link_Time = 3000;
+            
+		Main_Info.Comp_Connect_Cnt[2]=5;
+
+            if( Uart_Info[UART4_485].Rx_Buf[1] == 0x13 )           // 0x13 수신. 전체
+            {
+                Uart4_Rcv_0x13_Data(&Uart_Info[UART4_485].Rx_Buf[0]);
+            }
+            else if( Uart_Info[UART4_485].Rx_Buf[1] == 0x15 )      // 0x15 수신. 변화
+            {
+                Uart4_Rcv_0x15_Data(&Uart_Info[UART4_485].Rx_Buf[0]);
+            }
+            
+            Uart_Info[UART4_485].Rx_Timeout = 0;
+            Uart_Info[UART4_485].Tx_Timeout = 50;                   // 패킷수신 후 다음번 명령까지의 TX 딜레이는 상대측 보드의 내부 지연시간을 고려해서 50ms 후에 전송함.
+            Uart_Info[UART4_485].Ack_Flag = SET;                    // 패킷요청 때 CLR. 정상수신되고 CRC 문제 없으면 SET.
+        }
+    }
+}

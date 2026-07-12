@@ -1,0 +1,68 @@
+---- EXT_61850_Info Matches (74 in 6 files) ----
+Main.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\src):    memset((unsigned char*)&EXT_61850_Info,0,sizeof(EXT_61850_Info));
+Main.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\src):    memset((unsigned char*)&EXT_61850_Info_2,0,sizeof(EXT_61850_Info_2));
+Main.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\src):    memset((unsigned char*)&EXT_61850_Info_3,0,sizeof(EXT_61850_Info_3));
+Memory_map.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):_EXT_61850 EXT_61850_Info, EXT_61850_Info_2, EXT_61850_Info_3;
+Memory_map.h (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):extern _EXT_61850 EXT_61850_Info, EXT_61850_Info_2, EXT_61850_Info_3;
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.G_LINK_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord2 = (unsigned short*)&EXT_61850_Info_3.G_LINK_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.G_LINK_STATUS);
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.FIRE_RECEPTION_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord2 = (unsigned short*)&EXT_61850_Info_3.FIRE_RECEPTION_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.FIRE_RECEPTION_STATUS);
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord2 = (unsigned short*)&EXT_61850_Info_3.FIRE_REMOTE_CONTROL_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS);
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.UNMANNED_SECURITY[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord2 = (unsigned short*)&EXT_61850_Info_3.UNMANNED_SECURITY[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.UNMANNED_SECURITY);
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.G_LINK_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord2 = (unsigned short*)&EXT_61850_Info_3.G_LINK_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.G_LINK_STATUS);
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):            pWord = (unsigned short*)&EXT_61850_Info.G_LINK_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.FIRE_RECEPTION_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord2 = (unsigned short*)&EXT_61850_Info_3.FIRE_RECEPTION_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.FIRE_RECEPTION_STATUS);
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):            pWord = (unsigned short*)&EXT_61850_Info.FIRE_RECEPTION_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord2 = (unsigned short*)&EXT_61850_Info_3.FIRE_REMOTE_CONTROL_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.FIRE_RECEPTION_STATUS);
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):            pWord = (unsigned short*)&EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.UNMANNED_SECURITY[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord2 = (unsigned short*)&EXT_61850_Info_3.UNMANNED_SECURITY[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.UNMANNED_SECURITY);
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):            pWord = (unsigned short*)&EXT_61850_Info.UNMANNED_SECURITY[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):		pWord = (unsigned short*)&EXT_61850_Info.FIRE_RECEPTION_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):		size = sizeof(EXT_61850_Info.FIRE_RECEPTION_STATUS);
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):		pWord = (unsigned short*)&EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):		size = sizeof(EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS);
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):		pWord = (unsigned short*)&EXT_61850_Info.UNMANNED_SECURITY[0];
+Uart6.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):		size = sizeof(EXT_61850_Info.UNMANNED_SECURITY);
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.G_LINK_STATUS[0];
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.G_LINK_STATUS) / 2;                            // 워드길이로 계산.
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.FIRE_RECEPTION_STATUS[0];
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.FIRE_RECEPTION_STATUS) / 2;                            // 워드길이로 계산.
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0];
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS) / 2;                            // 워드길이로 계산.
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.UNMANNED_SECURITY[0];
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.UNMANNED_SECURITY) / 2;                            // 워드길이로 계산.
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			if(word_buf & 0x0002) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] |= 0x0008;	//bit set
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			else if(word_buf & 0x0001) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] &= ~0x0008;	//bit clr
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			if(word_buf & 0x0008) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] |= 0x0010;	//bit set
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			else if(word_buf & 0x0004) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] &= ~0x0010;	//bit clr
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			if(word_buf & 0x0020) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] |= 0x0020;	//bit set
+Uart7.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			else if(word_buf & 0x0010) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] &= ~0x0020;	//bit clr
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.G_LINK_STATUS[0];
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.G_LINK_STATUS) / 2;                            // 워드길이로 계산.
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.FIRE_RECEPTION_STATUS[0];
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.FIRE_RECEPTION_STATUS) / 2;                            // 워드길이로 계산.
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS[0];
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.FIRE_REMOTE_CONTROL_STATUS) / 2;                            // 워드길이로 계산.
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        pWord = (unsigned short*)&EXT_61850_Info.UNMANNED_SECURITY[0];
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):        word_cnt = sizeof(EXT_61850_Info.UNMANNED_SECURITY) / 2;                            // 워드길이로 계산.
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			if(word_buf & 0x0002) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] |= 0x0008;	//bit set
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			else if(word_buf & 0x0001) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] &= ~0x0008;	//bit clr
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			if(word_buf & 0x0008) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] |= 0x0010;	//bit set
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			else if(word_buf & 0x0004) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] &= ~0x0010;	//bit clr
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			if(word_buf & 0x0020) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] |= 0x0020;	//bit set
+Uart9.c (f:\project\2018\g-linkpc\firmware\total\2019_version\연세우유_아산\firmware\gl902\gl902_main_r12\app):			else if(word_buf & 0x0010) EXT_61850_Info.FIRE_RECEPTION_STATUS[0] &= ~0x0020;	//bit clr

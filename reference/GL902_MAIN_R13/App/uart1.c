@@ -1,0 +1,1952 @@
+#include "stm32f4xx_hal.h"
+#include "memory_map.h"
+#include "delay.h"
+#include "uart1.h"
+
+
+extern UART_HandleTypeDef huart1;           // 통합제어 모니터.
+
+void USART1_ISR(void)
+{
+    unsigned short rcv_length;
+    unsigned char RxData;
+    
+    if( Uart_Info[UART_GLINK].Rx_Timeout == 0 )   Uart_Info[UART_GLINK].Rx_Cnt = 0;
+    if( Uart_Info[UART_GLINK].Rx_Cnt > 32 )   Uart_Info[UART_GLINK].Rx_Cnt = 0;
+    
+    RxData = USART1->DR;		
+    
+    if( Uart_Info[UART_GLINK].Rx_Cnt == 0  && RxData == 0xC9 )			// ID 검사
+    {
+        Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+    }
+    else if( Uart_Info[UART_GLINK].Rx_Cnt == 1 && (RxData == 0x20 || RxData == 0x13 || RxData == 0x15) )					// 쓰기, 읽기 명령
+    {
+        Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+    }
+    else if( Uart_Info[UART_GLINK].Rx_Buf[1] == 0x13 )
+    {
+        if( Uart_Info[UART_GLINK].Rx_Buf[0] == 0xC9 )
+        {
+            if( Uart_Info[UART_GLINK].Rx_Cnt == 2 )					// 상위 주소
+            {
+                Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART_GLINK].Rx_Cnt == 3 )					// 하위 주소
+            {
+                Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART_GLINK].Rx_Cnt == 4 )					// 데이터 길이
+            {
+                Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART_GLINK].Rx_Cnt == 5 )					// 데이터 길이
+            {
+                Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART_GLINK].Rx_Cnt >= 6 )	// 읽기
+            {
+                Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+
+                if( Uart_Info[UART_GLINK].Rx_Cnt == 8 )
+                    Uart_Info[UART_GLINK].Rcv_Pkt = SET;
+            }
+            else
+            {
+                Uart_Info[UART_GLINK].Rx_Cnt = 0;
+            }
+        }
+        else
+        {
+            if( Uart_Info[UART_GLINK].Rx_Cnt == 2 )					// 상위 주소
+            {
+                Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART_GLINK].Rx_Cnt == 3 )					// 하위 주소
+            {
+                Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART_GLINK].Rx_Cnt == 4 )					// CRC
+            {
+                Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+            }
+            else if( Uart_Info[UART_GLINK].Rx_Cnt == 5 )					// CRC
+            {
+                Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+                
+                if( Uart_Info[UART_GLINK].Rx_Cnt == 6 )
+                    Uart_Info[UART_GLINK].Rcv_Pkt = SET;
+            }
+            else
+            {
+                Uart_Info[UART_GLINK].Rx_Cnt = 0;
+            }
+        }
+    }
+    else if( Uart_Info[UART_GLINK].Rx_Buf[1] == 0x15 )
+    {
+        if( Uart_Info[UART_GLINK].Rx_Cnt == 2 )					// 상위 주소
+        {
+            Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+        }
+        else if( Uart_Info[UART_GLINK].Rx_Cnt == 3 )					// 하위 주소
+        {
+            Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+        }
+        else if( Uart_Info[UART_GLINK].Rx_Cnt == 4 )					// 데이터 길이
+        {
+            Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+        }
+        else if( Uart_Info[UART_GLINK].Rx_Cnt == 5 )					// 데이터 길이
+        {
+            Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+        }
+        else if( Uart_Info[UART_GLINK].Rx_Cnt >= 6 )	// 읽기
+        {
+            Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+
+            if( Uart_Info[UART_GLINK].Rx_Cnt == 8 )
+                Uart_Info[UART_GLINK].Rcv_Pkt = SET;
+        }
+        else
+        {
+            Uart_Info[UART_GLINK].Rx_Cnt = 0;
+        }
+    }
+    else if( Uart_Info[UART_GLINK].Rx_Buf[1] == 0x20 )
+    {
+        if( Uart_Info[UART_GLINK].Rx_Cnt == 2 )					// 상위 주소
+        {
+            Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+        }
+        else if( Uart_Info[UART_GLINK].Rx_Cnt == 3 )					// 하위 주소
+        {
+            Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+        }
+        else if( Uart_Info[UART_GLINK].Rx_Cnt == 4 )					// 데이터 길이
+        {
+            Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+        }
+        else if( Uart_Info[UART_GLINK].Rx_Cnt == 5 )					// 데이터 길이
+        {
+            Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+        }
+        else if( Uart_Info[UART_GLINK].Rx_Cnt >= 6 )	                // 데이터
+        {
+            Uart_Info[UART_GLINK].rcv_length = (Uart_Info[UART_GLINK].Rx_Buf[4] << 8 | Uart_Info[UART_GLINK].Rx_Buf[5]);
+
+            Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt++] = RxData;
+
+            if( Uart_Info[UART_GLINK].Rx_Cnt == (6 + Uart_Info[UART_GLINK].rcv_length + 2) )		// 헤더 + 데이터 + CRC
+                Uart_Info[UART_GLINK].Rcv_Pkt = SET;
+        }
+        else
+        {
+            Uart_Info[UART_GLINK].Rx_Cnt = 0;
+        }
+    }
+    else
+        Uart_Info[UART_GLINK].Rx_Cnt = 0;
+
+    Uart_Info[UART_GLINK].Rx_Timeout = 5;
+}
+
+void Uart1_Rcv_0x13_Data(unsigned char *pData)
+{
+    unsigned short word_buf, *pWord, *pWord2, word_cnt, byte_cnt, i, cnt, addr, cal_crc;
+    unsigned char upper_addr, lower_addr, *p, *pByte, *pByte2;
+    
+    addr = pData[2];
+    addr <<= 8;
+    addr |= pData[3];
+    
+    upper_addr = pData[2];
+    lower_addr = pData[3];
+    
+    if( upper_addr == MEM_ADDR_TOTAL )
+    {
+        pWord = (unsigned short*)&Total_Info;
+        pWord2 = (unsigned short*)&Total_Info_2;
+        
+        word_cnt = sizeof(Total_Info);
+        
+        Uart_Info[UART_GLINK].Tx_Buf[0] = 0x65;
+        Uart_Info[UART_GLINK].Tx_Buf[1] = 0x13;
+        Uart_Info[UART_GLINK].Tx_Buf[2] = pData[2];
+        Uart_Info[UART_GLINK].Tx_Buf[3] = pData[3];
+        Uart_Info[UART_GLINK].Tx_Buf[4] = word_cnt >> 8;
+        Uart_Info[UART_GLINK].Tx_Buf[5] = word_cnt & 0xFF;
+        
+        p = &Uart_Info[UART_GLINK].Tx_Buf[6];
+        
+        for(i=0;i<word_cnt;i+=2)
+        {
+            *p++ = (*pWord >> 8) & 0xFF;
+            *p++ = *pWord & 0xFF;
+            
+            *pWord2 = *pWord;
+            
+            pWord++;
+            pWord2++;
+        }
+        
+        cal_crc = crc16(&Uart_Info[UART_GLINK].Tx_Buf[0],6 + word_cnt);
+        
+        *p++ = cal_crc >> 8;
+        *p++ = cal_crc;
+        
+        Uart_Info[UART_GLINK].Tx_Length = 6 + word_cnt + 2;
+        
+    }
+    else if( upper_addr == MEM_ADDR_SYSTEM )
+    {
+        //pWord = (unsigned short*)&System_Info;
+        //pWord2 = (unsigned short*)&System_Info_2;
+        
+        Uart_Info[UART_GLINK].Tx_Buf[0] = 0x65;
+        Uart_Info[UART_GLINK].Tx_Buf[1] = 0x13;
+        Uart_Info[UART_GLINK].Tx_Buf[2] = pData[2];
+        Uart_Info[UART_GLINK].Tx_Buf[3] = pData[3];
+        Uart_Info[UART_GLINK].Tx_Buf[4] = 98 >> 8;
+        Uart_Info[UART_GLINK].Tx_Buf[5] = 98 & 0xFF;
+        
+        p = &Uart_Info[UART_GLINK].Tx_Buf[6];
+        Uart_Info[UART_GLINK].Tx_Length = 6;
+        
+        while( lower_addr < 98 )
+        {
+            switch( lower_addr )
+            {
+                case 0 :
+                            for(i=0;i<6;i++)
+                                *p++ = System_Info.ETH_MAC_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_MAC_ADDRESS);
+                            lower_addr += sizeof(System_Info.ETH_MAC_ADDRESS);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.ETH_MAC_ADDRESS[0],(unsigned char*)&System_Info_2.ETH_MAC_ADDRESS[0],sizeof(System_Info.ETH_MAC_ADDRESS));
+                            break;
+                            
+                case 6 :
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.ETH_SERVER_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_SERVER_ADDRESS);
+                            lower_addr += sizeof(System_Info.ETH_SERVER_ADDRESS);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.ETH_SERVER_ADDRESS[0],(unsigned char*)&System_Info_2.ETH_SERVER_ADDRESS[0],sizeof(System_Info.ETH_SERVER_ADDRESS));
+                            
+                            break;
+                            
+                case 10 :
+                            *p++ = System_Info.ETH_SERVER_PORT >> 8;
+                            *p++ = System_Info.ETH_SERVER_PORT;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_SERVER_PORT);
+                            lower_addr += sizeof(System_Info.ETH_SERVER_PORT);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.ETH_SERVER_PORT,(unsigned char*)&System_Info_2.ETH_SERVER_PORT,sizeof(System_Info.ETH_SERVER_PORT));
+                            
+                            break;
+                            
+                case 12 :
+                            for(i=0;i<6;i++)
+                                *p++ = System_Info.WIFI_MAC_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_MAC_ADDRESS);
+                            lower_addr += sizeof(System_Info.WIFI_MAC_ADDRESS);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.WIFI_MAC_ADDRESS[0],(unsigned char*)&System_Info_2.WIFI_MAC_ADDRESS[0],sizeof(System_Info.WIFI_MAC_ADDRESS));
+                            
+                            break;
+                            
+                case 18 :
+                            for(i=0;i<16;i++)
+                                *p++ = System_Info.WIFI_AP[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_AP);
+                            lower_addr += sizeof(System_Info.WIFI_AP);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.WIFI_AP[0],(unsigned char*)&System_Info_2.WIFI_AP[0],sizeof(System_Info.WIFI_AP));
+                            
+                            break;
+                            
+                case 34 :
+                            for(i=0;i<16;i++)
+                                *p++ = System_Info.WIFI_PASSWORD[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_PASSWORD);
+                            lower_addr += sizeof(System_Info.WIFI_PASSWORD);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.WIFI_PASSWORD[0],(unsigned char*)&System_Info_2.WIFI_PASSWORD[0],sizeof(System_Info.WIFI_PASSWORD));
+                            
+                            break;
+                            
+                case 50 :
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.WIFI_SERVER_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_SERVER_ADDRESS);
+                            lower_addr += sizeof(System_Info.WIFI_SERVER_ADDRESS);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.WIFI_SERVER_ADDRESS[0],(unsigned char*)&System_Info_2.WIFI_SERVER_ADDRESS[0],sizeof(System_Info.WIFI_SERVER_ADDRESS));
+                            
+                            break;
+                            
+                case 54 :
+                            *p++ = System_Info.WIFI_SERVER_PORT >> 8;
+                            *p++ = System_Info.WIFI_SERVER_PORT;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_SERVER_PORT);
+                            lower_addr += sizeof(System_Info.WIFI_SERVER_PORT);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.WIFI_SERVER_PORT,(unsigned char*)&System_Info_2.WIFI_SERVER_PORT,sizeof(System_Info.WIFI_SERVER_PORT));
+                            
+                            break;
+                            
+                case 56 :
+                            *p++ = System_Info.ETH_WIFI_SELECT;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_WIFI_SELECT);
+                            lower_addr += sizeof(System_Info.ETH_WIFI_SELECT);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.ETH_WIFI_SELECT,(unsigned char*)&System_Info_2.ETH_WIFI_SELECT,sizeof(System_Info.ETH_WIFI_SELECT));
+                            
+                            break;
+                            
+                case 57 :
+                            *p++ = System_Info.DHCP_ON_OFF;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.DHCP_ON_OFF);
+                            lower_addr += sizeof(System_Info.DHCP_ON_OFF);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.DHCP_ON_OFF,(unsigned char*)&System_Info_2.DHCP_ON_OFF,sizeof(System_Info.DHCP_ON_OFF));
+                            
+                            break;
+                            
+                case 58 :
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.ETH_LOCAL_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_LOCAL_ADDRESS);
+                            lower_addr += sizeof(System_Info.ETH_LOCAL_ADDRESS);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.ETH_LOCAL_ADDRESS[0],(unsigned char*)&System_Info_2.ETH_LOCAL_ADDRESS[0],sizeof(System_Info.ETH_LOCAL_ADDRESS));
+                            
+                            break;
+                            
+                case 62 :
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.ETH_LOCAL_SUBNETMASK[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_LOCAL_SUBNETMASK);
+                            lower_addr += sizeof(System_Info.ETH_LOCAL_SUBNETMASK);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.ETH_LOCAL_SUBNETMASK[0],(unsigned char*)&System_Info_2.ETH_LOCAL_SUBNETMASK[0],sizeof(System_Info.ETH_LOCAL_SUBNETMASK));
+                            
+                            break;
+                            
+                case 66 :
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.ETH_LOCAL_GATEWAY[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_LOCAL_GATEWAY);
+                            lower_addr += sizeof(System_Info.ETH_LOCAL_GATEWAY);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.ETH_LOCAL_GATEWAY[0],(unsigned char*)&System_Info_2.ETH_LOCAL_GATEWAY[0],sizeof(System_Info.ETH_LOCAL_GATEWAY));
+                            
+                            break;
+                            
+                case 70 :
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.ETH_AUTO_IP_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_AUTO_IP_ADDRESS);
+                            lower_addr += sizeof(System_Info.ETH_AUTO_IP_ADDRESS);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.ETH_AUTO_IP_ADDRESS[0],(unsigned char*)&System_Info_2.ETH_AUTO_IP_ADDRESS[0],sizeof(System_Info.ETH_AUTO_IP_ADDRESS));
+                            
+                            break;
+                            
+                case 74 :
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.WIFI_AUTO_IP_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_AUTO_IP_ADDRESS);
+                            lower_addr += sizeof(System_Info.WIFI_AUTO_IP_ADDRESS);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.WIFI_AUTO_IP_ADDRESS[0],(unsigned char*)&System_Info_2.WIFI_AUTO_IP_ADDRESS[0],sizeof(System_Info.WIFI_AUTO_IP_ADDRESS));
+                            
+                            break;
+                            
+                case 78 :
+                            *p++ = System_Info.DATA_SEND_DUTY >> 8;
+                            *p++ = System_Info.DATA_SEND_DUTY;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.DATA_SEND_DUTY);
+                            lower_addr += sizeof(System_Info.DATA_SEND_DUTY);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.DATA_SEND_DUTY,(unsigned char*)&System_Info_2.DATA_SEND_DUTY,sizeof(System_Info.DATA_SEND_DUTY));
+                            
+                            break;
+                            
+                case 80 :
+                            *p++ = System_Info.GROUP_ID >> 8;
+                            *p++ = System_Info.GROUP_ID;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.GROUP_ID);
+                            lower_addr += sizeof(System_Info.GROUP_ID);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.GROUP_ID,(unsigned char*)&System_Info_2.GROUP_ID,sizeof(System_Info.GROUP_ID));
+                            
+                            break;
+                            
+                case 82 :
+                            *p++ = System_Info.SYSTEM_USER_ID_H >> 8;
+                            *p++ = System_Info.SYSTEM_USER_ID_H;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.SYSTEM_USER_ID_H);
+                            lower_addr += sizeof(System_Info.SYSTEM_USER_ID_H);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.SYSTEM_USER_ID_H,(unsigned char*)&System_Info_2.SYSTEM_USER_ID_H,sizeof(System_Info.SYSTEM_USER_ID_H));
+                            
+                            break;
+                            
+                case 84 :
+                            *p++ = System_Info.SYSTEM_USER_ID >> 8;
+                            *p++ = System_Info.SYSTEM_USER_ID;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.SYSTEM_USER_ID);
+                            lower_addr += sizeof(System_Info.SYSTEM_USER_ID);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.SYSTEM_USER_ID,(unsigned char*)&System_Info_2.SYSTEM_USER_ID,sizeof(System_Info.SYSTEM_USER_ID));
+                            
+                            break;
+                            
+                case 86 :
+                            *p++ = System_Info.COMP_COUNT_QTY >> 8;
+                            *p++ = System_Info.COMP_COUNT_QTY;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.COMP_COUNT_QTY);
+                            lower_addr += sizeof(System_Info.COMP_COUNT_QTY);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.COMP_COUNT_QTY,(unsigned char*)&System_Info_2.COMP_COUNT_QTY,sizeof(System_Info.COMP_COUNT_QTY));
+                            
+                            break;
+                            
+                case 88 :
+                            *p++ = System_Info.MODEL >> 8;
+                            *p++ = System_Info.MODEL;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.MODEL);
+                            lower_addr += sizeof(System_Info.MODEL);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.MODEL,(unsigned char*)&System_Info_2.MODEL,sizeof(System_Info.MODEL));
+                            
+                            break;
+                            
+                case 90 :
+                            *p++ = System_Info.VERSION >> 8;
+                            *p++ = System_Info.VERSION;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.VERSION);
+                            lower_addr += sizeof(System_Info.VERSION);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.VERSION,(unsigned char*)&System_Info_2.VERSION,sizeof(System_Info.VERSION));
+                            
+                            break;
+                            
+                case 92 :
+                            *p++ = System_Info.VERSION_NUM >> 8;
+                            *p++ = System_Info.VERSION_NUM;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.VERSION_NUM);
+                            lower_addr += sizeof(System_Info.VERSION_NUM);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.VERSION_NUM,(unsigned char*)&System_Info_2.VERSION_NUM,sizeof(System_Info.VERSION_NUM));
+                            
+                            break;
+                            
+                case 94 :
+                            *p++ = System_Info.PRODUCT_ID;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.PRODUCT_ID);
+                            lower_addr += sizeof(System_Info.PRODUCT_ID);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.PRODUCT_ID,(unsigned char*)&System_Info_2.PRODUCT_ID,sizeof(System_Info.PRODUCT_ID));
+                            
+                            break;
+                            
+                case 95 :
+                            *p++ = System_Info.COMPANY_ID;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.COMPANY_ID);
+                            lower_addr += sizeof(System_Info.COMPANY_ID);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.COMPANY_ID,(unsigned char*)&System_Info_2.COMPANY_ID,sizeof(System_Info.COMPANY_ID));
+                            
+                            break;
+                            
+                case 96 :
+                            *p++ = System_Info.DB_SEND_DUTY >> 8;
+                            *p++ = System_Info.DB_SEND_DUTY;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.DB_SEND_DUTY);
+                            lower_addr += sizeof(System_Info.DB_SEND_DUTY);
+                            
+                            Copy_Buf((unsigned char*)&System_Info.DB_SEND_DUTY,(unsigned char*)&System_Info_2.DB_SEND_DUTY,sizeof(System_Info.DB_SEND_DUTY));
+                            
+                            break;
+                            
+                default :
+                            lower_addr = 98;
+                            
+                            break;
+            }
+        }
+        
+        cal_crc = crc16(&Uart_Info[UART_GLINK].Tx_Buf[0],Uart_Info[UART_GLINK].Tx_Length);
+        
+        *p++ = cal_crc >> 8;
+        *p++ = cal_crc;
+        
+        Uart_Info[UART_GLINK].Tx_Length += 2;
+        
+//        USART1_TX;
+//        HAL_UART_Transmit_IT(&huart1,Uart_Info[UART_GLINK].Tx_Buf,Uart_Info[UART_GLINK].Tx_Length);
+    }
+    else if( upper_addr >= MEM_ADDR_COMP1 && upper_addr <= MEM_ADDR_COMP12 )
+    {
+        pWord = (unsigned short*)&Comp_Info[upper_addr - 0x11];
+        pWord2 = (unsigned short*)&Comp_Info_2[upper_addr - 0x11];
+        
+        word_cnt = sizeof(Comp_Info[0]);
+        
+        Uart_Info[UART_GLINK].Tx_Buf[0] = 0x65;
+        Uart_Info[UART_GLINK].Tx_Buf[1] = 0x13;
+        Uart_Info[UART_GLINK].Tx_Buf[2] = pData[2];
+        Uart_Info[UART_GLINK].Tx_Buf[3] = pData[3];
+        Uart_Info[UART_GLINK].Tx_Buf[4] = word_cnt >> 8;
+        Uart_Info[UART_GLINK].Tx_Buf[5] = word_cnt & 0xFF;
+        
+        p = &Uart_Info[UART_GLINK].Tx_Buf[6];
+        
+        for(i=0;i<word_cnt;i+=2)
+        {
+            *p++ = (*pWord >> 8) & 0xFF;
+            *p++ = *pWord & 0xFF;
+            
+            *pWord2 = *pWord;
+            
+            pWord++;
+            pWord2++;
+        }
+        
+        cal_crc = crc16(&Uart_Info[UART_GLINK].Tx_Buf[0],6 + word_cnt);
+        
+        *p++ = cal_crc >> 8;
+        *p++ = cal_crc;
+        
+        Uart_Info[UART_GLINK].Tx_Length = 6 + word_cnt + 2;
+        
+//        USART1_TX;
+//        HAL_UART_Transmit_IT(&huart1,Uart_Info[UART_GLINK].Tx_Buf,Uart_Info[UART_GLINK].Tx_Length);
+    }
+    else if( upper_addr >= MEM_ADDR_POWER1 && upper_addr <= MEM_ADDR_POWER12 )
+    {
+        pByte = (unsigned char*)&POWER_Info[upper_addr - 0x31];
+        pByte2 = (unsigned char*)&POWER_Info_2[upper_addr - 0x31];
+        
+        word_cnt = sizeof(POWER_Info[0]);
+        
+        Uart_Info[UART_GLINK].Tx_Buf[0] = 0x65;
+        Uart_Info[UART_GLINK].Tx_Buf[1] = 0x13;
+        Uart_Info[UART_GLINK].Tx_Buf[2] = pData[2];
+        Uart_Info[UART_GLINK].Tx_Buf[3] = pData[3];
+        Uart_Info[UART_GLINK].Tx_Buf[4] = word_cnt >> 8;
+        Uart_Info[UART_GLINK].Tx_Buf[5] = word_cnt & 0xFF;
+        
+        p = &Uart_Info[UART_GLINK].Tx_Buf[6];
+        
+        for(i=0; i<word_cnt; i++)
+        {
+            *p++ = *pByte;
+            
+            *pByte2 = *pByte;
+            
+            pByte++;
+            pByte2++;
+        }
+        
+        cal_crc = crc16(&Uart_Info[UART_GLINK].Tx_Buf[0],6 + word_cnt);
+        
+        *p++ = cal_crc >> 8;
+        *p++ = cal_crc;
+        
+        Uart_Info[UART_GLINK].Tx_Length = 6 + word_cnt + 2;
+        
+//        USART1_TX;
+//        HAL_UART_Transmit_IT(&huart1,Uart_Info[UART_GLINK].Tx_Buf,Uart_Info[UART_GLINK].Tx_Length);
+    }
+
+	
+    else if( upper_addr >= MEM_ADDR_IO_0xE0 && upper_addr <= MEM_ADDR_IO_0xEF )
+    {
+        pWord = (unsigned short*)&IO_Info[upper_addr - 0xE0];
+        pWord2 = (unsigned short*)&IO_Info_2[upper_addr - 0xE0];
+        
+        word_cnt = sizeof(IO_Info[0]);
+        
+        Uart_Info[UART_GLINK].Tx_Buf[0] = 0x65;
+        Uart_Info[UART_GLINK].Tx_Buf[1] = 0x13;
+        Uart_Info[UART_GLINK].Tx_Buf[2] = pData[2];
+        Uart_Info[UART_GLINK].Tx_Buf[3] = pData[3];
+        Uart_Info[UART_GLINK].Tx_Buf[4] = word_cnt >> 8;
+        Uart_Info[UART_GLINK].Tx_Buf[5] = word_cnt & 0xFF;
+        
+        p = &Uart_Info[UART_GLINK].Tx_Buf[6];
+        
+        for(i=0;i<word_cnt;i+=2)
+        {
+            *p++ = (*pWord >> 8) & 0xFF;
+            *p++ = *pWord & 0xFF;
+            
+            *pWord2 = *pWord;
+            
+            pWord++;
+            pWord2++;
+        }
+        
+        cal_crc = crc16(&Uart_Info[UART_GLINK].Tx_Buf[0],6 + word_cnt);
+        
+        *p++ = cal_crc >> 8;
+        *p++ = cal_crc;
+        
+        Uart_Info[UART_GLINK].Tx_Length = 6 + word_cnt + 2;
+        
+//        USART1_TX;
+//        HAL_UART_Transmit_IT(&huart1,Uart_Info[UART_GLINK].Tx_Buf,Uart_Info[UART_GLINK].Tx_Length);
+    }
+    else if( upper_addr >= MEM_ADDR_20mA_0xF0 && upper_addr <= MEM_ADDR_20mA_0xFF )
+    {
+        pWord = (unsigned short*)&AI_Info[upper_addr - 0xF0];
+        pWord2 = (unsigned short*)&AI_Info_2[upper_addr - 0xF0];
+        
+        word_cnt = sizeof(AI_Info[0]);
+        
+        Uart_Info[UART_GLINK].Tx_Buf[0] = 0x65;
+        Uart_Info[UART_GLINK].Tx_Buf[1] = 0x13;
+        Uart_Info[UART_GLINK].Tx_Buf[2] = pData[2];
+        Uart_Info[UART_GLINK].Tx_Buf[3] = pData[3];
+        Uart_Info[UART_GLINK].Tx_Buf[4] = word_cnt >> 8;
+        Uart_Info[UART_GLINK].Tx_Buf[5] = word_cnt & 0xFF;
+        
+        p = &Uart_Info[UART_GLINK].Tx_Buf[6];
+        
+        for(i=0;i<word_cnt;i+=2)
+        {
+            *p++ = (*pWord >> 8) & 0xFF;
+            *p++ = *pWord & 0xFF;
+            
+            *pWord2 = *pWord;
+            
+            pWord++;
+            pWord2++;
+        }
+        
+        cal_crc = crc16(&Uart_Info[UART_GLINK].Tx_Buf[0],6 + word_cnt);
+        
+        *p++ = cal_crc >> 8;
+        *p++ = cal_crc;
+        
+        Uart_Info[UART_GLINK].Tx_Length = 6 + word_cnt + 2;
+        
+//        USART1_TX;
+//        HAL_UART_Transmit_IT(&huart1,Uart_Info[UART_GLINK].Tx_Buf,Uart_Info[UART_GLINK].Tx_Length);
+    }
+}
+
+void Uart1_Rcv_0x15_Data(unsigned char *pData)
+{
+    unsigned short word_buf, *pWord, *pWord2, word_cnt, byte_cnt, i, cnt, addr, cal_crc;
+    unsigned char upper_addr, lower_addr, *p, state;
+    
+    addr = pData[2];
+    addr <<= 8;
+    addr |= pData[3];
+    
+    upper_addr = pData[2];
+    lower_addr = pData[3];
+    
+    if( upper_addr == MEM_ADDR_TOTAL )
+    {
+        pWord = (unsigned short*)&Total_Info;
+        pWord2 = (unsigned short*)&Total_Info_2;
+        
+        word_cnt = sizeof(Total_Info);        // 구조체길이
+        
+        Uart_Info[UART_GLINK].Tx_Buf[0] = 0x65;
+        Uart_Info[UART_GLINK].Tx_Buf[1] = 0x15;
+        
+        p = &Uart_Info[UART_GLINK].Tx_Buf[4];
+        Uart_Info[UART_GLINK].Tx_Length = 0;
+        
+        addr = 0;
+        lower_addr = 0;     // 항상 0번지부터 스캔.
+        
+        for(i=0;i<word_cnt;i+=2)
+        {
+            if( lower_addr >= word_cnt )  break;      // 요청주소가 구조체길이보다 길면
+            
+            if( *pWord != *pWord2 )
+            {
+                *p++ = addr >> 8;
+                *p++ = addr;
+                *p++ = (*pWord >> 8) & 0xFF;
+                *p++ = *pWord & 0xFF;
+                
+                Uart_Info[UART_GLINK].Tx_Length += 4;
+            }
+            
+            *pWord2 = *pWord;
+            
+            pWord++;
+            pWord2++;
+            
+            addr += 2;
+            lower_addr += 2;
+        }
+        
+        if( Uart_Info[UART_GLINK].Tx_Length == 0 )       // 변화된 데이터가 없으면 첫번째 주소값으로 응답
+        {
+            pWord = (unsigned short*)&Total_Info;
+            
+            *p++ = upper_addr;
+            *p++ = 0;
+            *p++ = (*pWord >> 8) & 0xFF;
+            *p++ = *pWord & 0xFF;
+            
+            Uart_Info[UART_GLINK].Tx_Length += 4;
+        }
+        
+        Uart_Info[UART_GLINK].Tx_Buf[2] = Uart_Info[UART_GLINK].Tx_Length >> 8;
+        Uart_Info[UART_GLINK].Tx_Buf[3] = Uart_Info[UART_GLINK].Tx_Length;
+        
+        Uart_Info[UART_GLINK].Tx_Length += 4;            // 헤더 4바이트
+        
+        cal_crc = crc16(&Uart_Info[UART_GLINK].Tx_Buf[0],Uart_Info[UART_GLINK].Tx_Length);
+        
+        *p++ = cal_crc >> 8;
+        *p++ = cal_crc;
+        
+        Uart_Info[UART_GLINK].Tx_Length += 2;
+        
+//        USART1_TX;
+//        HAL_UART_Transmit_IT(&huart1,Uart_Info[UART_GLINK].Tx_Buf,Uart_Info[UART_GLINK].Tx_Length);
+    }
+    else if( upper_addr == MEM_ADDR_SYSTEM )
+    {
+        //pWord = (unsigned short*)&System_Info;
+        //pWord2 = (unsigned short*)&System_Info_2;
+        
+        word_cnt = sizeof(System_Info);        // 구조체길이
+        
+        Uart_Info[UART_GLINK].Tx_Buf[0] = 0x65;
+        Uart_Info[UART_GLINK].Tx_Buf[1] = 0x15;
+        
+        p = &Uart_Info[UART_GLINK].Tx_Buf[4];
+        Uart_Info[UART_GLINK].Tx_Length = 0;
+        
+        addr = 0x0100;
+        lower_addr = 0;     // 항상 0번지부터 스캔.
+        
+        while( lower_addr < 98 )
+        {
+            switch( lower_addr )
+            {
+                case 0 :
+                            state = Check_Data((unsigned char*)&System_Info.ETH_MAC_ADDRESS[0],(unsigned char*)&System_Info_2.ETH_MAC_ADDRESS[0],sizeof(System_Info.ETH_MAC_ADDRESS));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.ETH_MAC_ADDRESS);
+                                lower_addr += sizeof(System_Info.ETH_MAC_ADDRESS);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            for(i=0;i<6;i++)
+                                *p++ = System_Info.ETH_MAC_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_MAC_ADDRESS);
+                            addr += sizeof(System_Info.ETH_MAC_ADDRESS);
+                            lower_addr += sizeof(System_Info.ETH_MAC_ADDRESS);
+                            
+                            break;
+                            
+                case 6 :
+                            state = Check_Data((unsigned char*)&System_Info.ETH_SERVER_ADDRESS[0],(unsigned char*)&System_Info_2.ETH_SERVER_ADDRESS[0],sizeof(System_Info.ETH_SERVER_ADDRESS));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.ETH_SERVER_ADDRESS);
+                                lower_addr += sizeof(System_Info.ETH_SERVER_ADDRESS);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.ETH_SERVER_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_SERVER_ADDRESS);
+                            addr += sizeof(System_Info.ETH_SERVER_ADDRESS);
+                            lower_addr += sizeof(System_Info.ETH_SERVER_ADDRESS);
+                            
+                            break;
+                            
+                case 10 :
+                            state = Check_Data((unsigned char*)&System_Info.ETH_SERVER_PORT,(unsigned char*)&System_Info_2.ETH_SERVER_PORT,sizeof(System_Info.ETH_SERVER_PORT));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.ETH_SERVER_PORT);
+                                lower_addr += sizeof(System_Info.ETH_SERVER_PORT);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.ETH_SERVER_PORT >> 8;
+                            *p++ = System_Info.ETH_SERVER_PORT;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_SERVER_PORT);
+                            addr += sizeof(System_Info.ETH_SERVER_PORT);
+                            lower_addr += sizeof(System_Info.ETH_SERVER_PORT);
+                            
+                            break;
+                            
+                case 12 :
+                            state = Check_Data((unsigned char*)&System_Info.WIFI_MAC_ADDRESS[0],(unsigned char*)&System_Info_2.WIFI_MAC_ADDRESS[0],sizeof(System_Info.WIFI_MAC_ADDRESS));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.WIFI_MAC_ADDRESS);
+                                lower_addr += sizeof(System_Info.WIFI_MAC_ADDRESS);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            for(i=0;i<6;i++)
+                                *p++ = System_Info.WIFI_MAC_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_MAC_ADDRESS);
+                            addr += sizeof(System_Info.WIFI_MAC_ADDRESS);
+                            lower_addr += sizeof(System_Info.WIFI_MAC_ADDRESS);
+                            
+                            break;
+                            
+                case 18 :
+                            state = Check_Data((unsigned char*)&System_Info.WIFI_AP[0],(unsigned char*)&System_Info_2.WIFI_AP[0],sizeof(System_Info.WIFI_AP));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.WIFI_AP);
+                                lower_addr += sizeof(System_Info.WIFI_AP);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            for(i=0;i<16;i++)
+                                *p++ = System_Info.WIFI_AP[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_AP);
+                            addr += sizeof(System_Info.WIFI_AP);
+                            lower_addr += sizeof(System_Info.WIFI_AP);
+                            
+                            break;
+                            
+                case 34 :
+                            state = Check_Data((unsigned char*)&System_Info.WIFI_PASSWORD[0],(unsigned char*)&System_Info_2.WIFI_PASSWORD[0],sizeof(System_Info.WIFI_PASSWORD));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.WIFI_PASSWORD);
+                                lower_addr += sizeof(System_Info.WIFI_PASSWORD);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            for(i=0;i<16;i++)
+                                *p++ = System_Info.WIFI_PASSWORD[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_PASSWORD);
+                            addr += sizeof(System_Info.WIFI_PASSWORD);
+                            lower_addr += sizeof(System_Info.WIFI_PASSWORD);
+                            
+                            break;
+                            
+                case 50 :
+                            state = Check_Data((unsigned char*)&System_Info.WIFI_SERVER_ADDRESS[0],(unsigned char*)&System_Info_2.WIFI_SERVER_ADDRESS[0],sizeof(System_Info.WIFI_SERVER_ADDRESS));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.WIFI_SERVER_ADDRESS);
+                                lower_addr += sizeof(System_Info.WIFI_SERVER_ADDRESS);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.WIFI_SERVER_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_SERVER_ADDRESS);
+                            addr += sizeof(System_Info.WIFI_SERVER_ADDRESS);
+                            lower_addr += sizeof(System_Info.WIFI_SERVER_ADDRESS);
+                            
+                            break;
+                            
+                case 54 :
+                            state = Check_Data((unsigned char*)&System_Info.WIFI_SERVER_PORT,(unsigned char*)&System_Info_2.WIFI_SERVER_PORT,sizeof(System_Info.WIFI_SERVER_PORT));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.WIFI_SERVER_PORT);
+                                lower_addr += sizeof(System_Info.WIFI_SERVER_PORT);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.WIFI_SERVER_PORT >> 8;
+                            *p++ = System_Info.WIFI_SERVER_PORT;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_SERVER_PORT);
+                            addr += sizeof(System_Info.WIFI_SERVER_PORT);
+                            lower_addr += sizeof(System_Info.WIFI_SERVER_PORT);
+                            
+                            break;
+                            
+                case 56 :
+                            state = Check_Data((unsigned char*)&System_Info.ETH_WIFI_SELECT,(unsigned char*)&System_Info_2.ETH_WIFI_SELECT,sizeof(System_Info.ETH_WIFI_SELECT));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.ETH_WIFI_SELECT);
+                                lower_addr += sizeof(System_Info.ETH_WIFI_SELECT);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.ETH_WIFI_SELECT;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_WIFI_SELECT);
+                            addr += sizeof(System_Info.ETH_WIFI_SELECT);
+                            lower_addr += sizeof(System_Info.ETH_WIFI_SELECT);
+                            
+                            break;
+                            
+                case 57 :
+                            state = Check_Data((unsigned char*)&System_Info.DHCP_ON_OFF,(unsigned char*)&System_Info_2.DHCP_ON_OFF,sizeof(System_Info.DHCP_ON_OFF));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.DHCP_ON_OFF);
+                                lower_addr += sizeof(System_Info.DHCP_ON_OFF);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.DHCP_ON_OFF;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.DHCP_ON_OFF);
+                            addr += sizeof(System_Info.DHCP_ON_OFF);
+                            lower_addr += sizeof(System_Info.DHCP_ON_OFF);
+                            
+                            break;
+                            
+                case 58 :
+                            state = Check_Data((unsigned char*)&System_Info.ETH_LOCAL_ADDRESS[0],(unsigned char*)&System_Info_2.ETH_LOCAL_ADDRESS[0],sizeof(System_Info.ETH_LOCAL_ADDRESS));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.ETH_LOCAL_ADDRESS);
+                                lower_addr += sizeof(System_Info.ETH_LOCAL_ADDRESS);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.ETH_LOCAL_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_LOCAL_ADDRESS);
+                            addr += sizeof(System_Info.ETH_LOCAL_ADDRESS);
+                            lower_addr += sizeof(System_Info.ETH_LOCAL_ADDRESS);
+                            
+                            break;
+                            
+                case 62 :
+                            state = Check_Data((unsigned char*)&System_Info.ETH_LOCAL_SUBNETMASK[0],(unsigned char*)&System_Info_2.ETH_LOCAL_SUBNETMASK[0],sizeof(System_Info.ETH_LOCAL_SUBNETMASK));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.ETH_LOCAL_SUBNETMASK);
+                                lower_addr += sizeof(System_Info.ETH_LOCAL_SUBNETMASK);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.ETH_LOCAL_SUBNETMASK[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_LOCAL_SUBNETMASK);
+                            addr += sizeof(System_Info.ETH_LOCAL_SUBNETMASK);
+                            lower_addr += sizeof(System_Info.ETH_LOCAL_SUBNETMASK);
+                            
+                            break;
+                            
+                case 66 :
+                            state = Check_Data((unsigned char*)&System_Info.ETH_LOCAL_GATEWAY[0],(unsigned char*)&System_Info_2.ETH_LOCAL_GATEWAY[0],sizeof(System_Info.ETH_LOCAL_GATEWAY));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.ETH_LOCAL_GATEWAY);
+                                lower_addr += sizeof(System_Info.ETH_LOCAL_GATEWAY);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.ETH_LOCAL_GATEWAY[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_LOCAL_GATEWAY);
+                            addr += sizeof(System_Info.ETH_LOCAL_GATEWAY);
+                            lower_addr += sizeof(System_Info.ETH_LOCAL_GATEWAY);
+                            
+                            break;
+                            
+                case 70 :
+                            state = Check_Data((unsigned char*)&System_Info.ETH_AUTO_IP_ADDRESS[0],(unsigned char*)&System_Info_2.ETH_AUTO_IP_ADDRESS[0],sizeof(System_Info.ETH_AUTO_IP_ADDRESS));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.ETH_AUTO_IP_ADDRESS);
+                                lower_addr += sizeof(System_Info.ETH_AUTO_IP_ADDRESS);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.ETH_AUTO_IP_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.ETH_AUTO_IP_ADDRESS);
+                            addr += sizeof(System_Info.ETH_AUTO_IP_ADDRESS);
+                            lower_addr += sizeof(System_Info.ETH_AUTO_IP_ADDRESS);
+                            
+                            break;
+                            
+                case 74 :
+                            state = Check_Data((unsigned char*)&System_Info.WIFI_AUTO_IP_ADDRESS[0],(unsigned char*)&System_Info_2.WIFI_AUTO_IP_ADDRESS[0],sizeof(System_Info.WIFI_AUTO_IP_ADDRESS));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.WIFI_AUTO_IP_ADDRESS);
+                                lower_addr += sizeof(System_Info.WIFI_AUTO_IP_ADDRESS);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            for(i=0;i<4;i++)
+                                *p++ = System_Info.WIFI_AUTO_IP_ADDRESS[i];
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.WIFI_AUTO_IP_ADDRESS);
+                            addr += sizeof(System_Info.WIFI_AUTO_IP_ADDRESS);
+                            lower_addr += sizeof(System_Info.WIFI_AUTO_IP_ADDRESS);
+                            
+                            break;
+                            
+                case 78 :
+                            state = Check_Data((unsigned char*)&System_Info.DATA_SEND_DUTY,(unsigned char*)&System_Info_2.DATA_SEND_DUTY,sizeof(System_Info.DATA_SEND_DUTY));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.DATA_SEND_DUTY);
+                                lower_addr += sizeof(System_Info.DATA_SEND_DUTY);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.DATA_SEND_DUTY >> 8;
+                            *p++ = System_Info.DATA_SEND_DUTY;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.DATA_SEND_DUTY);
+                            addr += sizeof(System_Info.DATA_SEND_DUTY);
+                            lower_addr += sizeof(System_Info.DATA_SEND_DUTY);
+                            
+                            break;
+                            
+                case 80 :
+                            state = Check_Data((unsigned char*)&System_Info.GROUP_ID,(unsigned char*)&System_Info_2.GROUP_ID,sizeof(System_Info.GROUP_ID));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.GROUP_ID);
+                                lower_addr += sizeof(System_Info.GROUP_ID);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.GROUP_ID >> 8;
+                            *p++ = System_Info.GROUP_ID;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.GROUP_ID);
+                            addr += sizeof(System_Info.GROUP_ID);
+                            lower_addr += sizeof(System_Info.GROUP_ID);
+                            
+                            break;
+                            
+                case 82 :
+                            state = Check_Data((unsigned char*)&System_Info.SYSTEM_USER_ID_H,(unsigned char*)&System_Info_2.SYSTEM_USER_ID_H,sizeof(System_Info.SYSTEM_USER_ID_H));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.SYSTEM_USER_ID_H);
+                                lower_addr += sizeof(System_Info.SYSTEM_USER_ID_H);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.SYSTEM_USER_ID_H >> 8;
+                            *p++ = System_Info.SYSTEM_USER_ID_H;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.SYSTEM_USER_ID_H);
+                            addr += sizeof(System_Info.SYSTEM_USER_ID_H);
+                            lower_addr += sizeof(System_Info.SYSTEM_USER_ID_H);
+                            
+                            break;
+                            
+                case 84 :
+                            state = Check_Data((unsigned char*)&System_Info.SYSTEM_USER_ID,(unsigned char*)&System_Info_2.SYSTEM_USER_ID,sizeof(System_Info.SYSTEM_USER_ID));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.SYSTEM_USER_ID);
+                                lower_addr += sizeof(System_Info.SYSTEM_USER_ID);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.SYSTEM_USER_ID >> 8;
+                            *p++ = System_Info.SYSTEM_USER_ID;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.SYSTEM_USER_ID);
+                            addr += sizeof(System_Info.SYSTEM_USER_ID);
+                            lower_addr += sizeof(System_Info.SYSTEM_USER_ID);
+                            
+                            break;
+                            
+                case 86 :
+                            state = Check_Data((unsigned char*)&System_Info.COMP_COUNT_QTY,(unsigned char*)&System_Info_2.COMP_COUNT_QTY,sizeof(System_Info.COMP_COUNT_QTY));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.COMP_COUNT_QTY);
+                                lower_addr += sizeof(System_Info.COMP_COUNT_QTY);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.COMP_COUNT_QTY >> 8;
+                            *p++ = System_Info.COMP_COUNT_QTY;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.COMP_COUNT_QTY);
+                            addr += sizeof(System_Info.COMP_COUNT_QTY);
+                            lower_addr += sizeof(System_Info.COMP_COUNT_QTY);
+                            
+                            break;
+                            
+                case 88 :
+                            state = Check_Data((unsigned char*)&System_Info.MODEL,(unsigned char*)&System_Info_2.MODEL,sizeof(System_Info.MODEL));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.MODEL);
+                                lower_addr += sizeof(System_Info.MODEL);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.MODEL >> 8;
+                            *p++ = System_Info.MODEL;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.MODEL);
+                            addr += sizeof(System_Info.MODEL);
+                            lower_addr += sizeof(System_Info.MODEL);
+                            
+                            break;
+                            
+                case 90 :
+                            state = Check_Data((unsigned char*)&System_Info.VERSION,(unsigned char*)&System_Info_2.VERSION,sizeof(System_Info.VERSION));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.VERSION);
+                                lower_addr += sizeof(System_Info.VERSION);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.VERSION >> 8;
+                            *p++ = System_Info.VERSION;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.VERSION);
+                            addr += sizeof(System_Info.VERSION);
+                            lower_addr += sizeof(System_Info.VERSION);
+                            
+                            break;
+                            
+                case 92 :
+                            state = Check_Data((unsigned char*)&System_Info.VERSION_NUM,(unsigned char*)&System_Info_2.VERSION_NUM,sizeof(System_Info.VERSION_NUM));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.VERSION_NUM);
+                                lower_addr += sizeof(System_Info.VERSION_NUM);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.VERSION_NUM >> 8;
+                            *p++ = System_Info.VERSION_NUM;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.VERSION_NUM);
+                            addr += sizeof(System_Info.VERSION_NUM);
+                            lower_addr += sizeof(System_Info.VERSION_NUM);
+                            
+                            break;
+                            
+                case 94 :
+                            state = Check_Data((unsigned char*)&System_Info.PRODUCT_ID,(unsigned char*)&System_Info_2.PRODUCT_ID,sizeof(System_Info.PRODUCT_ID));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.PRODUCT_ID);
+                                lower_addr += sizeof(System_Info.PRODUCT_ID);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.PRODUCT_ID;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.PRODUCT_ID);
+                            addr += sizeof(System_Info.PRODUCT_ID);
+                            lower_addr += sizeof(System_Info.PRODUCT_ID);
+                            
+                            break;
+                            
+                case 95 :
+                            state = Check_Data((unsigned char*)&System_Info.COMPANY_ID,(unsigned char*)&System_Info_2.COMPANY_ID,sizeof(System_Info.COMPANY_ID));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.COMPANY_ID);
+                                lower_addr += sizeof(System_Info.COMPANY_ID);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.COMPANY_ID;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.COMPANY_ID);
+                            addr += sizeof(System_Info.COMPANY_ID);
+                            lower_addr += sizeof(System_Info.COMPANY_ID);
+                            
+                            break;
+                            
+                case 96 :
+                            state = Check_Data((unsigned char*)&System_Info.DB_SEND_DUTY,(unsigned char*)&System_Info_2.DB_SEND_DUTY,sizeof(System_Info.DB_SEND_DUTY));
+                            if( state == 0 )
+                            {
+                                addr += sizeof(System_Info.DB_SEND_DUTY);
+                                lower_addr += sizeof(System_Info.DB_SEND_DUTY);
+                                break;
+                            }
+                            
+                            *p++ = (addr >> 8) & 0xFF;
+                            *p++ = addr & 0xFF;
+                            Uart_Info[UART_GLINK].Tx_Length += 2;
+                            
+                            *p++ = System_Info.DB_SEND_DUTY >> 8;
+                            *p++ = System_Info.DB_SEND_DUTY;
+                            
+                            Uart_Info[UART_GLINK].Tx_Length += sizeof(System_Info.DB_SEND_DUTY);
+                            addr += sizeof(System_Info.DB_SEND_DUTY);
+                            lower_addr += sizeof(System_Info.DB_SEND_DUTY);
+                            
+                            break;
+                            
+                default :
+                            lower_addr = 98;
+                            
+                            break;
+            }
+        }
+        
+        if( Uart_Info[UART_GLINK].Tx_Length == 0 )       // 변화된 데이터가 없으면 첫번째 주소값으로 응답
+        {
+            pWord = (unsigned short*)&System_Info;
+            
+            *p++ = upper_addr;
+            *p++ = 0;
+            *p++ = System_Info.ETH_MAC_ADDRESS[0];
+            *p++ = System_Info.ETH_MAC_ADDRESS[1];
+            *p++ = System_Info.ETH_MAC_ADDRESS[2];
+            *p++ = System_Info.ETH_MAC_ADDRESS[3];
+            *p++ = System_Info.ETH_MAC_ADDRESS[4];
+            *p++ = System_Info.ETH_MAC_ADDRESS[5];
+            
+            Uart_Info[UART_GLINK].Tx_Length += 8;
+        }
+        
+        Uart_Info[UART_GLINK].Tx_Buf[2] = Uart_Info[UART_GLINK].Tx_Length >> 8;
+        Uart_Info[UART_GLINK].Tx_Buf[3] = Uart_Info[UART_GLINK].Tx_Length;
+        
+        Uart_Info[UART_GLINK].Tx_Length += 4;            // 헤더 2바이트
+        
+        cal_crc = crc16(&Uart_Info[UART_GLINK].Tx_Buf[0],Uart_Info[UART_GLINK].Tx_Length);
+        
+        *p++ = cal_crc >> 8;
+        *p++ = cal_crc;
+        
+        Uart_Info[UART_GLINK].Tx_Length += 2;
+        
+//        USART1_TX;
+//        HAL_UART_Transmit_IT(&huart1,Uart_Info[UART_GLINK].Tx_Buf,Uart_Info[UART_GLINK].Tx_Length);
+    }
+    else if( upper_addr >= MEM_ADDR_COMP1 && upper_addr <= MEM_ADDR_COMP12 )
+    {
+        pWord = (unsigned short*)&Comp_Info[upper_addr - MEM_ADDR_COMP1];
+        pWord2 = (unsigned short*)&Comp_Info_2[upper_addr - MEM_ADDR_COMP1];
+        
+        word_cnt = sizeof(Comp_Info[0]);        // 구조체길이
+        
+        Uart_Info[UART_GLINK].Tx_Buf[0] = 0x65;
+        Uart_Info[UART_GLINK].Tx_Buf[1] = 0x15;
+        
+        p = &Uart_Info[UART_GLINK].Tx_Buf[4];
+        Uart_Info[UART_GLINK].Tx_Length = 0;
+        
+        for(i=0;i<word_cnt;i+=2)
+        {
+            if( lower_addr >= word_cnt )  break;      // 요청주소가 구조체길이보다 길면
+            
+            if( *pWord != *pWord2 )
+            {
+                *p++ = addr >> 8;
+                *p++ = addr;
+                *p++ = (*pWord >> 8) & 0xFF;
+                *p++ = *pWord & 0xFF;
+                
+                Uart_Info[UART_GLINK].Tx_Length += 4;
+            }
+            
+            *pWord2 = *pWord;
+            
+            pWord++;
+            pWord2++;
+            
+            addr += 2;
+            lower_addr += 2;
+        }
+        
+        if( Uart_Info[UART_GLINK].Tx_Length == 0 )       // 변화된 데이터가 없으면 첫번째 주소값으로 응답
+        {
+            pWord = (unsigned short*)&Comp_Info[upper_addr - MEM_ADDR_COMP1];
+            
+            *p++ = upper_addr;
+            *p++ = 0;
+            *p++ = (*pWord >> 8) & 0xFF;
+            *p++ = *pWord & 0xFF;
+            
+            Uart_Info[UART_GLINK].Tx_Length += 4;
+        }
+        
+        Uart_Info[UART_GLINK].Tx_Buf[2] = Uart_Info[UART_GLINK].Tx_Length >> 8;
+        Uart_Info[UART_GLINK].Tx_Buf[3] = Uart_Info[UART_GLINK].Tx_Length;
+        
+        Uart_Info[UART_GLINK].Tx_Length += 4;            // 헤더 2바이트
+        
+        cal_crc = crc16(&Uart_Info[UART_GLINK].Tx_Buf[0],Uart_Info[UART_GLINK].Tx_Length);
+        
+        *p++ = cal_crc >> 8;
+        *p++ = cal_crc;
+        
+        Uart_Info[UART_GLINK].Tx_Length += 2;
+        
+//        USART1_TX;
+//        HAL_UART_Transmit_IT(&huart1,Uart_Info[UART_GLINK].Tx_Buf,Uart_Info[UART_GLINK].Tx_Length);
+    }
+    else if( upper_addr >= MEM_ADDR_IO_0xE0 && upper_addr <= MEM_ADDR_IO_0xEF )
+    {
+        pWord = (unsigned short*)&IO_Info[upper_addr - MEM_ADDR_IO_0xE0];
+        pWord2 = (unsigned short*)&IO_Info_2[upper_addr - MEM_ADDR_IO_0xE0];
+        
+        word_cnt = sizeof(IO_Info[0]);        // 구조체길이
+        
+        Uart_Info[UART_GLINK].Tx_Buf[0] = 0x65;
+        Uart_Info[UART_GLINK].Tx_Buf[1] = 0x15;
+        
+        p = &Uart_Info[UART_GLINK].Tx_Buf[4];
+        Uart_Info[UART_GLINK].Tx_Length = 0;
+        
+        for(i=0;i<word_cnt;i+=2)
+        {
+            if( lower_addr >= word_cnt )  break;      // 요청주소가 구조체길이보다 길면
+            
+            if( *pWord != *pWord2 )
+            {
+                *p++ = addr >> 8;
+                *p++ = addr;
+                *p++ = (*pWord >> 8) & 0xFF;
+                *p++ = *pWord & 0xFF;
+                
+                Uart_Info[UART_GLINK].Tx_Length += 4;
+            }
+            
+            *pWord2 = *pWord;
+            
+            pWord++;
+            pWord2++;
+            
+            addr += 2;
+            lower_addr += 2;
+        }
+        
+        if( Uart_Info[UART_GLINK].Tx_Length == 0 )       // 변화된 데이터가 없으면 첫번째 주소값으로 응답
+        {
+            pWord = (unsigned short*)&IO_Info[upper_addr - MEM_ADDR_IO_0xE0];
+            
+            *p++ = upper_addr;
+            *p++ = 0;
+            *p++ = (*pWord >> 8) & 0xFF;
+            *p++ = *pWord & 0xFF;
+            
+            Uart_Info[UART_GLINK].Tx_Length += 4;
+        }
+        
+        Uart_Info[UART_GLINK].Tx_Buf[2] = Uart_Info[UART_GLINK].Tx_Length >> 8;
+        Uart_Info[UART_GLINK].Tx_Buf[3] = Uart_Info[UART_GLINK].Tx_Length;
+        
+        Uart_Info[UART_GLINK].Tx_Length += 4;            // 헤더 2바이트
+        
+        cal_crc = crc16(&Uart_Info[UART_GLINK].Tx_Buf[0],Uart_Info[UART_GLINK].Tx_Length);
+        
+        *p++ = cal_crc >> 8;
+        *p++ = cal_crc;
+        
+        Uart_Info[UART_GLINK].Tx_Length += 2;
+        
+//        USART1_TX;
+//        HAL_UART_Transmit_IT(&huart1,Uart_Info[UART_GLINK].Tx_Buf,Uart_Info[UART_GLINK].Tx_Length);
+    }
+    else if( upper_addr >= MEM_ADDR_20mA_0xF0 && upper_addr <= MEM_ADDR_20mA_0xFF )
+    {
+        pWord = (unsigned short*)&AI_Info[upper_addr - MEM_ADDR_20mA_0xF0];
+        pWord2 = (unsigned short*)&AI_Info_2[upper_addr - MEM_ADDR_20mA_0xF0];
+        
+        word_cnt = sizeof(AI_Info[0]);        // 구조체길이
+        
+        Uart_Info[UART_GLINK].Tx_Buf[0] = 0x65;
+        Uart_Info[UART_GLINK].Tx_Buf[1] = 0x15;
+        
+        p = &Uart_Info[UART_GLINK].Tx_Buf[4];
+        Uart_Info[UART_GLINK].Tx_Length = 0;
+        
+        for(i=0;i<word_cnt;i+=2)
+        {
+            if( lower_addr >= word_cnt )  break;      // 요청주소가 구조체길이보다 길면
+            
+            if( *pWord != *pWord2 )
+            {
+                *p++ = addr >> 8;
+                *p++ = addr;
+                *p++ = (*pWord >> 8) & 0xFF;
+                *p++ = *pWord & 0xFF;
+                
+                Uart_Info[UART_GLINK].Tx_Length += 4;
+            }
+            
+            *pWord2 = *pWord;
+            
+            pWord++;
+            pWord2++;
+            
+            addr += 2;
+            lower_addr += 2;
+        }
+        
+        if( Uart_Info[UART_GLINK].Tx_Length == 0 )       // 변화된 데이터가 없으면 첫번째 주소값으로 응답
+        {
+            pWord = (unsigned short*)&AI_Info[upper_addr - MEM_ADDR_20mA_0xF0];
+            
+            *p++ = upper_addr;
+            *p++ = 0;
+            *p++ = (*pWord >> 8) & 0xFF;
+            *p++ = *pWord & 0xFF;
+            
+            Uart_Info[UART_GLINK].Tx_Length += 4;
+        }
+        
+        Uart_Info[UART_GLINK].Tx_Buf[2] = Uart_Info[UART_GLINK].Tx_Length >> 8;
+        Uart_Info[UART_GLINK].Tx_Buf[3] = Uart_Info[UART_GLINK].Tx_Length;
+        
+        Uart_Info[UART_GLINK].Tx_Length += 4;            // 헤더 2바이트
+        
+        cal_crc = crc16(&Uart_Info[UART_GLINK].Tx_Buf[0],Uart_Info[UART_GLINK].Tx_Length);
+        
+        *p++ = cal_crc >> 8;
+        *p++ = cal_crc;
+        
+        Uart_Info[UART_GLINK].Tx_Length += 2;
+        
+//        USART1_TX;
+//        HAL_UART_Transmit_IT(&huart1,Uart_Info[UART_GLINK].Tx_Buf,Uart_Info[UART_GLINK].Tx_Length);
+    }
+}
+
+void Uart1_Rcv_0x20_Data(unsigned char *pData)
+{
+    unsigned short word_buf, *pWord, *pWord2, word_cnt, byte_cnt, i, cnt, addr, cal_crc, last_addr, size;
+    unsigned char upper_addr, lower_addr, *p, set_time = 0;
+    
+	addr = pData[2];
+	addr <<= 8;
+	addr |= pData[3];
+
+	upper_addr = pData[2];
+	lower_addr = pData[3];
+   
+    	if( upper_addr == MEM_ADDR_TOTAL )
+    	{
+		byte_cnt = pData[4];
+		byte_cnt <<= 8;
+		byte_cnt |= pData[5];
+
+		word_cnt = byte_cnt / 2;        // byte -> word 카운트로
+
+		pWord = (unsigned short*)&Total_Info;
+		size = sizeof(Total_Info);
+
+		pWord += lower_addr / 2;
+
+		cnt = 6;
+
+		for(i=0;i<word_cnt;i++)
+		{
+			if( size <= lower_addr )     break;
+			
+			word_buf = pData[cnt++];            word_buf <<= 8;            word_buf |= pData[cnt++];
+
+			if( lower_addr >= ((unsigned char*)&Total_Info.Year_Week - (unsigned char*)&Total_Info) )
+			{
+				set_time = 1;   // 시간
+			}
+			else if( lower_addr == ((unsigned char*)&Total_Info.SYSTEM_CONT - (unsigned char*)&Total_Info) )
+			{
+				if(word_buf==100)
+				{
+					Total_Data_Init();	
+					HAL_NVIC_SystemReset();
+				}
+				else if(word_buf==101)	
+					HAL_NVIC_SystemReset();
+			}
+			
+			else if( lower_addr < ((unsigned char*)&Total_Info.SYSTEM_CONT - (unsigned char*)&Total_Info) )
+			{
+			
+				if( lower_addr == ((unsigned char*)&Total_Info.CHANGE_TIME_HOUR - (unsigned char*)&Total_Info) )
+				{
+					Total_Info.CHANGE_TIMER_HOUR=0;	Total_Info.CHANGE_TIMER_MIN=0;
+					Write_Fram(TOTAL_DATA_ADDRESS + ((unsigned char*)&Total_Info.CHANGE_TIMER_HOUR - (unsigned char*)&Total_Info),(unsigned char*)&Total_Info.CHANGE_TIMER_HOUR,4);
+				}
+				
+		    		Write_Fram(TOTAL_DATA_ADDRESS + lower_addr,(unsigned char*)&word_buf,2);
+		 	}
+		    
+		    	*pWord++ = word_buf;
+//		    	Write_Fram(TOTAL_DATA_ADDRESS + lower_addr,(unsigned char*)&word_buf,2);
+
+		    	lower_addr += 2;
+		}
+
+		if( set_time )      
+			Set_Time();	
+    	}
+    	else if( upper_addr == MEM_ADDR_SYSTEM )
+    	{
+	        byte_cnt = pData[4];
+	        byte_cnt <<= 8;
+	        byte_cnt |= pData[5];
+
+	        last_addr = lower_addr + byte_cnt;  // last_addr = 마지막 쓰기주소. lower_addr = 현재주소.
+	        
+	        p = &pData[6];
+	        
+	        while( lower_addr < last_addr )
+	        {
+	            switch( lower_addr )
+	            {
+	                case 0 :
+	                            for(i=0;i<6;i++)
+	                                System_Info.ETH_MAC_ADDRESS[i] = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.ETH_MAC_ADDRESS);
+	                            
+	                            break;
+	                            
+	                case 6 :
+	                            for(i=0;i<4;i++)
+	                                System_Info.ETH_SERVER_ADDRESS[i] = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.ETH_SERVER_ADDRESS);
+	                            
+	                            break;
+	                            
+	                case 10 :
+	                            System_Info.ETH_SERVER_PORT = Big_To_Little(p,2);
+	                            p += sizeof(System_Info.ETH_SERVER_PORT);
+	                            lower_addr += sizeof(System_Info.ETH_SERVER_PORT);
+	                            
+	                            break;
+	                            
+	                case 12 :
+	                            for(i=0;i<6;i++)
+	                                System_Info.WIFI_MAC_ADDRESS[i] = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.WIFI_MAC_ADDRESS);
+	                            
+	                            break;
+	                            
+	                case 18 :
+	                            for(i=0;i<16;i++)
+	                                *p++ = System_Info.WIFI_AP[i] = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.WIFI_AP);
+	                            
+	                            break;
+	                            
+	                case 34 :
+	                            for(i=0;i<16;i++)
+	                                System_Info.WIFI_PASSWORD[i] = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.WIFI_PASSWORD);
+	                            
+	                            break;
+	                            
+	                case 50 :
+	                            for(i=0;i<4;i++)
+	                                System_Info.WIFI_SERVER_ADDRESS[i] = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.WIFI_SERVER_ADDRESS);
+	                            
+	                            break;
+	                            
+	                case 54 :
+	                            System_Info.WIFI_SERVER_PORT = Big_To_Little(p,2);
+	                            p += sizeof(System_Info.WIFI_SERVER_PORT);
+	                            lower_addr += sizeof(System_Info.WIFI_SERVER_PORT);
+	                            
+	                            break;
+	                            
+	                case 56 :
+	                            System_Info.ETH_WIFI_SELECT = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.ETH_WIFI_SELECT);
+	                            
+	                            break;
+	                            
+	                case 57 :
+	                            System_Info.DHCP_ON_OFF = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.DHCP_ON_OFF);
+	                            
+	                            break;
+	                            
+	                case 58 :
+	                            for(i=0;i<4;i++)
+	                                System_Info.ETH_LOCAL_ADDRESS[i] = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.ETH_LOCAL_ADDRESS);
+	                            
+	                            break;
+	                            
+	                case 62 :
+	                            for(i=0;i<4;i++)
+	                                System_Info.ETH_LOCAL_SUBNETMASK[i] = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.ETH_LOCAL_SUBNETMASK);
+	                            
+	                            break;
+	                            
+	                case 66 :
+	                            for(i=0;i<4;i++)
+	                                System_Info.ETH_LOCAL_GATEWAY[i] = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.ETH_LOCAL_GATEWAY);
+	                            
+	                            break;
+	                            
+	                case 70 :
+	                            for(i=0;i<4;i++)
+	                                System_Info.ETH_AUTO_IP_ADDRESS[i] = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.ETH_AUTO_IP_ADDRESS);
+	                            
+	                            break;
+	                            
+	                case 74 :
+	                            for(i=0;i<4;i++)
+	                                *p++ = System_Info.WIFI_AUTO_IP_ADDRESS[i] = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.WIFI_AUTO_IP_ADDRESS);
+	                            
+	                            break;
+	                            
+	                case 78 :
+	                            System_Info.DATA_SEND_DUTY = Big_To_Little(p,2);
+	                            p += sizeof(System_Info.DATA_SEND_DUTY);
+	                            lower_addr += sizeof(System_Info.DATA_SEND_DUTY);
+	                            
+	                            break;
+	                            
+	                case 80 :
+	                            System_Info.GROUP_ID = Big_To_Little(p,2);
+	                            p += sizeof(System_Info.GROUP_ID);
+	                            lower_addr += sizeof(System_Info.GROUP_ID);
+	                            
+	                            break;
+	                            
+	                case 82 :
+	                            System_Info.SYSTEM_USER_ID_H = Big_To_Little(p,2);
+	                            p += sizeof(System_Info.SYSTEM_USER_ID_H);
+	                            lower_addr += sizeof(System_Info.SYSTEM_USER_ID_H);
+	                            
+	                            break;
+	                            
+	                case 84 :
+	                            System_Info.SYSTEM_USER_ID = Big_To_Little(p,2);
+	                            p += sizeof(System_Info.SYSTEM_USER_ID);
+	                            lower_addr += sizeof(System_Info.SYSTEM_USER_ID);
+	                            
+	                            break;
+	                            
+	                case 86 :
+	                            System_Info.COMP_COUNT_QTY = Big_To_Little(p,2);
+	                            p += sizeof(System_Info.COMP_COUNT_QTY);
+	                            lower_addr += sizeof(System_Info.COMP_COUNT_QTY);
+								
+					Total_Info.USE_COMP_QTY=System_Info.COMP_COUNT_QTY;
+	        			Write_Fram(TOTAL_DATA_ADDRESS,(unsigned char*)&Total_Info,sizeof(Total_Info));
+	                            
+	                            break;
+	                            
+	                case 88 :
+	                            System_Info.MODEL = Big_To_Little(p,2);
+	                            p += sizeof(System_Info.MODEL);
+	                            lower_addr += sizeof(System_Info.MODEL);
+	                            
+	                            break;
+	                            
+	                case 90 :
+	                            System_Info.VERSION = Big_To_Little(p,2);
+	                            p += sizeof(System_Info.VERSION);
+	                            lower_addr += sizeof(System_Info.VERSION);
+	                            
+	                            break;
+	                            
+	                case 92 :
+	                            System_Info.VERSION_NUM = Big_To_Little(p,2);
+	                            p += sizeof(System_Info.VERSION_NUM);
+	                            lower_addr += sizeof(System_Info.VERSION_NUM);
+	                            
+	                            break;
+	                            
+	                case 94 :
+	                            System_Info.PRODUCT_ID = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.PRODUCT_ID);
+	                            
+	                            break;
+	                            
+	                case 95 :
+	                            System_Info.COMPANY_ID = *p++;
+	                            
+	                            lower_addr += sizeof(System_Info.COMPANY_ID);
+	                            
+	                            break;
+	                            
+	                case 96 :
+	                            System_Info.DB_SEND_DUTY = Big_To_Little(p,2);
+	                            p += sizeof(System_Info.DB_SEND_DUTY);
+	                            addr += sizeof(System_Info.DB_SEND_DUTY);
+	                            
+	                            break;
+	                            
+	                default :
+	                            lower_addr = 98;
+	                            
+	                            break;
+	            }
+	        }
+        
+        	Write_Fram(SYSTEM_DATA_ADDRESS,(unsigned char*)&System_Info,sizeof(System_Info));
+    	}
+	else
+	{
+		if( upper_addr >= MEM_ADDR_COMP1 && upper_addr <= MEM_ADDR_COMP8 )
+		{
+			if( Uart_Info[UART4_485].Tx_Enable == CLR )
+			{
+				for(i=0;i<Uart_Info[UART_GLINK].Rx_Cnt;i++)
+				    Uart_Info[UART4_485].Tx_Buf[i] = Uart_Info[UART_GLINK].Rx_Buf[i];
+
+				Uart_Info[UART4_485].Tx_Buf[0] = upper_addr - 0x10;         // 0x11 -> 0x01
+
+				Uart_Info[UART4_485].Tx_Length = Uart_Info[UART_GLINK].Rx_Cnt;
+				Uart_Info[UART4_485].Tx_Enable = SET;
+				Uart_Info[UART4_485].Tx_Repeat = 3;
+				
+				cal_crc = crc16(Uart_Info[UART4_485].Tx_Buf,Uart_Info[UART4_485].Tx_Length - 2);
+
+				Uart_Info[UART4_485].Tx_Buf[Uart_Info[UART4_485].Tx_Length - 2] = cal_crc >> 8;
+				Uart_Info[UART4_485].Tx_Buf[Uart_Info[UART4_485].Tx_Length - 1] = cal_crc;
+			}
+		}
+		else
+		{
+			if( Uart_Info[UART5_D_IO].Tx_Enable == CLR )
+			{
+				for(i=0;i<Uart_Info[UART_GLINK].Rx_Cnt;i++)
+				    Uart_Info[UART5_D_IO].Tx_Buf[i] = Uart_Info[UART_GLINK].Rx_Buf[i];
+
+				Uart_Info[UART5_D_IO].Tx_Buf[0] = upper_addr;
+
+				Uart_Info[UART5_D_IO].Tx_Length = Uart_Info[UART_GLINK].Rx_Cnt;
+				Uart_Info[UART5_D_IO].Tx_Enable = SET;
+				Uart_Info[UART5_D_IO].Tx_Repeat = 3;
+				
+				cal_crc = crc16(Uart_Info[UART5_D_IO].Tx_Buf,Uart_Info[UART5_D_IO].Tx_Length - 2);
+
+				Uart_Info[UART5_D_IO].Tx_Buf[Uart_Info[UART5_D_IO].Tx_Length - 2] = cal_crc >> 8;
+				Uart_Info[UART5_D_IO].Tx_Buf[Uart_Info[UART5_D_IO].Tx_Length - 1] = cal_crc;
+			}
+		}
+	}
+}
+
+void Uart1_Tx_Process(void)
+{
+    if( Uart_Info[UART_GLINK].Tx_Timeout > 1 )   return;
+    
+    if( Uart_Info[UART_GLINK].Tx_Timeout == 1 )
+    {
+        Uart_Info[UART_GLINK].Tx_Timeout = 0;
+        
+        USART1_TX;
+        HAL_UART_Transmit_IT(&huart1,Uart_Info[UART_GLINK].Tx_Buf,Uart_Info[UART_GLINK].Tx_Length);
+    }
+}
+
+void Uart1_Rx_Process(void)
+{
+    unsigned short cal_crc, rcv_crc;
+    
+    if( Uart_Info[UART_GLINK].Rcv_Pkt == SET )
+    {
+        Uart_Info[UART_GLINK].Rcv_Pkt = CLR;
+    
+        cal_crc = crc16((unsigned char*)Uart_Info[UART_GLINK].Rx_Buf, Uart_Info[UART_GLINK].Rx_Cnt - 2);
+		
+        rcv_crc = Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt - 2];
+        rcv_crc <<= 8;
+        rcv_crc |= Uart_Info[UART_GLINK].Rx_Buf[Uart_Info[UART_GLINK].Rx_Cnt - 1];  
+
+        if( cal_crc == rcv_crc )                            // 패킷수신.
+        {
+            Uart_Info[UART_GLINK].Link_Time = 3000;
+            
+            if( Uart_Info[UART_GLINK].Rx_Buf[1] == 0x13 )           // 0x13 수신. 전체
+            {
+                Uart1_Rcv_0x13_Data(&Uart_Info[UART_GLINK].Rx_Buf[0]);
+                Uart_Info[UART_GLINK].Tx_Timeout = 5;
+				
+            }
+            else if( Uart_Info[UART_GLINK].Rx_Buf[1] == 0x15 )      // 0x15 수신. 변화
+            {
+                Uart1_Rcv_0x15_Data(&Uart_Info[UART_GLINK].Rx_Buf[0]);
+                Uart_Info[UART_GLINK].Tx_Timeout = 5;
+            }
+            else if( Uart_Info[UART_GLINK].Rx_Buf[1] == 0x20 )
+            {
+                Uart1_Rcv_0x20_Data(&Uart_Info[UART_GLINK].Rx_Buf[0]);
+                
+                Uart_Info[UART_GLINK].Rx_Buf[3] = 0x00;          // 0x20 -> 0x15
+                Uart_Info[UART_GLINK].Rx_Buf[4] = 0x00;
+                Uart_Info[UART_GLINK].Rx_Buf[5] = 0x00;
+                
+                Uart1_Rcv_0x15_Data(&Uart_Info[UART_GLINK].Rx_Buf[0]);
+                Uart_Info[UART_GLINK].Tx_Timeout = 5;
+            }
+            
+            Uart_Info[UART_GLINK].Rx_Timeout = 0;
+        }
+    }
+}
