@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { fetchGsTechSettings } from "../services/api";
 import type { GsTechSettings } from "../services/api";
 import type { YujinMapValue } from "../types";
+import { AuxiliaryControlDialog } from "./AuxiliaryControlDialog";
+import type { YonseiAuxiliaryDevice } from "./AuxiliaryControlDialog";
 
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const LIVE_VALUE_MAX_AGE_MS = 12_000;
@@ -21,6 +23,7 @@ type DetailCompressor = {
   connected: boolean;
   alarm: boolean;
   fault: boolean;
+  control?: YonseiAuxiliaryDevice;
   inverter: boolean;
   isOilfree?: boolean;
   totalHours: number;
@@ -77,6 +80,7 @@ export function DetailScreen({
     tcp_mode: 0,
     cctv_enabled: false,
   });
+  const [selectedAuxiliary, setSelectedAuxiliary] = useState<YonseiAuxiliaryDevice | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -91,7 +95,10 @@ export function DetailScreen({
   }, []);
 
   const compressors = selectDetailCompressors(dashboard.compressors, mapValues);
-  const auxiliaryDevices = buildAuxiliaryDevices(mapValues, gstechSettings.dio_bit0, gstechSettings.dio_bit4);
+  const yonseiDevices = buildYonseiAuxiliaryDevices(mapValues);
+  const auxiliaryDevices = yonseiDevices.some((device) => device.connected)
+    ? yonseiDevices
+    : buildAuxiliaryDevices(mapValues, gstechSettings.dio_bit0, gstechSettings.dio_bit4);
   const devices = [
     ...compressors.map((compressor) => ({ kind: "compressor" as const, compressor })),
     ...auxiliaryDevices.map((device) => ({ kind: "auxiliary" as const, device })),
@@ -108,7 +115,7 @@ export function DetailScreen({
               onOpenDetail={onOpenCompressorDetail}
             />
           ) : (
-            <AuxiliaryDeviceCard key={device.device.id} device={device.device} />
+            <AuxiliaryDeviceCard key={device.device.id} device={device.device} onOpenControl={setSelectedAuxiliary} />
           ),
         ) : (
           <div className="col-span-4 flex h-[281px] items-center justify-center rounded-[8px] border border-[#b9d9f3] bg-white text-[22px] font-black text-[#6f879d]">
@@ -116,6 +123,7 @@ export function DetailScreen({
           </div>
         )}
       </div>
+      {selectedAuxiliary ? <AuxiliaryControlDialog device={selectedAuxiliary} onClose={() => setSelectedAuxiliary(null)} /> : null}
     </div>
   );
 }
@@ -176,7 +184,7 @@ function DetailCompressorCard({
   );
 }
 
-function AuxiliaryDeviceCard({ device }: { device: AuxiliaryDevice }) {
+function AuxiliaryDeviceCard({ device, onOpenControl }: { device: AuxiliaryDevice; onOpenControl: (device: YonseiAuxiliaryDevice) => void }) {
   const valueText = !device.connected
     ? "FAIL"
     : device.measuredValue === undefined || !Number.isFinite(device.measuredValue)
@@ -184,7 +192,7 @@ function AuxiliaryDeviceCard({ device }: { device: AuxiliaryDevice }) {
       : `${device.measuredValue.toFixed(device.measuredUnit === "bar" ? 2 : 1)} ${device.measuredUnit}`;
 
   return (
-    <article className="grid min-h-0 grid-rows-[42px_1fr_34px] gap-[3px] overflow-hidden border border-[#75b4ee] bg-[#d8ecff] p-[3px] shadow-[inset_0_0_0_1px_#ffffff]">
+    <button className="grid min-h-0 grid-rows-[42px_1fr_34px] gap-[3px] overflow-hidden border border-[#75b4ee] bg-[#d8ecff] p-[3px] text-left shadow-[inset_0_0_0_1px_#ffffff] disabled:cursor-default" disabled={!device.control} onClick={() => { if (device.control) onOpenControl(device.control); }} type="button">
       <DeviceSummary indexLabel={device.category.toUpperCase()} title={device.name} value={valueText} />
       <div className="grid min-h-0 grid-cols-[1fr_126px] gap-[3px] overflow-hidden">
         <div className="grid min-h-0 grid-rows-[1fr_30px] overflow-hidden border border-[#75b4ee] bg-white">
@@ -208,7 +216,7 @@ function AuxiliaryDeviceCard({ device }: { device: AuxiliaryDevice }) {
         modeText={device.modeText}
         runText={device.runText}
       />
-    </article>
+    </button>
   );
 }
 
@@ -334,6 +342,40 @@ export function selectDetailCompressors(
   return compressors
     .filter((compressor) => compressor.id <= configuredCount && !(hiddenMask & (1 << (compressor.id - 1))))
     .sort((left, right) => left.id - right.id);
+}
+
+function buildYonseiAuxiliaryDevices(values: Record<string, YujinMapValue>): AuxiliaryDevice[] {
+  return Array.from({ length: 8 }, (_, index) => {
+    const highAddress = index < 4 ? 0xe0 : 0xe1;
+    const bit = ((index % 4) * 2) as 0 | 2 | 4 | 6;
+    const key = `${highAddress.toString(16).toUpperCase()}00`;
+    const connected = hasRecentValue(values, key, 30_000);
+    const word = Math.trunc(liveMapNumber(values, key, 0));
+    const running = connected && Boolean(word & (1 << bit));
+    const name = index < 6 ? `DRYER ${index + 1}${index % 2 === 1 ? " (PCM)" : ""}` : index === 6 ? "PUMP" : "FAN";
+    const control: YonseiAuxiliaryDevice = {
+      id: `yonsei-${index + 1}`,
+      name,
+      address: (highAddress << 8) | 0x04,
+      bit,
+      connected,
+      running,
+    };
+    return {
+      id: control.id,
+      name,
+      type: index < 6 ? "DRYER" : index === 6 ? "PUMP" : "FAN",
+      category: index < 4 ? "dio1" : "dio2",
+      imageSrc: index < 6 ? "/dryer.png" : "/device.png",
+      connected,
+      measuredValue: undefined,
+      measuredUnit: "℃",
+      modeText: "REM",
+      runText: connected ? running ? "RUN" : "RDY" : "FAIL",
+      fault: false,
+      control,
+    };
+  });
 }
 
 function buildAuxiliaryDevices(

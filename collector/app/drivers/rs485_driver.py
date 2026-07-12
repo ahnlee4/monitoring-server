@@ -147,6 +147,8 @@ class RS485Collector(BaseCollector):
         settings_poll_interval_cycles: int = 5,
         full_snapshot_interval_cycles: int = 5,
         power_poll_interval_cycles: int = 1,
+        dio_poll_interval_cycles: int = 1,
+        module_poll_interval_cycles: int = 1,
     ) -> None:
         self.serial_port = serial_port
         self.baudrate = baudrate
@@ -162,6 +164,8 @@ class RS485Collector(BaseCollector):
         self.settings_poll_interval_cycles = max(0, settings_poll_interval_cycles)
         self.full_snapshot_interval_cycles = max(0, full_snapshot_interval_cycles)
         self.power_poll_interval_cycles = max(0, power_poll_interval_cycles)
+        self.dio_poll_interval_cycles = max(0, dio_poll_interval_cycles)
+        self.module_poll_interval_cycles = max(0, module_poll_interval_cycles)
         self._serial: serial.Serial | None = None
         self._serial_lock = threading.RLock()
         self._control_priority = threading.Event()
@@ -206,6 +210,8 @@ class RS485Collector(BaseCollector):
             port = self._open_serial()
             poll_settings = self._should_poll_settings_maps()
             poll_power = self._should_poll_power_maps()
+            poll_dio = self._should_poll_dio_maps()
+            poll_modules = self._should_poll_module_maps()
             self._poll_cycle_index += 1
             system_words = self._poll_address(port, 0x00)
             if system_words is not None:
@@ -254,6 +260,32 @@ class RS485Collector(BaseCollector):
                         map_values.extend(words_to_generic_map_values(mem_addr, words))
                     if comp_index < min(self.comp_qty, 8) - 1:
                         time.sleep(self.inter_request_delay)
+
+            if poll_dio:
+                for mem_addr in (0xE0, 0xE1):
+                    if self._control_priority.is_set():
+                        break
+                    words = self._poll_address(port, mem_addr)
+                    if words is not None:
+                        self._word_cache[mem_addr] = words
+                        map_values.extend(words_to_generic_map_values(mem_addr, words))
+                    if mem_addr == 0xE0:
+                        time.sleep(self.inter_request_delay)
+
+            if poll_modules:
+                use_device_index = 0x4C // 2
+                use_device_word = system_words[use_device_index] if use_device_index < len(system_words) else 0
+                module_count = max(0, min(16, (int(use_device_word) >> 8) & 0xFF))
+                for module_index in range(module_count):
+                    if self._control_priority.is_set():
+                        break
+                    mem_addr = 0xF0 + module_index
+                    words = self._poll_address(port, mem_addr)
+                    if words is not None:
+                        self._word_cache[mem_addr] = words
+                        map_values.extend(words_to_generic_map_values(mem_addr, words))
+                    if module_index < module_count - 1:
+                        time.sleep(self.inter_request_delay)
         except Exception as exc:
             self._close_serial()
             error = str(exc)
@@ -276,6 +308,12 @@ class RS485Collector(BaseCollector):
 
     def _should_poll_power_maps(self) -> bool:
         return self.power_poll_interval_cycles > 0 and self._poll_cycle_index % self.power_poll_interval_cycles == 0
+
+    def _should_poll_dio_maps(self) -> bool:
+        return self.dio_poll_interval_cycles > 0 and self._poll_cycle_index % self.dio_poll_interval_cycles == 0
+
+    def _should_poll_module_maps(self) -> bool:
+        return self.module_poll_interval_cycles > 0 and self._poll_cycle_index % self.module_poll_interval_cycles == 0
 
     def _should_publish_full_snapshot(self) -> bool:
         return (

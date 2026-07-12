@@ -1,10 +1,11 @@
-type ActiveDialog = "factory" | "settings" | "control" | null;
+type ActiveDialog = "cctv" | "settings" | "control" | "minmax" | null;
 type ActiveScreen = "main" | "detail";
 
 type QuickButtonsProps = {
   activeScreen: ActiveScreen;
   menuOpen: boolean;
   onOpenDialog: (dialog: ActiveDialog) => void;
+  onExportPower: () => void;
   onToggleDetail: () => void;
   setMenuOpen: (open: boolean) => void;
 };
@@ -15,17 +16,19 @@ type QuickMenuItem = {
   action: () => void;
 };
 
-const PRELOAD_ICONS = ["/factory.png", "/setting.png", "/control.png", "/device.png", "/device_back.png", "/menu.png"];
+const PRELOAD_ICONS = ["/setting.png", "/control.png", "/device.png", "/device_back.png", "/menu.png"];
 
 export function QuickButtons({
   activeScreen,
   menuOpen,
   onOpenDialog,
+  onExportPower,
   onToggleDetail,
   setMenuOpen,
 }: QuickButtonsProps) {
   const menuItems: QuickMenuItem[] = [
-    { label: "공장 변경", icon: "/factory.png", action: () => onOpenDialog("factory") },
+    { label: "CCTV", icon: "/device.png", action: () => onOpenDialog("cctv") },
+    { label: "전력 CSV", icon: "/setting.png", action: onExportPower },
     { label: "설정", icon: "/setting.png", action: () => onOpenDialog("settings") },
     { label: "통합운전", icon: "/control.png", action: () => onOpenDialog("control") },
     {

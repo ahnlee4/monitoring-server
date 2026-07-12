@@ -5,6 +5,8 @@ import { EquipmentDetailDialog } from "./components/EquipmentDetailDialog";
 import { ControlAdvancedPanel } from "./components/ControlAdvancedPanel";
 import { EquipmentMaskSettings } from "./components/EquipmentMaskSettings";
 import { ModeSequenceEditor } from "./components/ModeSequenceEditor";
+import { CctvDialog } from "./components/CctvDialog";
+import { MinMaxDialog } from "./components/MinMaxDialog";
 import { MobileLayout } from "./components/MobileLayout";
 import { GsTechSettingsPanel } from "./components/GsTechSettingsPanel";
 import { ProductSettingsPanel } from "./components/ProductSettingsPanel";
@@ -52,6 +54,7 @@ type CompressorState = {
   inverter: boolean;
   isOilfree: boolean;
   totalHours: number;
+  currentAmps: number;
   repair: boolean;
   mainInverter: boolean;
 };
@@ -59,6 +62,8 @@ type CompressorState = {
 type DashboardState = {
   integratedRun: boolean;
   mainPressure: number;
+  mainTemperature: number;
+  totalPower: number;
   appVersion: string;
   firmwareVersion: string;
   lowPressureAlarm: "none" | "warning" | "reserve";
@@ -80,14 +85,14 @@ type DashboardState = {
   compressors: CompressorState[];
 };
 
-type ActiveDialog = "factory" | "settings" | "control" | "password" | null;
+type ActiveDialog = "cctv" | "settings" | "control" | "minmax" | "password" | null;
 type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.141";
+const APP_VERSION = "0.1.142";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036", "0038", "000E", "0010", "0012"];
 const MODE_ALIGN_ROWS = 7;
@@ -132,6 +137,8 @@ const OPTION_LABELS = [
 const emptyDashboard: DashboardState = {
   integratedRun: false,
   mainPressure: 0,
+  mainTemperature: Number.NaN,
+  totalPower: Number.NaN,
   appVersion: APP_VERSION,
   firmwareVersion: "-",
   lowPressureAlarm: "none",
@@ -174,6 +181,7 @@ function emptyCompressor(index: number): CompressorState {
     inverter: false,
     isOilfree: false,
     totalHours: 0,
+    currentAmps: Number.NaN,
     repair: false,
     mainInverter: false,
   };
@@ -259,6 +267,7 @@ export default function App() {
 
     setAdminLogoClicks({ count: nextCount, lastAt: nowMs });
   };
+  const handleExportPower = () => exportPowerCsv(mapValues, dashboard.configuredCount);
 
   return (
     <main className="flex min-h-screen items-center justify-center overflow-hidden bg-black text-black">
@@ -280,7 +289,7 @@ export default function App() {
           />
         ) : (
         <div className="grid h-full grid-rows-[74px_578px_148px]">
-          <TopBar dashboard={dashboard} now={now} onLogoClick={handleLogoClick} />
+          <TopBar dashboard={dashboard} now={now} onLogoClick={handleLogoClick} onOpenMinMax={() => setActiveDialog("minmax")} />
 
           <section className="relative min-h-0">
             {showMainScreen ? (
@@ -315,13 +324,15 @@ export default function App() {
             menuOpen={menuOpen}
             modeSequenceBusy={modeSequenceBusy}
             onOpenDialog={openDialog}
+            onExportPower={handleExportPower}
             onModeSequenceAction={handleModeSequenceAction}
             onToggleDetail={() => setActiveScreen((screen) => (screen === "detail" ? "main" : "detail"))}
             setMenuOpen={setMenuOpen}
           />
         </div>
         )}
-        {activeDialog === "factory" ? <FactoryDialog onClose={() => setActiveDialog(null)} /> : null}
+        {activeDialog === "cctv" ? <CctvDialog onClose={() => setActiveDialog(null)} /> : null}
+        {activeDialog === "minmax" ? <MinMaxDialog mapValues={mapValues} onClose={() => setActiveDialog(null)} /> : null}
         {activeDialog === "settings" ? (
           <SettingsDialog configuredCount={dashboard.configuredCount} level={settingsLevel} mapValues={mapValues} onClose={() => setActiveDialog(null)} />
         ) : null}
@@ -378,6 +389,9 @@ function buildDashboardFromMap(
   const systemOnline = hasRecentValue(values, "0000", SYSTEM_LINK_GRACE_MS) || hasRecentValue(values, "0002", SYSTEM_LINK_GRACE_MS);
   const displayOrder = readRunSequence(values);
   const mainPressure = scalePressure100(liveMapNumber(values, "0000", 0));
+  const mainTemperature = scale10(liveMapNumber(values, "F002", Number.NaN));
+  const powerValues = Array.from({ length: Math.min(8, compressors.length) }, (_, index) => liveMapNumber(values, `${(0x31 + index).toString(16).toUpperCase()}12`, Number.NaN));
+  const validPowerValues = powerValues.filter(Number.isFinite);
   const optionDevice = liveMapNumber(values, "004A", 0);
   const lowAlarmStep = liveMapNumber(values, "0054", 0);
   const sortModeWord = Math.trunc(liveMapNumber(values, "0024", 0));
@@ -408,6 +422,8 @@ function buildDashboardFromMap(
     ...emptyDashboard,
     integratedRun: (liveMapNumber(values, "0050", 0) & 0x0001) === 0x0001,
     mainPressure,
+    mainTemperature,
+    totalPower: validPowerValues.length ? validPowerValues.reduce((sum, value) => sum + value, 0) : Number.NaN,
     firmwareVersion: buildFirmwareVersion(values),
     lowPressureAlarm: lowAlarmStep >= 4 && options[7]?.checked ? "reserve" : lowAlarmStep >= 3 ? "warning" : "none",
     sortMode: (sortModeWord & 0x0001) === 0x0001 ? "time" : "setting",
@@ -478,6 +494,7 @@ function buildCompressorFromMap(
   const version2 = Math.trunc(read("80", "78", 0));
   const runHoursLow = read("9A", "68", 0);
   const runHoursHigh = read("9C", "6A", 0);
+  const currentAmps = liveMapNumber(values, `${(0x30 + compNo).toString(16).toUpperCase()}00`, Number.NaN);
   const connected = hasRecentValue(values, `${primaryPrefix}00`, DEVICE_LINK_GRACE_MS) || hasRecentValue(values, `${fallbackPrefix}00`, DEVICE_LINK_GRACE_MS);
   const modelName = connected ? (isOilfree ? getOilfreeModelName(model1, version1, version2) : getInjectionModelName(model1)) : "-";
   const isInverter = modelName.includes("V");
@@ -501,6 +518,7 @@ function buildCompressorFromMap(
     inverter: isInverter,
     isOilfree,
     totalHours: Math.trunc(runHoursHigh * 65536 + runHoursLow),
+    currentAmps,
   };
 }
 
@@ -623,11 +641,11 @@ function setWordHighByte(word: number, highByte: number) {
   return ((highByte & 0xff) << 8) | (Math.trunc(word) & 0x00ff);
 }
 
-function TopBar({ dashboard, now, onLogoClick }: { dashboard: DashboardState; now: Date; onLogoClick: () => void }) {
+function TopBar({ dashboard, now, onLogoClick, onOpenMinMax }: { dashboard: DashboardState; now: Date; onLogoClick: () => void; onOpenMinMax: () => void }) {
   return (
     <header className="grid min-h-0 grid-cols-[241px_241px_241px_65px_241px_241px] gap-[2px]">
       <TopRunPanel running={dashboard.integratedRun} />
-      <TopPressurePanel value={dashboard.mainPressure} />
+      <TopPressurePanel onClick={onOpenMinMax} value={dashboard.mainPressure} />
       <TopPanel tone="date">
         <span>{formatDateTime(now)}</span>
         <small>App {dashboard.appVersion} / Fw {dashboard.firmwareVersion}</small>
@@ -638,6 +656,7 @@ function TopBar({ dashboard, now, onLogoClick }: { dashboard: DashboardState; no
       <TopPanel tone="title">
         <span>컴프레샤</span>
         <span>통합제어 시스템</span>
+        <small className="mt-[2px] text-[10px]">온도 {Number.isFinite(dashboard.mainTemperature) ? `${dashboard.mainTemperature.toFixed(1)}℃` : "---"} / 전력 {Number.isFinite(dashboard.totalPower) ? `${Math.round(dashboard.totalPower).toLocaleString("ko-KR")}W` : "---"}</small>
       </TopPanel>
       <button
         aria-label="관리자 비밀번호 화면"
@@ -662,18 +681,20 @@ function TopRunPanel({ running }: { running: boolean }) {
   );
 }
 
-function TopPressurePanel({ value }: { value: number }) {
+function TopPressurePanel({ onClick, value }: { onClick: () => void; value: number }) {
   const hasValue = Number.isFinite(value);
 
   return (
-    <TopPanel tone="pressure" emphasis>
-      <span className="block w-full text-center text-[13px] font-black leading-none tracking-[0.14em] text-[#1b5c96]">메인 압력</span>
-      <span className="mt-[3px] grid w-full grid-cols-[42px_1fr_42px] items-end leading-none text-[#083f73] drop-shadow-[0_1px_0_rgba(255,255,255,0.45)]">
-        <span />
-        <strong className="text-center font-black tabular-nums tracking-[-0.07em] text-[38px]">{hasValue ? value.toFixed(2) : "---"}</strong>
-        <small className="pb-[5px] text-left text-[17px] font-black tracking-[-0.03em]">{hasValue ? "bar" : ""}</small>
-      </span>
-    </TopPanel>
+    <button className="min-h-0" onClick={onClick} title="압력/온도 최소·최대 보기" type="button">
+      <TopPanel tone="pressure" emphasis>
+        <span className="block w-full text-center text-[13px] font-black leading-none tracking-[0.14em] text-[#1b5c96]">메인 압력</span>
+        <span className="mt-[3px] grid w-full grid-cols-[42px_1fr_42px] items-end leading-none text-[#083f73] drop-shadow-[0_1px_0_rgba(255,255,255,0.45)]">
+          <span />
+          <strong className="text-center font-black tabular-nums tracking-[-0.07em] text-[38px]">{hasValue ? value.toFixed(2) : "---"}</strong>
+          <small className="pb-[5px] text-left text-[17px] font-black tracking-[-0.03em]">{hasValue ? "bar" : ""}</small>
+        </span>
+      </TopPanel>
+    </button>
   );
 }
 
@@ -697,7 +718,7 @@ function TopPanel({
 
   return (
     <div
-      className={`flex min-h-0 flex-col items-center justify-center overflow-hidden rounded-[4px] border px-[4px] text-center font-bold leading-tight text-white ${emphasis ? "text-[21px]" : "text-[23px]"} ${toneClass}`}
+      className={`flex h-full min-h-0 flex-col items-center justify-center overflow-hidden rounded-[4px] border px-[4px] text-center font-bold leading-tight text-white ${emphasis ? "text-[21px]" : "text-[23px]"} ${toneClass}`}
     >
       {children}
     </div>
@@ -722,7 +743,7 @@ function CompressorCard({ alarmVisible, compressor, onOpenDetail }: { alarmVisib
       onClick={() => onOpenDetail(compressor.id)}
       type="button"
     >
-      <div className="grid h-full grid-rows-[42px_1fr_1fr_1fr_1fr_1fr] gap-[2px] border border-[#75b4ee] bg-[#d8ecff] p-[2px] shadow-[inset_0_0_0_1px_#ffffff]">
+      <div className="grid h-full grid-rows-[42px_1fr_1fr_1fr_1fr_1fr_1fr] gap-[2px] border border-[#75b4ee] bg-[#d8ecff] p-[2px] shadow-[inset_0_0_0_1px_#ffffff]">
         <div
           className="flex items-center justify-center overflow-hidden border border-[#75b4ee] px-[6px] text-center text-[20px] font-bold leading-none shadow-[2px_2px_1px_#ababab]"
           style={{ backgroundColor: titleTone.background, color: titleTone.color }}
@@ -732,6 +753,7 @@ function CompressorCard({ alarmVisible, compressor, onOpenDetail }: { alarmVisib
         <MetricRow label="압력" value={compressor.connected ? formatScaledValue(compressor.pressure, "bar", 2) : "--- bar"} />
         <TripleRow label={pressureLabel} valueA={secondValue} valueB={thirdValue} />
         <MetricRow label="온도" value={compressor.connected ? formatScaledValue(compressor.temperature, "℃") : "--- ℃"} />
+        <MetricRow label="전류" value={compressor.connected && Number.isFinite(compressor.currentAmps) ? formatScaledValue(compressor.currentAmps, "A") : "--- A"} />
         <div className="relative grid grid-cols-2 gap-[2px]">
           <StatusCell tone={compressor.connected && compressor.local ? "local" : "remote"}>{compressor.connected ? formatRunMode(compressor.runMode) : "---"}</StatusCell>
           <StatusCell tone={compressor.connected && compressor.running ? "running" : "stop"}>{compressor.connected ? formatOperationStatus(compressor.operationStatus) : "통신 불량"}</StatusCell>
@@ -901,6 +923,7 @@ function Footer({
   menuOpen,
   modeSequenceBusy,
   onOpenDialog,
+  onExportPower,
   onModeSequenceAction,
   onToggleDetail,
   setMenuOpen,
@@ -910,6 +933,7 @@ function Footer({
   menuOpen: boolean;
   modeSequenceBusy: boolean;
   onOpenDialog: (dialog: ActiveDialog) => void;
+  onExportPower: () => void;
   onModeSequenceAction: (action: ModeSequenceAction) => void;
   onToggleDetail: () => void;
   setMenuOpen: (open: boolean) => void;
@@ -925,6 +949,7 @@ function Footer({
       <QuickButtons
         activeScreen={activeScreen}
         menuOpen={menuOpen}
+        onExportPower={onExportPower}
         onOpenDialog={onOpenDialog}
         onToggleDetail={onToggleDetail}
         setMenuOpen={setMenuOpen}
@@ -1072,70 +1097,6 @@ function DialogCloseButton({ onClick }: { onClick: () => void }) {
     >
       ×
     </button>
-  );
-}
-
-function FactoryDialog({ onClose }: { onClose: () => void }) {
-  const factories = ["공장 1", "공장 2", "공장 3", "공장 4", "공장 5"];
-  const [selectedFactory, setSelectedFactory] = useState(() => Number(window.localStorage.getItem("selectedFactory") ?? 0) || 0);
-  const [saveStatus, setSaveStatus] = useState("공장 선택 대기 중");
-  const applyFactory = () => {
-    window.localStorage.setItem("selectedFactory", String(selectedFactory));
-    setSaveStatus(`${factories[selectedFactory]} 저장 완료`);
-    window.setTimeout(onClose, 250);
-  };
-
-  return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-[24px] max-sm:p-[8px]">
-      <section className="w-[720px] overflow-hidden rounded-[12px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_14px_34px_rgba(15,43,72,0.32)] max-sm:max-h-[calc(100dvh-16px)] max-sm:w-full">
-        <div className="flex h-[86px] items-center justify-between border-b border-[#dbe7f1] bg-white px-[22px] max-sm:h-[64px] max-sm:px-[14px]">
-          <div className="flex items-center gap-[14px]">
-            <span className="flex h-[52px] w-[52px] items-center justify-center rounded-[10px] bg-[#eaf4fc] max-sm:h-[42px] max-sm:w-[42px]">
-              <img src="/factory.png" alt="" className="h-[36px] w-[36px] object-contain" />
-            </span>
-            <span>
-              <span className="block text-[27px] font-black leading-none text-[#173f69] max-sm:text-[21px]">공장 변경</span>
-              <span className="mt-[7px] block text-[14px] font-bold text-[#6f879d] max-sm:hidden">운영할 공장을 선택한 뒤 적용하세요</span>
-            </span>
-          </div>
-          <DialogCloseButton onClick={onClose} />
-        </div>
-        <div className="grid grid-cols-[190px_1fr] gap-[12px] p-[14px] max-sm:max-h-[calc(100dvh-152px)] max-sm:grid-cols-1 max-sm:overflow-y-auto max-sm:p-[12px]">
-          <aside className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-            <div className="text-[14px] font-black text-[#6f879d]">현재 선택</div>
-            <div className="mt-[10px] text-[32px] font-black leading-none text-[#173f69]">{factories[selectedFactory]}</div>
-            <div className="mt-[12px] rounded-[8px] bg-[#eef7ff] px-[10px] py-[8px] text-[13px] font-black text-[#45657f]">{saveStatus}</div>
-          </aside>
-          <div className="grid grid-cols-2 gap-[8px] max-sm:grid-cols-1">
-        {factories.map((factory, index) => (
-          <button
-            key={factory}
-            className={`grid h-[76px] grid-cols-[44px_1fr] items-center rounded-[9px] border p-[10px] text-left transition-colors ${
-              selectedFactory === index
-                ? "border-[#237bd0] bg-[#eef7ff] shadow-[0_8px_18px_rgba(35,123,208,0.14)]"
-                : "border-[#d9e6f0] bg-white hover:border-[#9cc7e8]"
-            }`}
-            onClick={() => setSelectedFactory(index)}
-            type="button"
-          >
-            <span className={`flex h-[36px] w-[36px] items-center justify-center rounded-[7px] text-[17px] font-black ${selectedFactory === index ? "bg-[#237bd0] text-white" : "bg-[#eef3f7] text-[#5d748c]"}`}>
-              {index + 1}
-            </span>
-            <span className="flex min-w-0 flex-col justify-center">
-              <span className="text-[22px] font-black leading-none text-[#173f69]">{factory}</span>
-              <span className="mt-[7px] text-[13px] font-bold text-[#6f879d]">{selectedFactory === index ? "선택됨" : "선택 가능"}</span>
-            </span>
-          </button>
-        ))}
-          </div>
-        </div>
-        <div className="grid h-[72px] grid-cols-[1fr_160px_180px] gap-[10px] border-t border-[#dbe7f1] bg-white px-[18px] py-[12px] max-sm:h-[64px] max-sm:grid-cols-1 max-sm:px-[12px]">
-          <span className="max-sm:hidden" />
-          <button className="rounded-[8px] border border-[#cfdde8] bg-[#f8fbfd] text-[19px] font-black text-[#45657f] max-sm:hidden" onClick={onClose} type="button">취소</button>
-          <button className="rounded-[8px] bg-[#237bd0] text-[19px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)]" onClick={applyFactory} type="button">적용</button>
-        </div>
-      </section>
-    </div>
   );
 }
 
@@ -2237,6 +2198,27 @@ function getLowPressureText(tone: DashboardState["lowPressureAlarm"]) {
   if (tone === "none") return "";
   if (tone === "reserve") return "저압 경보로 인하여 예비기 가동중";
   return "저압 경보 알람";
+}
+
+function exportPowerCsv(values: Record<string, YujinMapValue>, configuredCount: number) {
+  const labels = ["상전류 R", "상전류 S", "상전류 T", "상전압 R", "상전압 S", "상전압 T", "선간전압 RS", "선간전압 ST", "선간전압 TR", "유효전력", "무효전력", "피상전력", "유효전력량", "무효전력량", "피상전력량", "부하율", "역률", "주파수"];
+  const rows = [["저장시각", "호기", ...labels]];
+  const recordedAt = new Date().toLocaleString("ko-KR");
+  for (let unit = 1; unit <= Math.min(8, configuredCount); unit += 1) {
+    const prefix = (0x30 + unit).toString(16).toUpperCase();
+    rows.push([
+      recordedAt,
+      `${unit}호기`,
+      ...labels.map((_, index) => values[`${prefix}${(index * 2).toString(16).padStart(2, "0").toUpperCase()}`]?.value ?? ""),
+    ]);
+  }
+  const csv = `\uFEFF${rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")).join("\r\n")}`;
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `power-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function formatDateTime(date: Date) {

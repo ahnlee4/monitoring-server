@@ -40,7 +40,7 @@ type MobileDashboard = {
   compressors: MobileCompressor[];
 };
 
-type ActiveDialog = "factory" | "settings" | "control" | "password" | null;
+type ActiveDialog = "cctv" | "settings" | "control" | "minmax" | "password" | null;
 type ActiveScreen = "main" | "detail";
 type ModeSequenceAction = "previous" | "refresh" | "next";
 type FullscreenDocument = Document & {
@@ -82,7 +82,7 @@ export function MobileLayout({
 
   return (
     <section className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-[#eef4fa] text-[#12263a]">
-      <MobileHeader dashboard={dashboard} now={now} onLogoClick={onLogoClick} />
+      <MobileHeader dashboard={dashboard} now={now} onLogoClick={onLogoClick} onOpenMinMax={() => onOpenDialog("minmax")} />
       <main className={`flex min-h-0 flex-1 flex-col px-[12px] pb-[112px] pt-[10px] ${activeScreen === "main" ? "overflow-hidden" : "overflow-y-auto"}`}>
         {activeScreen === "detail" ? (
           detailCompressors.length ? (
@@ -112,10 +112,12 @@ function MobileHeader({
   dashboard,
   now,
   onLogoClick,
+  onOpenMinMax,
 }: {
   dashboard: MobileDashboard;
   now: Date;
   onLogoClick: () => void;
+  onOpenMinMax: () => void;
 }) {
   const [fullscreenActive, setFullscreenActive] = useState(false);
 
@@ -172,7 +174,7 @@ function MobileHeader({
         </div>
       </div>
       <div className="mt-[10px] grid grid-cols-2 gap-[8px]">
-        <MobileSummaryTile label="메인 압력" unit="bar" value={formatNumber(dashboard.mainPressure, 2)} />
+        <MobileSummaryTile label="메인 압력" onClick={onOpenMinMax} unit="bar" value={formatNumber(dashboard.mainPressure, 2)} />
         <MobileSummaryTile label="현재 시각" value={formatMobileDateTime(now)} />
       </div>
     </header>
@@ -201,15 +203,20 @@ function FullscreenIcon({ active }: { active: boolean }) {
   );
 }
 
-function MobileSummaryTile({ label, unit = "", value }: { label: string; unit?: string; value: string }) {
-  return (
-    <div className="rounded-[10px] border border-[#d9e6f0] bg-[#f8fbfd] px-[11px] py-[9px]">
+function MobileSummaryTile({ label, onClick, unit = "", value }: { label: string; onClick?: () => void; unit?: string; value: string }) {
+  const content = (
+    <>
       <div className="text-[11px] font-black text-[#6f879d]">{label}</div>
       <div className="mt-[5px] flex items-end justify-end gap-[5px] text-right">
         <span className="min-w-0 truncate text-[24px] font-black leading-none text-[#173f69]">{value}</span>
         {unit ? <span className="shrink-0 pb-[2px] text-[12px] font-black text-[#6f879d]">{unit}</span> : null}
       </div>
-    </div>
+    </>
+  );
+  return (
+    onClick
+      ? <button className="rounded-[10px] border border-[#d9e6f0] bg-[#f8fbfd] px-[11px] py-[9px] text-left" onClick={onClick} type="button">{content}</button>
+      : <div className="rounded-[10px] border border-[#d9e6f0] bg-[#f8fbfd] px-[11px] py-[9px]">{content}</div>
   );
 }
 
@@ -413,7 +420,7 @@ function MobileBottomActions({
         <MobileNavButton active={activeScreen === "detail"} label="상세" onClick={activeScreen === "detail" ? undefined : onToggleScreen} />
         <MobileNavButton label="통합" onClick={() => onOpenDialog("control")} />
         <MobileNavButton label="설정" onClick={() => onOpenDialog("settings")} />
-        <MobileNavButton label="공장" onClick={() => onOpenDialog("factory")} />
+        <MobileNavButton label="CCTV" onClick={() => onOpenDialog("cctv")} />
       </div>
       <div className="mt-[7px] grid grid-cols-[1fr_42px_42px_42px] gap-[6px]">
         <div className="flex items-center rounded-[8px] bg-[#eef7ff] px-[10px] text-[12px] font-black text-[#45657f]">
