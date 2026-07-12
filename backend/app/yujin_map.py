@@ -324,6 +324,8 @@ MODULE_TEMPLATE = [
     TemplateEntry("12", 2, 2, True, "0", None),
     TemplateEntry("14", 2, 2, True, "0", None),
     TemplateEntry("16", 2, 2, True, "0", None),
+    TemplateEntry("1C", 2, 2, True, "0", "CH1 DAC CAL"),
+    TemplateEntry("1E", 2, 2, True, "0", "CH2 DAC CAL"),
 ]
 
 

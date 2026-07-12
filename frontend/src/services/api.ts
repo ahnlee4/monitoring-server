@@ -40,6 +40,49 @@ export type PressureGapSettings = {
   updated_at?: string | null;
 };
 
+export type ScheduleSlot = {
+  enabled: boolean;
+  time: string;
+  run_units: number;
+};
+
+export type ScheduleSettings = {
+  days: Array<{
+    day: number;
+    run_slots: ScheduleSlot[];
+    stop_slots: ScheduleSlot[];
+  }>;
+  holidays: string[];
+  updated_at?: string | null;
+};
+
+export type ProductSettings = {
+  factory_password: string;
+  admin_password: string;
+  user_password: string;
+  login_id: string;
+  login_password: string;
+  save_cycle_seconds: number;
+  save_period_days: number;
+  backlight_percent: number;
+  screen_saver_seconds: number;
+  alarm_sound_enabled: boolean;
+  alarm_visible: boolean;
+  camera1_ip: string;
+  camera1_port: number;
+  camera2_ip: string;
+  camera2_port: number;
+  updated_at?: string | null;
+};
+
+export type GsTechSettings = {
+  dio_bit0: number;
+  dio_bit4: number;
+  tcp_mode: 0 | 1;
+  cctv_enabled: boolean;
+  updated_at?: string | null;
+};
+
 export class ControlStatusUnsupportedError extends Error {
   constructor() {
     super("명령 상태 조회 API가 없습니다. backend 이미지를 최신으로 갱신해주세요.");
@@ -145,6 +188,36 @@ export async function fetchPressureGapSettings() {
 
 export async function updatePressureGapSettings(pressureGap: number) {
   return putJson<PressureGapSettings>(`${apiBase()}/app-settings/pressure-gap`, { pressure_gap: pressureGap });
+}
+
+export async function fetchScheduleSettings() {
+  const response = await fetchWithTimeout(`${apiBase()}/app-settings/schedule-settings`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`schedule-settings ${response.status}`);
+  return (await response.json()) as ScheduleSettings;
+}
+
+export async function updateScheduleSettings(settings: ScheduleSettings) {
+  return putJson<ScheduleSettings>(`${apiBase()}/app-settings/schedule-settings`, settings);
+}
+
+export async function fetchProductSettings() {
+  const response = await fetchWithTimeout(`${apiBase()}/app-settings/product-settings`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`product-settings ${response.status}`);
+  return (await response.json()) as ProductSettings;
+}
+
+export async function updateProductSettings(settings: ProductSettings) {
+  return putJson<ProductSettings>(`${apiBase()}/app-settings/product-settings`, settings);
+}
+
+export async function fetchGsTechSettings() {
+  const response = await fetchWithTimeout(`${apiBase()}/app-settings/gstech-settings`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`gstech-settings ${response.status}`);
+  return (await response.json()) as GsTechSettings;
+}
+
+export async function updateGsTechSettings(settings: GsTechSettings) {
+  return putJson<GsTechSettings>(`${apiBase()}/app-settings/gstech-settings`, settings);
 }
 
 export async function enqueueMapWriteBatch(source: string, writes: MapWrite[]) {

@@ -145,6 +145,60 @@ class PressureGapSettingsOut(BaseModel):
     updated_at: datetime | None = None
 
 
+class ScheduleSlotIn(BaseModel):
+    enabled: bool = False
+    time: str = Field(default="00:00", pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    run_units: int = Field(default=1, ge=1, le=12)
+
+
+class ScheduleDayIn(BaseModel):
+    day: int = Field(ge=0, le=6)
+    run_slots: list[ScheduleSlotIn]
+    stop_slots: list[ScheduleSlotIn]
+
+
+class ScheduleSettingsIn(BaseModel):
+    days: list[ScheduleDayIn]
+    holidays: list[str] = Field(default_factory=list)
+
+
+class ScheduleSettingsOut(ScheduleSettingsIn):
+    updated_at: datetime | None = None
+
+
+class ProductSettingsIn(BaseModel):
+    factory_password: str = Field(min_length=1, max_length=32)
+    admin_password: str = Field(pattern=r"^\d{6}$")
+    user_password: str = Field(pattern=r"^\d{4}$")
+    login_id: str = Field(min_length=1, max_length=32)
+    login_password: str = Field(min_length=1, max_length=32)
+    save_cycle_seconds: int = Field(ge=1, le=30)
+    save_period_days: int = Field(ge=1, le=60)
+    backlight_percent: int = Field(ge=0, le=100)
+    screen_saver_seconds: int = Field(ge=0, le=300)
+    alarm_sound_enabled: bool = True
+    alarm_visible: bool = True
+    camera1_ip: str = Field(max_length=45)
+    camera1_port: int = Field(ge=0, le=65535)
+    camera2_ip: str = Field(max_length=45)
+    camera2_port: int = Field(ge=0, le=65535)
+
+
+class ProductSettingsOut(ProductSettingsIn):
+    updated_at: datetime | None = None
+
+
+class GsTechSettingsIn(BaseModel):
+    dio_bit0: int = Field(ge=0, le=7)
+    dio_bit4: int = Field(ge=0, le=7)
+    tcp_mode: Literal[0, 1] = 0
+    cctv_enabled: bool = False
+
+
+class GsTechSettingsOut(GsTechSettingsIn):
+    updated_at: datetime | None = None
+
+
 class GroupOperationIn(BaseModel):
     action: Literal["run", "stop"]
 

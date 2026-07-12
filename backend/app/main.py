@@ -14,6 +14,17 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import get_settings
 from app.control_protocol import RUN_SEQUENCE_KEYS, build_group_operation_writes
 from app.database import Base, engine, get_db, SessionLocal
+from app.admin_settings import (
+    GSTECH_SETTINGS_KEY,
+    PRODUCT_SETTINGS_KEY,
+    SCHEDULE_SETTINGS_KEY,
+    ScheduleRunner,
+    load_json_setting,
+    sanitize_gstech_settings,
+    sanitize_product_settings,
+    sanitize_schedule_settings,
+    save_json_setting,
+)
 from app.models import (
     Alarm,
     AppSetting,
@@ -34,6 +45,8 @@ from app.schemas import (
     DeviceOut,
     GroupOperationIn,
     GroupSettingsIn,
+    GsTechSettingsIn,
+    GsTechSettingsOut,
     MapWriteBatchIn,
     MapWriteIn,
     ModeSettingsIn,
@@ -41,8 +54,12 @@ from app.schemas import (
     OverviewOut,
     PressureGapSettingsIn,
     PressureGapSettingsOut,
+    ProductSettingsIn,
+    ProductSettingsOut,
     RawUart4BatchCommandIn,
     RawUart4CommandIn,
+    ScheduleSettingsIn,
+    ScheduleSettingsOut,
     TelemetryIngestRequest,
     TelemetryRecordOut,
     YujinMapDefinitionOut,
@@ -65,9 +82,11 @@ YUJIN_MAP_HEARTBEATS: dict[str, tuple[datetime, str]] = {}
 YUJIN_LIVE_MAP: dict[str, tuple[str, datetime, str]] = {}
 YUJIN_LIVE_MAP_LOCK = RLock()
 sms_monitor: DisconnectSmsMonitor | None = None
+schedule_runner: ScheduleRunner | None = None
 
 CONTROL_COMMAND_SOURCE_PRIORITY = {
     "group_operation": 0,
+    "schedule_group_operation": 0,
     "control_dialog_operation_mode": 1,
     "control_dialog_control_mode": 1,
     "control_dialog_sort_mode": 1,
@@ -113,7 +132,7 @@ def latest_yujin_seen_at(keys: list[str]) -> datetime | None:
 
 @app.on_event("startup")
 def on_startup() -> None:
-    global sms_monitor
+    global sms_monitor, schedule_runner
     wait_for_database()
     Base.metadata.create_all(bind=engine)
     migrate_legacy_schema()
@@ -121,10 +140,14 @@ def on_startup() -> None:
     seed_yujin_map()
     sms_monitor = DisconnectSmsMonitor(settings, latest_yujin_seen_at, SolapiSmsClient(settings))
     sms_monitor.start()
+    schedule_runner = ScheduleRunner(load_schedule_for_runner, dispatch_schedule_event)
+    schedule_runner.start()
 
 
 @app.on_event("shutdown")
 def on_shutdown() -> None:
+    if schedule_runner:
+        schedule_runner.stop()
     if sms_monitor:
         sms_monitor.stop()
 
@@ -585,6 +608,68 @@ def update_pressure_gap_settings(
     return PressureGapSettingsOut(pressure_gap=pressure_gap, updated_at=setting.updated_at)
 
 
+@app.get("/api/app-settings/schedule-settings", response_model=ScheduleSettingsOut)
+def get_schedule_settings(db: Session = Depends(get_db)) -> ScheduleSettingsOut:
+    payload, updated_at = load_json_setting(db, SCHEDULE_SETTINGS_KEY, sanitize_schedule_settings)
+    return ScheduleSettingsOut(**payload, updated_at=updated_at)
+
+
+@app.put("/api/app-settings/schedule-settings", response_model=ScheduleSettingsOut)
+def update_schedule_settings(
+    payload: ScheduleSettingsIn,
+    db: Session = Depends(get_db),
+) -> ScheduleSettingsOut:
+    normalized, updated_at = save_json_setting(
+        db,
+        SCHEDULE_SETTINGS_KEY,
+        payload.model_dump(),
+        sanitize_schedule_settings,
+    )
+    return ScheduleSettingsOut(**normalized, updated_at=updated_at)
+
+
+@app.get("/api/app-settings/product-settings", response_model=ProductSettingsOut)
+def get_product_settings(db: Session = Depends(get_db)) -> ProductSettingsOut:
+    payload, updated_at = load_json_setting(db, PRODUCT_SETTINGS_KEY, sanitize_product_settings)
+    return ProductSettingsOut(**payload, updated_at=updated_at)
+
+
+@app.put("/api/app-settings/product-settings", response_model=ProductSettingsOut)
+def update_product_settings(
+    payload: ProductSettingsIn,
+    db: Session = Depends(get_db),
+) -> ProductSettingsOut:
+    normalized, updated_at = save_json_setting(
+        db,
+        PRODUCT_SETTINGS_KEY,
+        payload.model_dump(),
+        sanitize_product_settings,
+    )
+    return ProductSettingsOut(**normalized, updated_at=updated_at)
+
+
+@app.get("/api/app-settings/gstech-settings", response_model=GsTechSettingsOut)
+def get_gstech_settings(db: Session = Depends(get_db)) -> GsTechSettingsOut:
+    payload, updated_at = load_json_setting(db, GSTECH_SETTINGS_KEY, sanitize_gstech_settings)
+    return GsTechSettingsOut(**payload, updated_at=updated_at)
+
+
+@app.put("/api/app-settings/gstech-settings", response_model=GsTechSettingsOut)
+def update_gstech_settings(
+    payload: GsTechSettingsIn,
+    db: Session = Depends(get_db),
+) -> GsTechSettingsOut:
+    if payload.dio_bit0 == payload.dio_bit4:
+        raise HTTPException(status_code=422, detail="DIO BIT0 and BIT4 cannot use the same device")
+    normalized, updated_at = save_json_setting(
+        db,
+        GSTECH_SETTINGS_KEY,
+        payload.model_dump(),
+        sanitize_gstech_settings,
+    )
+    return GsTechSettingsOut(**normalized, updated_at=updated_at)
+
+
 def remember_yujin_heartbeats(keys: list[str], recorded_at: datetime, source: str) -> None:
     with YUJIN_LIVE_MAP_LOCK:
         for key in keys:
@@ -611,11 +696,11 @@ def heartbeat_source(key: str, stored_source: str | None) -> str | None:
     return heartbeat[1] or stored_source
 
 
-@app.post("/api/control/group-operation", response_model=ControlCommandOut)
-async def create_group_operation_command(
-    payload: GroupOperationIn,
-    db: Session = Depends(get_db),
-) -> ControlCommandOut:
+def current_group_operation_writes(
+    db: Session,
+    action: str,
+    run_units_override: int | None = None,
+) -> list[dict]:
     current_operation_value = current_map_int(db, "0050", 0)
     connected_mask = current_map_int(db, "0002", 0)
     available_units = [unit for unit in range(1, 13) if connected_mask & (1 << (unit - 1))]
@@ -630,12 +715,12 @@ async def create_group_operation_command(
         cp_status_offset = "30" if prefix == "2" else "16"
         if current_map_int(db, f"{prefix}{unit_hex}{cp_status_offset}", 0):
             running_units.append(unit)
-    writes = build_group_operation_writes(
+    return build_group_operation_writes(
         current_value=current_operation_value,
-        action=payload.action,
+        action=action,
         sequence=sequence,
         available_units=available_units,
-        run_units=current_map_int(db, "0026", 0),
+        run_units=run_units_override if run_units_override is not None else current_map_int(db, "0026", 0),
         oilfree_selector=oilfree_selector,
         repair_mask=current_map_int(db, "0058", 0),
         running_units=running_units,
@@ -643,6 +728,46 @@ async def create_group_operation_command(
         stop_delay_seconds=current_map_int(db, "0004", 0),
         stop_additional_units=not bool(current_map_int(db, "004A", 0) & (1 << 14)),
     )
+
+
+def load_schedule_for_runner() -> dict:
+    with SessionLocal() as db:
+        payload, _ = load_json_setting(db, SCHEDULE_SETTINGS_KEY, sanitize_schedule_settings)
+        return payload
+
+
+def dispatch_schedule_event(event: dict) -> None:
+    action = str(event["action"])
+    run_units = max(1, min(12, int(event.get("run_units", 1))))
+    with SessionLocal() as db:
+        writes = current_group_operation_writes(
+            db,
+            action,
+            run_units_override=run_units if action == "run" else None,
+        )
+        if action == "run":
+            writes.insert(0, {"key": "0026", "address": 0x0026, "length": 2, "value": run_units})
+        command = enqueue_control_command(
+            db,
+            "map_write_batch",
+            {
+                "source": "schedule_group_operation",
+                "action": action,
+                "schedule_event_key": event["event_key"],
+                "writes": writes,
+            },
+            requested_by="schedule",
+            supersede_source="schedule_group_operation",
+        )
+        print(f"schedule command {command.id} queued: {action}, run_units={run_units}")
+
+
+@app.post("/api/control/group-operation", response_model=ControlCommandOut)
+async def create_group_operation_command(
+    payload: GroupOperationIn,
+    db: Session = Depends(get_db),
+) -> ControlCommandOut:
+    writes = current_group_operation_writes(db, payload.action)
     command = enqueue_control_command(
         db,
         "map_write_batch",

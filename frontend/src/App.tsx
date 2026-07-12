@@ -3,11 +3,13 @@ import type { FormEvent, PointerEvent, ReactNode } from "react";
 import { DetailScreen } from "./components/DetailScreen";
 import { EquipmentDetailDialog } from "./components/EquipmentDetailDialog";
 import { MobileLayout } from "./components/MobileLayout";
+import { GsTechSettingsPanel } from "./components/GsTechSettingsPanel";
+import { ProductSettingsPanel } from "./components/ProductSettingsPanel";
 import { QuickButtons } from "./components/QuickButtons";
+import { ScheduleSettingsPanel } from "./components/ScheduleSettingsPanel";
 import {
   MapSettingsPanel,
   NETWORK_SETTING_FIELDS,
-  PRODUCT_SETTING_FIELDS,
   SettingsTabBar,
   settingsTabsForLevel,
 } from "./components/AdminSettingsTabs";
@@ -16,12 +18,11 @@ import { useYujinMapValues } from "./hooks/useYujinMapValues";
 import {
   ControlStatusDelayedError,
   ControlStatusUnsupportedError,
-  fetchCollectorSettings,
+  fetchProductSettings,
   fetchPressureGapSettings,
   enqueueGroupOperation,
   enqueueMapWriteBatch,
   fetchModeSettings,
-  updateCollectorSettings,
   updateModeSettings,
   updatePressureGapSettings,
   waitForControlCommand,
@@ -81,7 +82,7 @@ type UserLevel = 0 | 1 | 2;
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.135";
+const APP_VERSION = "0.1.136";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -110,6 +111,7 @@ const OPTION_LABELS = [
   "교환운전 기능",
   "메인압력모듈 적용",
   "통합운전 제어시 기타 기기 제어",
+  "메인화면 정렬방식",
   "저압경보 적용",
   "저압경보시 예비기 가동유무",
   "고장발생시 예비기 가동유무",
@@ -118,7 +120,6 @@ const OPTION_LABELS = [
   "데이터 저장유무",
   "통합제어 정지시 컴프레샤 정지안함",
   "교환운전 테스트",
-  "인버터 컨트롤 에너지 절약모드",
 ];
 
 const emptyDashboard: DashboardState = {
@@ -381,7 +382,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPress
       sortModeWord,
       operationModeWord,
     },
-    options: buildOptions(optionDevice, sortModeWord),
+    options: buildOptions(optionDevice),
     compressors: orderedCompressors,
   };
 }
@@ -479,14 +480,12 @@ function getInjectionModelName(model: number) {
   return modelMap[model] ? `Micos ${modelMap[model]}` : "-";
 }
 
-function buildOptions(optionDevice: number, sortModeWord: number) {
+function buildOptions(optionDevice: number) {
   const base = emptyDashboard.options;
   const bit = (position: number) => Boolean(optionDevice & (1 << position));
 
   return base.map((option, index) => {
-    const mappedBits = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 7];
-    const checked = index === 13 ? ((Math.trunc(sortModeWord) >> 8) & 0xff) === 1 : bit(mappedBits[index] ?? index);
-    return { ...option, checked };
+    return { ...option, checked: bit(index + 2) };
   });
 }
 
@@ -1608,17 +1607,32 @@ function SegmentedOption({
 function PasswordDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess: (level: UserLevel) => void }) {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("설정 화면에 진입할 비밀번호를 입력하세요");
-  const submitPassword = (event: FormEvent) => {
+  const [checking, setChecking] = useState(false);
+  const submitPassword = async (event: FormEvent) => {
     event.preventDefault();
-    const matchedLevel = (Object.entries(USER_PASSWORDS).find(([, expected]) => expected === password)?.[0] ?? "") as `${UserLevel}` | "";
+    setChecking(true);
+    let configuredPasswords = USER_PASSWORDS;
+    try {
+      const settings = await fetchProductSettings();
+      configuredPasswords = {
+        [USER_LEVELS.admin]: settings.factory_password,
+        [USER_LEVELS.manager]: settings.admin_password,
+        [USER_LEVELS.user]: settings.user_password,
+      };
+    } catch {
+      setMessage("저장된 비밀번호 확인 실패 / 기본 비밀번호로 확인합니다");
+    }
+    const matchedLevel = (Object.entries(configuredPasswords).find(([, expected]) => expected === password)?.[0] ?? "") as `${UserLevel}` | "";
 
     if (matchedLevel === "") {
       setMessage("비밀번호가 올바르지 않습니다");
       setPassword("");
+      setChecking(false);
       return;
     }
 
     onSuccess(Number(matchedLevel) as UserLevel);
+    setChecking(false);
   };
 
   return (
@@ -1639,7 +1653,7 @@ function PasswordDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
         </div>
         <div className="grid h-[54px] grid-cols-2 gap-[10px] max-sm:h-[46px]">
           <button className="rounded-[8px] border border-[#cfdde8] bg-[#f8fbfd] text-[18px] font-black text-[#45657f]" onClick={onClose} type="button">취소</button>
-          <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)]" type="submit">확인</button>
+          <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)] disabled:opacity-50" disabled={checking} type="submit">{checking ? "확인 중..." : "확인"}</button>
         </div>
       </form>
     </DialogShell>
@@ -1802,16 +1816,14 @@ function rotateSequence(sequence: number[], direction: 1 | -1) {
 function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapValues: Record<string, YujinMapValue>; onClose: () => void }) {
   type ModeCellTarget = { rowIndex: number; colIndex: number; kind: "align" | "index" } | { kind: "count" };
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabKey>(() => settingsTabsForLevel(level)[0].key);
+  const [sequenceSection, setSequenceSection] = useState<"order" | "schedule">("order");
   const [modeRows, setModeRows] = useState(() => createDefaultModeRows());
   const [selectedModeIndex, setSelectedModeIndex] = useState(0);
   const [useModeCount, setUseModeCount] = useState("1");
   const [activeModeCell, setActiveModeCell] = useState<ModeCellTarget | null>(null);
   const [replaceNextModeInput, setReplaceNextModeInput] = useState(false);
   const [saveStatus, setSaveStatus] = useState("설정값 불러오는 중...");
-  const [collectorPort, setCollectorPort] = useState<"/dev/ttyUSB0" | "/dev/ttyS7" | null>(null);
-  const [collectorPortStatus, setCollectorPortStatus] = useState("통신 포트 설정값 불러오는 중...");
   const [saving, setSaving] = useState(false);
-  const [collectorSaving, setCollectorSaving] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -1832,23 +1844,6 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
         const nextUseModeCount = readUseUnitCount(mapValues);
         if (nextUseModeCount !== null) setUseModeCount(String(nextUseModeCount));
         setSaveStatus(`저장값 불러오기 실패: ${error instanceof Error ? error.message : String(error)}`);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    fetchCollectorSettings()
-      .then((settings) => {
-        if (!alive) return;
-        setCollectorPort(settings.serial_port);
-        setCollectorPortStatus(settings.serial_port ? `${settings.serial_port} 사용 중` : "저장값 없음 / .env 기본 포트 사용 중");
-      })
-      .catch((error) => {
-        if (!alive) return;
-        setCollectorPortStatus(`통신 포트 불러오기 실패: ${error instanceof Error ? error.message : String(error)}`);
       });
     return () => {
       alive = false;
@@ -1909,19 +1904,6 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
     }
     await saveModeSettings("사용모드 개수");
   };
-  const saveCollectorPort = async (serialPort: "/dev/ttyUSB0" | "/dev/ttyS7") => {
-    setCollectorSaving(true);
-    setCollectorPortStatus(`${serialPort} 저장 중...`);
-    try {
-      const saved = await updateCollectorSettings({ serial_port: serialPort });
-      setCollectorPort(saved.serial_port);
-      setCollectorPortStatus(`${saved.serial_port} 저장 완료 / collector가 자동 적용합니다`);
-    } catch (error) {
-      setCollectorPortStatus(`통신 포트 저장 실패: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setCollectorSaving(false);
-    }
-  };
   const activeModeValue =
     activeModeCell?.kind === "count"
       ? useModeCount
@@ -1976,6 +1958,13 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
         <SettingsTabBar activeTab={activeSettingsTab} level={level} onSelect={setActiveSettingsTab} />
 
         {activeSettingsTab === "sequence" ? (
+          <div className="grid grid-cols-2 gap-[5px] rounded-[8px] bg-[#dfeaf3] p-[4px]">
+            <button className={`h-[42px] rounded-[6px] text-[15px] font-black ${sequenceSection === "order" ? "bg-[#45657f] text-white" : "bg-white text-[#45657f]"}`} onClick={() => setSequenceSection("order")} type="button">운전 순서</button>
+            <button className={`h-[42px] rounded-[6px] text-[15px] font-black ${sequenceSection === "schedule" ? "bg-[#45657f] text-white" : "bg-white text-[#45657f]"}`} onClick={() => setSequenceSection("schedule")} type="button">스케줄</button>
+          </div>
+        ) : null}
+
+        {activeSettingsTab === "sequence" && sequenceSection === "order" ? (
           <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <PanelHeading eyebrow="MODE TABLE">사용모드 / 정렬 설정</PanelHeading>
             <div className="mt-[12px] grid gap-[6px]">
@@ -2050,43 +2039,23 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
           </div>
         ) : null}
 
+        {activeSettingsTab === "sequence" && sequenceSection === "schedule" ? (
+          <ScheduleSettingsPanel disabled={(Number(mapValues["0050"]?.value ?? 0) & 0x00ff) !== 0} />
+        ) : null}
+
         {activeSettingsTab === "network" ? (
           <MapSettingsPanel fields={NETWORK_SETTING_FIELDS} level={level} mapValues={mapValues} title="Network 설정" />
         ) : null}
 
         {activeSettingsTab === "product" ? (
-          <MapSettingsPanel fields={PRODUCT_SETTING_FIELDS} level={level} mapValues={mapValues} title="제품 설정" />
+          <ProductSettingsPanel level={level} mapValues={mapValues} />
         ) : null}
 
         {activeSettingsTab === "gstech" ? (
-          <section className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-            <PanelHeading eyebrow="GSTECH / RS485">통신 포트 설정</PanelHeading>
-            <div className="mt-[12px] grid grid-cols-2 gap-[10px] max-sm:grid-cols-1">
-              <button
-                className={`h-[58px] rounded-[8px] border text-[18px] font-black ${collectorPort === "/dev/ttyUSB0" ? "border-[#237bd0] bg-[#237bd0] text-white" : "border-[#d9e6f0] bg-[#f8fbfd] text-[#173f69]"}`}
-                disabled={collectorSaving}
-                onClick={() => saveCollectorPort("/dev/ttyUSB0")}
-                type="button"
-              >
-                USB0 외장 컨버터
-              </button>
-              <button
-                className={`h-[58px] rounded-[8px] border text-[18px] font-black ${collectorPort === "/dev/ttyS7" ? "border-[#237bd0] bg-[#237bd0] text-white" : "border-[#d9e6f0] bg-[#f8fbfd] text-[#173f69]"}`}
-                disabled={collectorSaving}
-                onClick={() => saveCollectorPort("/dev/ttyS7")}
-                type="button"
-              >
-                S7 내장 RS485
-              </button>
-            </div>
-            <div className="mt-[10px] rounded-[8px] bg-[#eef7ff] px-[10px] py-[9px] text-[13px] font-black text-[#45657f]">{collectorPortStatus}</div>
-            <div className="mt-[12px] rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px] text-[13px] font-bold leading-relaxed text-[#6f879d]">
-              원본의 센서 보정, 4~20mA 채널 및 DIO 세부 설정은 실제 모듈 주소와 연결되는 항목만 순차적으로 추가합니다.
-            </div>
-          </section>
+          <GsTechSettingsPanel mapValues={mapValues} />
         ) : null}
       </div>
-      {activeSettingsTab === "sequence" && activeModeCell ? (
+      {activeSettingsTab === "sequence" && sequenceSection === "order" && activeModeCell ? (
         <NumericKeypad
           allowDecimal={false}
           disabled={saving}

@@ -13,6 +13,8 @@ export type MapSettingField = {
   label: string;
   kind?: MapSettingKind;
   secret?: boolean;
+  scale?: number;
+  unit?: string;
   editableLevels?: SettingsAccessLevel[];
 };
 
@@ -52,10 +54,10 @@ export const PRODUCT_SETTING_FIELDS: MapSettingField[] = [
   { key: "003E", label: "메인 압력 선택 모듈", editableLevels: [FACTORY, ADMIN] },
   { key: "0050", label: "로컬(0) / 리모트(1)", kind: "word-high", editableLevels: [FACTORY, ADMIN] },
   { key: "0004", label: "정지 지연 시간(SEC)", editableLevels: [FACTORY, ADMIN] },
-  { key: "000A", label: "저압경보 압력차 설정", editableLevels: [FACTORY, ADMIN] },
+  { key: "000A", label: "저압경보 압력차 설정", scale: 10, unit: "bar", editableLevels: [FACTORY, ADMIN] },
   { key: "000C", label: "저압경보 적용시간 설정(MIN)", editableLevels: [FACTORY, ADMIN] },
-  { key: "015A", label: "펌웨어 버전", editableLevels: [] },
-  { key: "015C", label: "펌웨어 버전 번호", editableLevels: [] },
+  { key: "015A", label: "펌웨어 Version", editableLevels: [] },
+  { key: "015C", label: "펌웨어 Version 번호", editableLevels: [] },
 ];
 
 export function settingsTabsForLevel(level: SettingsAccessLevel) {
@@ -205,7 +207,9 @@ function MapSettingRow({
           value={value}
         />
       ) : (
-        <div className="mt-[7px] break-all text-[17px] font-black text-[#173f69]">{field.secret && currentValue ? "••••••••" : currentValue || "---"}</div>
+        <div className="mt-[7px] break-all text-[17px] font-black text-[#173f69]">
+          {field.secret && currentValue ? "••••••••" : currentValue || "---"}{field.unit && currentValue ? ` ${field.unit}` : ""}
+        </div>
       )}
       <div className="mt-[7px] flex items-center justify-between gap-[8px]">
         <span className={`min-w-0 truncate text-[10px] font-bold ${status.startsWith("실패") ? "text-[#d92525]" : "text-[#6f879d]"}`}>{status}</span>
@@ -228,6 +232,7 @@ function MapSettingRow({
 
 function displayFieldValue(field: MapSettingField, rawValue: string | number) {
   const raw = String(rawValue ?? "");
+  if (field.scale && Number.isFinite(Number(raw))) return String(Number(raw) / field.scale);
   if (field.kind !== "word-high" && field.kind !== "word-low") return raw;
   const word = Math.trunc(Number(raw) || 0);
   return String(field.kind === "word-high" ? (word >> 8) & 0xff : word & 0xff);
@@ -243,7 +248,7 @@ function buildMapSettingWrite(field: MapSettingField, value: string, mapValue?: 
   if (field.kind === "text") return { ...base, data_hex: encodeFixedText(value, length) };
 
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) throw new Error("정수 값을 입력하세요");
+  if (!Number.isFinite(parsed) || (!field.scale && !Number.isInteger(parsed))) throw new Error(field.scale ? "숫자 값을 입력하세요" : "정수 값을 입력하세요");
   if (field.kind === "word-high" || field.kind === "word-low") {
     if (parsed < 0 || parsed > 255) throw new Error("입력 범위는 0~255입니다");
     const currentWord = Math.trunc(Number(mapValue?.value ?? 0)) & 0xffff;
@@ -251,8 +256,10 @@ function buildMapSettingWrite(field: MapSettingField, value: string, mapValue?: 
     return { ...base, value: nextWord };
   }
 
+  const scaled = field.scale ? Math.round(parsed * field.scale) : parsed;
+  if (!Number.isInteger(scaled)) throw new Error("장비에 저장할 수 없는 소수값입니다");
   const maxValue = 2 ** (length * 8) - 1;
-  const normalized = parsed < 0 ? parsed + maxValue + 1 : parsed;
+  const normalized = scaled < 0 ? scaled + maxValue + 1 : scaled;
   if (normalized < 0 || normalized > maxValue) throw new Error(`입력 범위는 ${-Math.ceil((maxValue + 1) / 2)}~${maxValue}입니다`);
   return { ...base, value: normalized };
 }
