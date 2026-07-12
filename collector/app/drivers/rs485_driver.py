@@ -366,7 +366,15 @@ class RS485Collector(BaseCollector):
             value = int(write.get("value", 0))
             request = build_map_write_request(address, value, length, data)
             expected_data = data if data is not None else value.to_bytes(length, byteorder="big", signed=False)
-            self._write_and_verify(port, request, address, expected_data)
+            try:
+                self._write_and_verify(port, request, address, expected_data)
+            except Uart4ProtocolError as exc:
+                if not bool(write.get("continue_on_verification_failure", False)):
+                    raise
+                print(
+                    f"collector-uart4 write addr 0x{address:04X} verification warning; "
+                    f"continuing batch: {exc}"
+                )
             delay_after = write.get("delay_after_seconds")
             time.sleep(self.write_request_delay if delay_after is None else max(0.0, float(delay_after)))
 

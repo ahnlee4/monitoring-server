@@ -62,6 +62,10 @@ class GroupOperationProtocolTest(unittest.TestCase):
 
         self.assertEqual([write["address"] for write in writes], [0x121A, 0x111A, 0x0050, 0x131A])
         self.assertEqual([write["value"] for write in writes], [0x0001, 0x0001, 0x0100, 0x0001])
+        self.assertTrue(writes[0]["continue_on_verification_failure"])
+        self.assertTrue(writes[1]["continue_on_verification_failure"])
+        self.assertNotIn("continue_on_verification_failure", writes[2])
+        self.assertTrue(writes[3]["continue_on_verification_failure"])
 
     def test_group_stop_does_not_depend_on_target_cp_status(self) -> None:
         writes = build_group_operation_writes(

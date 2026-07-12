@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from app.drivers.rs485_driver import RS485Collector, Uart4ProtocolError, equipment_operation_status_address
+from app.models import ControlCommand
 
 
 class RS485WriteVerificationTest(unittest.TestCase):
@@ -56,6 +57,52 @@ class RS485WriteVerificationTest(unittest.TestCase):
             collector._write_and_verify(port, b"request", 0x0050, b"\x00\x01")
 
         self.assertEqual(port.write.call_count, 2)
+
+    def test_batch_continues_after_best_effort_equipment_verification_failure(self) -> None:
+        collector = self.collector()
+        collector._open_serial = MagicMock(return_value=MagicMock())
+        collector._write_and_verify = MagicMock(
+            side_effect=[Uart4ProtocolError("equipment state transition delayed"), None]
+        )
+        command = ControlCommand(
+            id=1,
+            command_type="map_write_batch",
+            payload={
+                "writes": [
+                    {
+                        "address": 0x121A,
+                        "length": 2,
+                        "value": 0x0001,
+                        "delay_after_seconds": 0,
+                        "continue_on_verification_failure": True,
+                    },
+                    {
+                        "address": 0x111A,
+                        "length": 2,
+                        "value": 0x0001,
+                        "delay_after_seconds": 0,
+                        "continue_on_verification_failure": True,
+                    },
+                ]
+            },
+        )
+
+        collector.execute_control_command(command)
+
+        self.assertEqual(collector._write_and_verify.call_count, 2)
+
+    def test_batch_still_stops_on_strict_verification_failure(self) -> None:
+        collector = self.collector()
+        collector._open_serial = MagicMock(return_value=MagicMock())
+        collector._write_and_verify = MagicMock(side_effect=Uart4ProtocolError("readback mismatch"))
+        command = ControlCommand(
+            id=2,
+            command_type="map_write_batch",
+            payload={"writes": [{"address": 0x0050, "length": 2, "value": 0x0000}]},
+        )
+
+        with self.assertRaisesRegex(Uart4ProtocolError, "readback mismatch"):
+            collector.execute_control_command(command)
 
 
 if __name__ == "__main__":

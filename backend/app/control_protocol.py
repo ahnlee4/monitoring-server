@@ -64,6 +64,9 @@ def build_equipment_operation_write(
         "length": 2,
         "value": 0x0002 if running else 0x0001,
         "delay_after_seconds": max(0.0, float(delay_after_seconds)),
+        # 원본은 장비 상태 확인이 늦거나 일시적으로 실패하더라도
+        # 설정된 간격 뒤 다음 장비의 운전/정지 명령을 계속 전송한다.
+        "continue_on_verification_failure": True,
     }
 
 
