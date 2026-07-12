@@ -3,6 +3,8 @@ import type { FormEvent, PointerEvent, ReactNode } from "react";
 import { DetailScreen, selectDetailCompressors } from "./components/DetailScreen";
 import { EquipmentDetailDialog } from "./components/EquipmentDetailDialog";
 import { ControlAdvancedPanel } from "./components/ControlAdvancedPanel";
+import { EquipmentMaskSettings } from "./components/EquipmentMaskSettings";
+import { ModeSequenceEditor } from "./components/ModeSequenceEditor";
 import { MobileLayout } from "./components/MobileLayout";
 import { GsTechSettingsPanel } from "./components/GsTechSettingsPanel";
 import { ProductSettingsPanel } from "./components/ProductSettingsPanel";
@@ -85,11 +87,13 @@ type UserLevel = 0 | 1 | 2;
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.139";
+const APP_VERSION = "0.1.140";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
-const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
+const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036", "0038", "000E", "0010", "0012"];
 const MODE_ALIGN_ROWS = 7;
-const MODE_ALIGN_COLUMNS = 3;
+const MODE_ALIGN_COLUMNS = 12;
+const MODE_RUN_COUNT_INDEX = MODE_ALIGN_COLUMNS;
+const MODE_ROW_VALUE_COUNT = MODE_ALIGN_COLUMNS + 1;
 const ADMIN_LOGO_CLICK_WINDOW_MS = 5_000;
 const ADMIN_LOGO_CLICK_COUNT = 5;
 type ModeSequenceAction = "previous" | "refresh" | "next";
@@ -146,7 +150,7 @@ const emptyDashboard: DashboardState = {
     operationModeWord: 0,
   },
   options: OPTION_LABELS.map((label) => ({ label, checked: false })),
-  compressors: Array.from({ length: 8 }, (_, index) => emptyCompressor(index)),
+  compressors: Array.from({ length: 12 }, (_, index) => emptyCompressor(index)),
 };
 
 function emptyCompressor(index: number): CompressorState {
@@ -286,7 +290,7 @@ export default function App() {
                     className="grid h-full gap-0"
                     style={{
                       gridTemplateColumns: `repeat(${mainColumnCount}, minmax(0, 1fr))`,
-                      gridTemplateRows: "repeat(2, minmax(0, 1fr))",
+                      gridTemplateRows: `repeat(${Math.ceil(visibleCompressors.length / mainColumnCount)}, minmax(0, 1fr))`,
                     }}
                   >
                     {visibleCompressors.map((compressor) => (
@@ -319,7 +323,7 @@ export default function App() {
         )}
         {activeDialog === "factory" ? <FactoryDialog onClose={() => setActiveDialog(null)} /> : null}
         {activeDialog === "settings" ? (
-          <SettingsDialog level={settingsLevel} mapValues={mapValues} onClose={() => setActiveDialog(null)} />
+          <SettingsDialog configuredCount={dashboard.configuredCount} level={settingsLevel} mapValues={mapValues} onClose={() => setActiveDialog(null)} />
         ) : null}
         {activeDialog === "control" ? (
           <ControlDialog dashboard={dashboard} onClose={() => setActiveDialog(null)} onControlProfileChange={setControlProfile} />
@@ -369,7 +373,7 @@ function buildDashboardFromMap(
   savedMainInverterUnit = 0,
 ): DashboardState {
   const oilfreeSelector = liveMapNumber(values, "0006", 0);
-  const compressors = Array.from({ length: 8 }, (_, index) => buildCompressorFromMap(values, index, oilfreeSelector));
+  const compressors = Array.from({ length: 12 }, (_, index) => buildCompressorFromMap(values, index, oilfreeSelector));
   const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
   const systemOnline = hasRecentValue(values, "0000", SYSTEM_LINK_GRACE_MS) || hasRecentValue(values, "0002", SYSTEM_LINK_GRACE_MS);
   const displayOrder = readRunSequence(values);
@@ -380,7 +384,11 @@ function buildDashboardFromMap(
   const operationModeWord = Math.trunc(liveMapNumber(values, "0050", 0));
   const repairMask = Math.trunc(liveMapNumber(values, "0058", 0));
   const options = buildOptions(optionDevice);
-  const configuredCount = clamp(Math.trunc(liveMapNumber(values, "004E", highestSetBit(connectedMask))), 0, compressors.length);
+  const configuredCount = clamp(
+    Math.trunc(storedMapNumber(values, "004E", highestSetBit(storedMapNumber(values, "0002", connectedMask)))),
+    0,
+    compressors.length,
+  );
   const connectedCompressors = compressors.map((compressor, index) => ({
     ...compressor,
     connected: systemOnline && Boolean(connectedMask & (1 << index)),
@@ -423,10 +431,10 @@ function buildDashboardFromMap(
 
 function readRunSequence(values: Record<string, YujinMapValue>) {
   const sequence = MAIN_RUN_SEQUENCE_KEYS.map((key) => Math.trunc(liveMapNumber(values, key, 0))).filter(
-    (value) => value >= 1 && value <= 8,
+    (value) => value >= 1 && value <= 12,
   );
   const uniqueSequence = Array.from(new Set(sequence));
-  const fallback = Array.from({ length: 8 }, (_, index) => index + 1).filter((value) => !uniqueSequence.includes(value));
+  const fallback = Array.from({ length: 12 }, (_, index) => index + 1).filter((value) => !uniqueSequence.includes(value));
 
   return [...uniqueSequence, ...fallback];
 }
@@ -535,6 +543,12 @@ function liveMapNumber(values: Record<string, YujinMapValue>, key: string, fallb
   if (!isLiveMapValue(item)) return fallback;
   const raw = item.value;
   if (raw === undefined || raw === null || raw === "") return fallback;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function storedMapNumber(values: Record<string, YujinMapValue>, key: string, fallback = 0) {
+  const raw = values[key.toUpperCase()]?.value;
   const numeric = Number(raw);
   return Number.isFinite(numeric) ? numeric : fallback;
 }
@@ -1741,7 +1755,7 @@ type ModeRow = {
 function createDefaultModeRows(): ModeRow[] {
   return Array.from({ length: MODE_ALIGN_ROWS }, (_, index) => ({
     no: `${index + 1}`,
-    values: ["3", "2", "0", "0"],
+    values: [...Array.from({ length: MODE_ALIGN_COLUMNS }, (_, unit) => String(unit + 1)), "3"],
   }));
 }
 
@@ -1782,7 +1796,7 @@ function readModeRowsFromMap(values: Record<string, YujinMapValue>): ModeRow[] {
 
   for (let rowIndex = 0; rowIndex < MODE_ALIGN_ROWS; rowIndex += 1) {
     const runUnit = readLiveWord(values, `04${(0x12 + rowIndex * 2).toString(16).padStart(2, "0")}`);
-    if (runUnit !== null) rows[rowIndex].values[3] = String(runUnit);
+    if (runUnit !== null) rows[rowIndex].values[MODE_RUN_COUNT_INDEX] = String(runUnit);
   }
 
   return rows;
@@ -1799,7 +1813,7 @@ function readUseUnitCount(values: Record<string, YujinMapValue>) {
   if (highWord === null || lowWord === null) return null;
 
   const count = ((highWord & 0xff) << 8) | ((lowWord >> 8) & 0xff);
-  return count > 0 && count <= 12 ? count : null;
+  return count > 0 && count <= MODE_ALIGN_ROWS ? count : null;
 }
 
 function normalizeModeRows(rows: ModeRow[]) {
@@ -1808,26 +1822,41 @@ function normalizeModeRows(rows: ModeRow[]) {
     const row = rows[rowIndex] ?? defaultRow;
     return {
       no: `${rowIndex + 1}`,
-      values: Array.from({ length: 4 }, (_, colIndex) => sanitizeNumericInput(row.values[colIndex] ?? defaultRow.values[colIndex] ?? "0", true) || "0"),
+      values: Array.from({ length: MODE_ROW_VALUE_COUNT }, (_, colIndex) => {
+        const migratedValue = row.values.length === 4
+          ? colIndex < 3 ? row.values[colIndex] : colIndex === MODE_RUN_COUNT_INDEX ? row.values[3] : defaultRow.values[colIndex]
+          : row.values[colIndex];
+        return sanitizeNumericInput(migratedValue ?? defaultRow.values[colIndex] ?? "0", true) || "0";
+      }),
     };
   });
 }
 
 function modeSettingsToState(settings: ModeSettings) {
-  const useModeCount = clamp(Math.trunc(Number(settings.use_mode_count) || 1), 1, 12);
+  const useModeCount = clamp(Math.trunc(Number(settings.use_mode_count) || 1), 1, MODE_ALIGN_ROWS);
   return {
     rows: normalizeModeRows(settings.rows),
     selectedModeIndex: clamp(Math.trunc(Number(settings.selected_mode_index) || 0), 0, Math.min(MODE_ALIGN_ROWS - 1, useModeCount - 1)),
     useModeCount: String(useModeCount),
+    hiddenMask: Math.trunc(Number(settings.hidden_mask) || 0),
+    excludeMask: Math.trunc(Number(settings.exclude_mask) || 0),
   };
 }
 
-function buildModeSettingsPayload(rows: ModeRow[], selectedModeIndex: number, useModeCount: string): ModeSettings {
-  const count = clamp(Math.trunc(Number(useModeCount) || 1), 1, 12);
+function buildModeSettingsPayload(
+  rows: ModeRow[],
+  selectedModeIndex: number,
+  useModeCount: string,
+  hiddenMask = 0,
+  excludeMask = 0,
+): ModeSettings {
+  const count = clamp(Math.trunc(Number(useModeCount) || 1), 1, MODE_ALIGN_ROWS);
   return {
     rows: normalizeModeRows(rows),
     selected_mode_index: clamp(Math.trunc(Number(selectedModeIndex) || 0), 0, Math.min(MODE_ALIGN_ROWS - 1, count - 1)),
     use_mode_count: count,
+    hidden_mask: hiddenMask & 0xffff,
+    exclude_mask: excludeMask & 0xffff,
   };
 }
 
@@ -1849,7 +1878,7 @@ function buildApplySequenceWrites(rows: ModeRow[], selectedModeIndex: number, us
   const allowedModeCount = clamp(Math.trunc(Number(useModeCount) || 1), 1, 12);
   const activeModeIndex = clamp(selectedModeIndex, 0, allowedModeCount - 1);
   const activeRow = normalizedRows[activeModeIndex] ?? row;
-  const runUnitCount = clamp(Math.trunc(Number(activeRow.values[3]) || 1), 1, 12);
+  const runUnitCount = clamp(Math.trunc(Number(activeRow.values[MODE_RUN_COUNT_INDEX]) || 1), 1, 12);
   const selectedUnits = activeRow.values
     .slice(0, MODE_ALIGN_COLUMNS)
     .map((value) => Math.trunc(Number(value) || 0))
@@ -1863,7 +1892,7 @@ function buildNextModeSettings(settings: ModeSettings, dashboard: DashboardState
   const count = clamp(Number(state.useModeCount) || 1, 1, MODE_ALIGN_ROWS);
   const direction = action === "next" ? 1 : -1;
   const selectedModeIndex = (state.selectedModeIndex + direction + count) % count;
-  return buildModeSettingsPayload(state.rows, selectedModeIndex, state.useModeCount);
+  return buildModeSettingsPayload(state.rows, selectedModeIndex, state.useModeCount, state.hiddenMask, state.excludeMask);
 }
 
 function buildModeSequenceActionWrites(settings: ModeSettings, dashboard: DashboardState, action: ModeSequenceAction) {
@@ -1886,13 +1915,22 @@ function rotateSequence(sequence: number[], direction: 1 | -1) {
   return [...sequence.slice(1), sequence[0]];
 }
 
-function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapValues: Record<string, YujinMapValue>; onClose: () => void }) {
+function dashboardMaskConflict(hiddenMask: number, excludeMask: number, configuredCount: number) {
+  if (configuredCount <= 0) return false;
+  const configuredMask = (1 << configuredCount) - 1;
+  return (hiddenMask & configuredMask) === configuredMask || (excludeMask & configuredMask) === configuredMask;
+}
+
+function SettingsDialog({ configuredCount, level, mapValues, onClose }: { configuredCount: number; level: UserLevel; mapValues: Record<string, YujinMapValue>; onClose: () => void }) {
   type ModeCellTarget = { rowIndex: number; colIndex: number; kind: "align" | "index" } | { kind: "count" };
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabKey>(() => settingsTabsForLevel(level)[0].key);
   const [sequenceSection, setSequenceSection] = useState<"order" | "schedule">("order");
   const [modeRows, setModeRows] = useState(() => createDefaultModeRows());
   const [selectedModeIndex, setSelectedModeIndex] = useState(0);
   const [useModeCount, setUseModeCount] = useState("1");
+  const [hiddenMask, setHiddenMask] = useState(0);
+  const [excludeMask, setExcludeMask] = useState(0);
+  const [editingModeRowIndex, setEditingModeRowIndex] = useState<number | null>(null);
   const [activeModeCell, setActiveModeCell] = useState<ModeCellTarget | null>(null);
   const [replaceNextModeInput, setReplaceNextModeInput] = useState(false);
   const [saveStatus, setSaveStatus] = useState("설정값 불러오는 중...");
@@ -1907,6 +1945,8 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
         setModeRows(state.rows);
         setSelectedModeIndex(state.selectedModeIndex);
         setUseModeCount(state.useModeCount);
+        setHiddenMask(state.hiddenMask);
+        setExcludeMask(state.excludeMask);
         setSaveStatus("설정 저장 대기 중");
       })
       .catch((error) => {
@@ -1916,6 +1956,7 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
         if (nextUseUnit !== null) setSelectedModeIndex(nextUseUnit);
         const nextUseModeCount = readUseUnitCount(mapValues);
         if (nextUseModeCount !== null) setUseModeCount(String(nextUseModeCount));
+        setHiddenMask(Math.trunc(Number(mapValues["0008"]?.value ?? 0)));
         setSaveStatus(`저장값 불러오기 실패: ${error instanceof Error ? error.message : String(error)}`);
       });
     return () => {
@@ -1927,11 +1968,13 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
     setSaving(true);
     setSaveStatus(`${label} 저장 중...`);
     try {
-      const saved = await updateModeSettings(buildModeSettingsPayload(rows, modeIndex, modeCount));
+      const saved = await updateModeSettings(buildModeSettingsPayload(rows, modeIndex, modeCount, hiddenMask, excludeMask));
       const state = modeSettingsToState(saved);
       setModeRows(state.rows);
       setSelectedModeIndex(state.selectedModeIndex);
       setUseModeCount(state.useModeCount);
+      setHiddenMask(state.hiddenMask);
+      setExcludeMask(state.excludeMask);
 
       setSaveStatus(`${label} 저장 완료 / 장비 적용 중...`);
       const result = await enqueueMapWriteBatch("settings_apply_sequence", buildApplySequenceWrites(state.rows, state.selectedModeIndex, state.useModeCount));
@@ -1962,7 +2005,7 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
     await saveModeSettings("정렬표");
   };
   const saveModeIndex = async (rowIndex: number) => {
-    const value = Math.trunc(Number(modeRows[rowIndex].values[3] || 0));
+    const value = Math.trunc(Number(modeRows[rowIndex].values[MODE_RUN_COUNT_INDEX] || 0));
     if (!Number.isFinite(value) || value < 0 || value > 0xffff) {
       setSaveStatus("Index 값 범위는 0~65535입니다");
       return;
@@ -1971,11 +2014,41 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
   };
   const saveUseModeCount = async () => {
     const count = Math.trunc(Number(useModeCount));
-    if (!Number.isFinite(count) || count < 1 || count > 12) {
-      setSaveStatus("사용모드 개수 범위는 1~12입니다");
+    if (!Number.isFinite(count) || count < 1 || count > MODE_ALIGN_ROWS) {
+      setSaveStatus(`사용모드 개수 범위는 1~${MODE_ALIGN_ROWS}입니다`);
       return;
     }
     await saveModeSettings("사용모드 개수");
+  };
+  const saveEquipmentMasks = async () => {
+    if (dashboardMaskConflict(hiddenMask, excludeMask, configuredCount)) {
+      setSaveStatus("모든 장비를 숨기거나 통합운전에서 제외할 수 없습니다");
+      return;
+    }
+    setSaving(true);
+    setSaveStatus("숨김/제외 설정 저장 중...");
+    try {
+      const saved = await updateModeSettings(buildModeSettingsPayload(modeRows, selectedModeIndex, useModeCount, hiddenMask, excludeMask));
+      const result = await enqueueMapWriteBatch("settings_equipment_masks", [
+        { key: "0008", address: 0x08, length: 2, value: hiddenMask },
+      ]);
+      await waitForControlCommand(Number(result.id), () => {});
+      setHiddenMask(saved.hidden_mask);
+      setExcludeMask(saved.exclude_mask);
+      setSaveStatus("숨김/제외 설정 저장 완료");
+    } catch (error) {
+      setSaveStatus(`숨김/제외 설정 실패: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const saveEditedModeRow = async (rowIndex: number, sequence: number[], runUnits: number) => {
+    const nextRows = modeRows.map((row, index) => index === rowIndex
+      ? { ...row, values: [...sequence.slice(0, MODE_ALIGN_COLUMNS).map(String), ...Array.from({ length: Math.max(0, MODE_ALIGN_COLUMNS - sequence.length) }, () => "0"), String(runUnits)] }
+      : row);
+    setModeRows(nextRows);
+    setEditingModeRowIndex(null);
+    await saveModeSettings(`${rowIndex + 1}번 운전순서`, nextRows, rowIndex, useModeCount);
   };
   const activeModeValue =
     activeModeCell?.kind === "count"
@@ -2042,7 +2115,7 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
             <PanelHeading eyebrow="MODE TABLE">사용모드 / 정렬 설정</PanelHeading>
             <div className="mt-[12px] grid gap-[6px]">
               {modeRows.map((row, rowIndex) => (
-                <div key={row.no} className="grid h-[38px] grid-cols-[54px_1fr_1fr_1fr_92px] gap-[5px] max-sm:grid-cols-[42px_1fr_1fr_1fr_64px]">
+                <div key={row.no} className="grid min-h-[42px] grid-cols-[54px_1fr_92px_100px] gap-[5px] max-sm:grid-cols-[42px_1fr_68px_72px]">
                   <button
                     className={`flex items-center justify-center rounded-[6px] font-black ${
                       selectedModeIndex === rowIndex ? "bg-[#237bd0] text-white" : "bg-[#eef3f7] text-[#45657f]"
@@ -2056,29 +2129,11 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
                   >
                     {row.no}
                   </button>
-                  {row.values.map((value, colIndex) => (
-                    <input
-                      key={`${row.no}-${colIndex}`}
-                      className="min-w-0 rounded-[6px] border border-[#d9e6f0] bg-[#f8fbfd] px-0 text-center text-[16px] font-bold text-[#173f69] outline-none focus:border-[#237bd0] focus:bg-white"
-                      disabled={saving}
-                      inputMode="numeric"
-                      onChange={(event) => updateModeCell(rowIndex, colIndex, event.target.value)}
-                      onFocus={(event) => {
-                        setActiveModeCell({ rowIndex, colIndex, kind: colIndex === 3 ? "index" : "align" });
-                        setReplaceNextModeInput(true);
-                        event.currentTarget.select();
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        event.currentTarget.blur();
-                        if (colIndex === 3) void saveModeIndex(rowIndex);
-                        else void saveModeAlign();
-                      }}
-                      pattern="[0-9]*"
-                      type="text"
-                      value={value}
-                    />
-                  ))}
+                  <div className="flex min-w-0 items-center overflow-hidden rounded-[6px] border border-[#d9e6f0] bg-[#f8fbfd] px-[9px] text-[14px] font-black text-[#45657f]">
+                    <span className="truncate">{row.values.slice(0, configuredCount).filter((value) => Number(value) > 0).join(" → ") || "순서 없음"}</span>
+                  </div>
+                  <div className="flex items-center justify-center rounded-[6px] bg-[#eef3f7] text-[14px] font-black text-[#173f69]">{row.values[MODE_RUN_COUNT_INDEX]}대</div>
+                  <button className="rounded-[6px] bg-[#237bd0] text-[13px] font-black text-white disabled:opacity-45" disabled={saving || configuredCount === 0} onClick={() => setEditingModeRowIndex(rowIndex)} type="button">순서 편집</button>
                 </div>
               ))}
             </div>
@@ -2105,9 +2160,18 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
                 type="text"
                 value={useModeCount}
               />
-              <ChoiceButton onClick={() => setUseModeCount((value) => String(Math.min(12, Number(value || 1) + 1)))}>+</ChoiceButton>
+              <ChoiceButton onClick={() => setUseModeCount((value) => String(Math.min(MODE_ALIGN_ROWS, Number(value || 1) + 1)))}>+</ChoiceButton>
               <button className="rounded-[8px] bg-[#237bd0] text-[18px] font-bold text-white disabled:opacity-55" disabled={saving} onClick={saveUseModeCount} type="button">저장</button>
             </div>
+            <EquipmentMaskSettings
+              configuredCount={configuredCount}
+              disabled={saving || (Number(mapValues["0050"]?.value ?? 0) & 0x00ff) !== 0}
+              excludeMask={excludeMask}
+              hiddenMask={hiddenMask}
+              onExcludeMaskChange={setExcludeMask}
+              onHiddenMaskChange={setHiddenMask}
+              onSave={() => void saveEquipmentMasks()}
+            />
             <div className="mt-[8px] rounded-[8px] bg-[#eef7ff] px-[10px] py-[8px] text-[13px] font-black text-[#45657f]">{saveStatus}</div>
           </div>
         ) : null}
@@ -2140,6 +2204,17 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
           onConfirm={confirmActiveModeValue}
           unit=""
           value={activeModeValue}
+        />
+      ) : null}
+      {activeSettingsTab === "sequence" && sequenceSection === "order" && editingModeRowIndex !== null ? (
+        <ModeSequenceEditor
+          configuredCount={configuredCount}
+          initialRunUnits={Number(modeRows[editingModeRowIndex].values[MODE_RUN_COUNT_INDEX]) || 1}
+          initialSequence={modeRows[editingModeRowIndex].values.slice(0, MODE_ALIGN_COLUMNS).map(Number)}
+          modeNumber={editingModeRowIndex + 1}
+          onCancel={() => setEditingModeRowIndex(null)}
+          onSave={(sequence, runUnits) => void saveEditedModeRow(editingModeRowIndex, sequence, runUnits)}
+          saving={saving}
         />
       ) : null}
     </DialogShell>

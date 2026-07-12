@@ -247,18 +247,21 @@ MODE_SETTINGS_KEY = "mode_settings"
 COLLECTOR_SETTINGS_KEY = "collector_settings"
 PRESSURE_GAP_SETTINGS_KEY = CONTROL_PROFILE_SETTINGS_KEY
 MODE_ALIGN_ROWS = 7
-MODE_ALIGN_COLUMNS = 4
+MODE_SEQUENCE_COLUMNS = 12
+MODE_ALIGN_COLUMNS = MODE_SEQUENCE_COLUMNS + 1
 ALLOWED_COLLECTOR_SERIAL_PORTS = {"/dev/ttyUSB0", "/dev/ttyS7"}
 
 
 def default_mode_settings_payload() -> dict:
     return {
         "rows": [
-            {"no": str(index + 1), "values": ["3", "2", "0", "0"]}
+            {"no": str(index + 1), "values": [*[str(unit) for unit in range(1, 13)], "3"]}
             for index in range(MODE_ALIGN_ROWS)
         ],
         "selected_mode_index": 0,
         "use_mode_count": 1,
+        "hidden_mask": 0,
+        "exclude_mask": 0,
     }
 
 
@@ -273,6 +276,8 @@ def sanitize_mode_settings_payload(payload: dict) -> dict:
         row = rows[index] if index < len(rows) and isinstance(rows[index], dict) else {}
         raw_values = row.get("values") if isinstance(row, dict) else []
         values = raw_values if isinstance(raw_values, list) else []
+        if len(values) == 4:
+            values = [*values[:3], *[str(unit) for unit in range(4, 13)], values[3]]
         normalized_values = []
         for value_index in range(MODE_ALIGN_COLUMNS):
             raw_value = values[value_index] if value_index < len(values) else defaults["rows"][index]["values"][value_index]
@@ -289,11 +294,21 @@ def sanitize_mode_settings_payload(payload: dict) -> dict:
     except (TypeError, ValueError):
         use_mode_count = defaults["use_mode_count"]
 
-    use_mode_count = max(1, min(12, use_mode_count))
+    use_mode_count = max(1, min(MODE_ALIGN_ROWS, use_mode_count))
+    try:
+        hidden_mask = int(payload.get("hidden_mask", defaults["hidden_mask"]))
+    except (TypeError, ValueError):
+        hidden_mask = 0
+    try:
+        exclude_mask = int(payload.get("exclude_mask", defaults["exclude_mask"]))
+    except (TypeError, ValueError):
+        exclude_mask = 0
     return {
         "rows": normalized_rows,
         "selected_mode_index": max(0, min(MODE_ALIGN_ROWS - 1, use_mode_count - 1, selected_mode_index)),
         "use_mode_count": use_mode_count,
+        "hidden_mask": max(0, min(0xFFFF, hidden_mask)),
+        "exclude_mask": max(0, min(0xFFFF, exclude_mask)),
     }
 
 
@@ -740,6 +755,9 @@ def current_group_operation_writes(
     available_units = [unit for unit in range(1, 13) if connected_mask & (1 << (unit - 1))]
     if not available_units:
         available_units = list(range(1, 9))
+    mode_settings, _ = load_mode_settings(db)
+    exclude_mask = int(mode_settings.get("exclude_mask", 0))
+    available_units = [unit for unit in available_units if not exclude_mask & (1 << (unit - 1))]
     sequence = [current_map_int(db, key, 0) for key in RUN_SEQUENCE_KEYS]
     oilfree_selector = current_map_int(db, "0006", 0)
     running_units = []

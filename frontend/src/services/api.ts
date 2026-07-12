@@ -27,6 +27,8 @@ export type ModeSettings = {
   rows: Array<{ no: string; values: string[] }>;
   selected_mode_index: number;
   use_mode_count: number;
+  hidden_mask: number;
+  exclude_mask: number;
   updated_at?: string | null;
 };
 

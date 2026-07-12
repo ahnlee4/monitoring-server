@@ -121,6 +121,8 @@ class ModeSettingsIn(BaseModel):
     rows: list[ModeRowIn]
     selected_mode_index: int = 0
     use_mode_count: int = 1
+    hidden_mask: int = Field(default=0, ge=0, le=0xFFFF)
+    exclude_mask: int = Field(default=0, ge=0, le=0xFFFF)
 
 
 class ModeSettingsOut(ModeSettingsIn):
