@@ -1,4 +1,5 @@
 .env
+.env.gateway
 node_modules
 dist
 __pycache__

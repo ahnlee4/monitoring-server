@@ -25,6 +25,15 @@ Ubuntu/WSL2 기준으로 동작하는 산업용 현장 모니터링 서버 MVP�
 5. `frontend` React 대시보드는 REST로 초기 화면을 로딩하고, 이후 WebSocket으로 실시간 변경을 반영합니다.
 6. `nginx`가 `/api`, `/ws`는 backend로 프록시하고 `/`는 frontend로 전달합니다.
 
+### 중앙 로그인 게이트웨이
+
+여러 현장 보드를 하나의 외부 도메인에서 사용자별로 분리하려면 별도 중앙 게이트웨이 구성을 사용합니다.
+
+- 실행 구성: `docker-compose.gateway.yml`
+- 보드 내부망 전환 오버레이: `docker-compose.board.gateway.yml`
+- 실행 스크립트: `scripts/start-gateway.sh`
+- DNS, 인증서, 공유기, 방화벽 및 운영 절차: [중앙 로그인 게이트웨이 구축 문서](docs/gateway-deployment.md)
+
 ## 3. MVP 범위
 
 - 장비 목록
