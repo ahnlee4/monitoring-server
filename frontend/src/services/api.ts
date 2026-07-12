@@ -35,6 +35,11 @@ export type CollectorSettings = {
   updated_at?: string | null;
 };
 
+export type PressureGapSettings = {
+  pressure_gap: number | null;
+  updated_at?: string | null;
+};
+
 export class ControlStatusUnsupportedError extends Error {
   constructor() {
     super("명령 상태 조회 API가 없습니다. backend 이미지를 최신으로 갱신해주세요.");
@@ -132,6 +137,16 @@ export async function updateCollectorSettings(settings: { serial_port: "/dev/tty
   return putJson<CollectorSettings>(`${apiBase()}/app-settings/collector-settings`, settings);
 }
 
+export async function fetchPressureGapSettings() {
+  const response = await fetchWithTimeout(`${apiBase()}/app-settings/pressure-gap`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`pressure-gap ${response.status}`);
+  return (await response.json()) as PressureGapSettings;
+}
+
+export async function updatePressureGapSettings(pressureGap: number) {
+  return putJson<PressureGapSettings>(`${apiBase()}/app-settings/pressure-gap`, { pressure_gap: pressureGap });
+}
+
 export async function enqueueMapWriteBatch(source: string, writes: MapWrite[]) {
   return postJson<{ id: number }>(`${apiBase()}/control/map-write-batch`, { source, writes });
 }
@@ -203,8 +218,12 @@ export async function fetchControlCommandStatus(commandId: number, timeoutMs = 1
   return Promise.race([requestPromise, timeoutPromise]);
 }
 
-export async function waitForControlCommand(commandId: number, onStatus: (status: ControlCommandStatus) => void) {
-  const deadline = Date.now() + 15_000;
+export async function waitForControlCommand(
+  commandId: number,
+  onStatus: (status: ControlCommandStatus) => void,
+  timeoutMs = 15_000,
+) {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const status = await fetchControlCommandStatus(commandId);
     if (status) {

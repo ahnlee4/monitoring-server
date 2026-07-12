@@ -1,6 +1,10 @@
 import unittest
 
-from app.control_protocol import build_group_operation_payload, build_group_operation_value
+from app.control_protocol import (
+    build_group_operation_payload,
+    build_group_operation_value,
+    build_group_operation_writes,
+)
 
 
 class GroupOperationProtocolTest(unittest.TestCase):
@@ -23,6 +27,57 @@ class GroupOperationProtocolTest(unittest.TestCase):
     def test_unknown_action_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             build_group_operation_payload(0, "pause")
+
+    def test_group_run_sets_flag_then_starts_units_in_sequence(self) -> None:
+        writes = build_group_operation_writes(
+            current_value=0x0100,
+            action="run",
+            sequence=[3, 1, 2],
+            available_units=[1, 2, 3],
+            run_units=2,
+            oilfree_selector=0b0100,
+            repair_mask=0,
+            running_units=[],
+            run_delay_seconds=4,
+            stop_delay_seconds=2,
+        )
+
+        self.assertEqual([write["address"] for write in writes], [0x0050, 0x1344, 0x111A])
+        self.assertEqual([write["value"] for write in writes], [0x0101, 0x0002, 0x0002])
+        self.assertEqual(writes[1]["delay_after_seconds"], 4)
+
+    def test_group_stop_stops_running_units_in_reverse_then_clears_flag(self) -> None:
+        writes = build_group_operation_writes(
+            current_value=0x0101,
+            action="stop",
+            sequence=[1, 2, 3],
+            available_units=[1, 2, 3],
+            run_units=2,
+            oilfree_selector=0,
+            repair_mask=0,
+            running_units=[1, 3],
+            run_delay_seconds=4,
+            stop_delay_seconds=2,
+        )
+
+        self.assertEqual([write["address"] for write in writes], [0x131A, 0x111A, 0x0050])
+        self.assertEqual([write["value"] for write in writes], [0x0001, 0x0001, 0x0100])
+
+    def test_group_run_skips_repair_units(self) -> None:
+        writes = build_group_operation_writes(
+            current_value=0,
+            action="run",
+            sequence=[1, 2, 3],
+            available_units=[1, 2, 3],
+            run_units=2,
+            oilfree_selector=0,
+            repair_mask=0b0010,
+            running_units=[],
+            run_delay_seconds=0,
+            stop_delay_seconds=0,
+        )
+
+        self.assertEqual([write["address"] for write in writes], [0x0050, 0x111A, 0x131A])
 
 
 if __name__ == "__main__":

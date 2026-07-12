@@ -12,7 +12,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
-from app.control_protocol import build_group_operation_payload
+from app.control_protocol import RUN_SEQUENCE_KEYS, build_group_operation_writes
 from app.database import Base, engine, get_db, SessionLocal
 from app.models import (
     Alarm,
@@ -39,6 +39,8 @@ from app.schemas import (
     ModeSettingsIn,
     ModeSettingsOut,
     OverviewOut,
+    PressureGapSettingsIn,
+    PressureGapSettingsOut,
     RawUart4BatchCommandIn,
     RawUart4CommandIn,
     TelemetryIngestRequest,
@@ -70,7 +72,6 @@ CONTROL_COMMAND_SOURCE_PRIORITY = {
     "control_dialog_control_mode": 1,
     "control_dialog_sort_mode": 1,
     "control_dialog_setting": 2,
-    "control_dialog_device_pressure": 2,
     "settings_apply_sequence": 2,
     "settings_mode_index": 3,
     "settings_use_mode_count": 3,
@@ -217,6 +218,7 @@ def seed_yujin_map() -> None:
 
 MODE_SETTINGS_KEY = "mode_settings"
 COLLECTOR_SETTINGS_KEY = "collector_settings"
+PRESSURE_GAP_SETTINGS_KEY = "pressure_gap_settings"
 MODE_ALIGN_ROWS = 7
 MODE_ALIGN_COLUMNS = 4
 ALLOWED_COLLECTOR_SERIAL_PORTS = {"/dev/ttyUSB0", "/dev/ttyS7"}
@@ -302,6 +304,32 @@ def load_collector_settings(db: Session) -> tuple[dict, datetime | None]:
     except json.JSONDecodeError:
         payload = None
     return sanitize_collector_settings_payload(payload), setting.updated_at
+
+
+def load_pressure_gap_settings(db: Session) -> tuple[float | None, datetime | None]:
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == PRESSURE_GAP_SETTINGS_KEY))
+    if not setting:
+        return None, None
+    try:
+        payload = json.loads(setting.value_json)
+        pressure_gap = max(0.0, float(payload["pressure_gap"]))
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return None, setting.updated_at
+    return pressure_gap, setting.updated_at
+
+
+def save_pressure_gap_settings(db: Session, pressure_gap: float) -> AppSetting:
+    normalized = round(max(0.0, float(pressure_gap)), 1)
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == PRESSURE_GAP_SETTINGS_KEY))
+    value_json = json.dumps({"pressure_gap": normalized}, ensure_ascii=False)
+    if not setting:
+        setting = AppSetting(key=PRESSURE_GAP_SETTINGS_KEY, value_json=value_json)
+        db.add(setting)
+    else:
+        setting.value_json = value_json
+    db.commit()
+    db.refresh(setting)
+    return setting
 
 
 @lru_cache(maxsize=1)
@@ -469,6 +497,8 @@ def normalize_map_write(write: MapWriteIn) -> dict:
         "address": address,
         "length": write.length,
     }
+    if write.delay_after_seconds is not None:
+        normalized["delay_after_seconds"] = write.delay_after_seconds
     if write.data_hex is not None:
         normalized["data_hex"] = write.data_hex
     else:
@@ -489,20 +519,6 @@ def legacy_raw_frame(payload: list[int], append_crc: bool = True, wait_response:
         "append_crc": append_crc,
         "wait_response": wait_response,
     }
-
-
-def legacy_map_write_frame(address: int, value: int, length: int = 2) -> dict:
-    data = int(value).to_bytes(length, byteorder="big", signed=False)
-    payload = [
-        0xC9,
-        0x20,
-        (address >> 8) & 0xFF,
-        address & 0xFF,
-        (length >> 8) & 0xFF,
-        length & 0xFF,
-        *data,
-    ]
-    return legacy_raw_frame(payload)
 
 
 @app.get("/api/yujin/map-schema")
@@ -553,6 +569,22 @@ def update_collector_settings(payload: CollectorSettingsIn, db: Session = Depend
     return CollectorSettingsOut(**normalized, updated_at=setting.updated_at)
 
 
+@app.get("/api/app-settings/pressure-gap", response_model=PressureGapSettingsOut)
+def get_pressure_gap_settings(db: Session = Depends(get_db)) -> PressureGapSettingsOut:
+    pressure_gap, updated_at = load_pressure_gap_settings(db)
+    return PressureGapSettingsOut(pressure_gap=pressure_gap, updated_at=updated_at)
+
+
+@app.put("/api/app-settings/pressure-gap", response_model=PressureGapSettingsOut)
+def update_pressure_gap_settings(
+    payload: PressureGapSettingsIn,
+    db: Session = Depends(get_db),
+) -> PressureGapSettingsOut:
+    setting = save_pressure_gap_settings(db, payload.pressure_gap)
+    pressure_gap, _ = load_pressure_gap_settings(db)
+    return PressureGapSettingsOut(pressure_gap=pressure_gap, updated_at=setting.updated_at)
+
+
 def remember_yujin_heartbeats(keys: list[str], recorded_at: datetime, source: str) -> None:
     with YUJIN_LIVE_MAP_LOCK:
         for key in keys:
@@ -585,13 +617,41 @@ async def create_group_operation_command(
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
     current_operation_value = current_map_int(db, "0050", 0)
+    connected_mask = current_map_int(db, "0002", 0)
+    available_units = [unit for unit in range(1, 13) if connected_mask & (1 << (unit - 1))]
+    if not available_units:
+        available_units = list(range(1, 9))
+    sequence = [current_map_int(db, key, 0) for key in RUN_SEQUENCE_KEYS]
+    oilfree_selector = current_map_int(db, "0006", 0)
+    running_units = []
+    for unit in available_units:
+        prefix = "2" if oilfree_selector & (1 << (unit - 1)) else "1"
+        unit_hex = f"{unit:X}"
+        run_mode_offset = "3A" if prefix == "2" else "18"
+        cp_status_offset = "30" if prefix == "2" else "16"
+        if current_map_int(db, f"{prefix}{unit_hex}{run_mode_offset}", 0) or current_map_int(
+            db, f"{prefix}{unit_hex}{cp_status_offset}", 0
+        ):
+            running_units.append(unit)
+    writes = build_group_operation_writes(
+        current_value=current_operation_value,
+        action=payload.action,
+        sequence=sequence,
+        available_units=available_units,
+        run_units=current_map_int(db, "0026", 0),
+        oilfree_selector=oilfree_selector,
+        repair_mask=current_map_int(db, "0058", 0),
+        running_units=running_units,
+        run_delay_seconds=current_map_int(db, "003C", 0),
+        stop_delay_seconds=current_map_int(db, "0004", 0),
+    )
     command = enqueue_control_command(
         db,
-        "raw_uart4",
+        "map_write_batch",
         {
             "source": "group_operation",
             "action": payload.action,
-            **legacy_raw_frame(build_group_operation_payload(current_operation_value, payload.action)),
+            "writes": writes,
         },
         supersede_source="group_operation",
     )
@@ -604,24 +664,23 @@ async def create_group_settings_command(
     payload: GroupSettingsIn,
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
-    pressure_gap_value = round(payload.pressure_gap * 10)
-    frames = [
-        legacy_map_write_frame(0x16, round(payload.no_load_pressure * 10)),
-        legacy_map_write_frame(0x18, round(payload.load_pressure * 10)),
-        legacy_raw_frame([0xC9, 0x82, 0x3C, (pressure_gap_value >> 8) & 0xFF, pressure_gap_value & 0xFF]),
-        legacy_map_write_frame(0x54, round(payload.low_alarm_pressure * 10)),
-        legacy_map_write_frame(0x26, int(payload.run_units)),
-        legacy_map_write_frame(0x42, int(payload.change_hours)),
-        legacy_map_write_frame(0x22, 1 if payload.control_mode == "group" else 0),
-        legacy_map_write_frame(0x24, set_word_low_byte(current_map_int(db, "0024", 0), 1 if payload.sort_mode == "time" else 0)),
-        legacy_map_write_frame(0x50, set_word_high_byte(current_map_int(db, "0050", 0), 0 if payload.operation_mode == "local" else 1)),
+    save_pressure_gap_settings(db, payload.pressure_gap)
+    writes = [
+        {"key": "0016", "address": 0x16, "length": 2, "value": round(payload.no_load_pressure * 10)},
+        {"key": "0018", "address": 0x18, "length": 2, "value": round(payload.load_pressure * 10)},
+        {"key": "001C", "address": 0x1C, "length": 2, "value": round(payload.low_alarm_pressure * 10)},
+        {"key": "0026", "address": 0x26, "length": 2, "value": int(payload.run_units)},
+        {"key": "0042", "address": 0x42, "length": 2, "value": int(payload.change_hours)},
+        {"key": "0022", "address": 0x22, "length": 2, "value": 1 if payload.control_mode == "group" else 0},
+        {"key": "0024", "address": 0x24, "length": 2, "value": set_word_low_byte(current_map_int(db, "0024", 0), 1 if payload.sort_mode == "time" else 0)},
+        {"key": "0050", "address": 0x50, "length": 2, "value": set_word_high_byte(current_map_int(db, "0050", 0), 0 if payload.operation_mode == "local" else 1)},
     ]
     command = enqueue_control_command(
         db,
-        "raw_uart4_batch",
+        "map_write_batch",
         {
             "source": "group_settings",
-            "frames": frames,
+            "writes": writes,
         },
     )
     await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})

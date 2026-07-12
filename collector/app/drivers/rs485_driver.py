@@ -140,6 +140,7 @@ class RS485Collector(BaseCollector):
         inter_request_delay: float = 0.05,
         write_request_delay: float = 0.05,
         write_response_timeout: float = 0.25,
+        write_verify_attempts: int = 3,
         debug_hex: bool = False,
         slow_address_log_ms: float = 200.0,
         publish_telemetry_frames: bool = False,
@@ -153,6 +154,7 @@ class RS485Collector(BaseCollector):
         self.inter_request_delay = inter_request_delay
         self.write_request_delay = write_request_delay
         self.write_response_timeout = write_response_timeout
+        self.write_verify_attempts = max(1, write_verify_attempts)
         self.debug_hex = debug_hex
         self.slow_address_log_ms = slow_address_log_ms
         self.publish_telemetry_frames = publish_telemetry_frames
@@ -363,13 +365,10 @@ class RS485Collector(BaseCollector):
             data = bytes_from_hex(str(write["data_hex"])) if "data_hex" in write else None
             value = int(write.get("value", 0))
             request = build_map_write_request(address, value, length, data)
-            with self._serial_lock:
-                port.reset_input_buffer()
-                port.write(request)
-                port.flush()
-                self._debug("tx-control", request)
-                self._read_control_response(port, address)
-            time.sleep(self.write_request_delay)
+            expected_data = data if data is not None else value.to_bytes(length, byteorder="big", signed=False)
+            self._write_and_verify(port, request, address, expected_data)
+            delay_after = write.get("delay_after_seconds")
+            time.sleep(self.write_request_delay if delay_after is None else max(0.0, float(delay_after)))
 
     def _execute_raw_uart4_command(self, command: ControlCommand) -> None:
         self._send_raw_uart4_frame(command.payload)
@@ -403,20 +402,57 @@ class RS485Collector(BaseCollector):
                 except Uart4ProtocolError as exc:
                     print(f"collector-uart4 raw command no immediate response: {exc}")
 
-    def _read_control_response(self, port: serial.Serial, address: int) -> None:
-        if self.write_response_timeout <= 0:
-            return
-        try:
-            frame = self._read_frame(port, self.write_response_timeout)
-        except Uart4ProtocolError as exc:
-            print(f"collector-uart4 write addr 0x{address:04X} no immediate response: {exc}")
-            return
+    def _write_and_verify(self, port: serial.Serial, request: bytes, address: int, expected_data: bytes) -> None:
+        last_error = "write verification failed"
+        for attempt in range(1, self.write_verify_attempts + 1):
+            with self._serial_lock:
+                port.reset_input_buffer()
+                port.write(request)
+                port.flush()
+                self._debug("tx-control", request)
 
-        self._debug("rx-control", frame)
-        try:
-            self._apply_response_frame(frame, expected_mem_addr=(address >> 8) & 0xFF)
-        except Uart4ProtocolError as exc:
-            print(f"collector-uart4 write addr 0x{address:04X} response ignored: {exc}")
+            if self.write_response_timeout <= 0:
+                return
+            time.sleep(self.write_request_delay)
+            try:
+                actual_data = self._read_back_map_bytes(port, address, len(expected_data))
+            except Uart4ProtocolError as exc:
+                last_error = str(exc)
+            else:
+                if actual_data == expected_data:
+                    return
+                last_error = f"readback {actual_data.hex().upper()} != expected {expected_data.hex().upper()}"
+
+            if attempt < self.write_verify_attempts:
+                print(
+                    f"collector-uart4 write addr 0x{address:04X} verify retry "
+                    f"{attempt}/{self.write_verify_attempts}: {last_error}"
+                )
+
+        raise Uart4ProtocolError(
+            f"write addr 0x{address:04X} was not confirmed after {self.write_verify_attempts} attempts: {last_error}"
+        )
+
+    def _read_back_map_bytes(self, port: serial.Serial, address: int, length: int) -> bytes:
+        mem_addr = (address >> 8) & 0xFF
+        with self._serial_lock:
+            port.reset_input_buffer()
+            request = build_full_read_request(mem_addr)
+            port.write(request)
+            port.flush()
+            self._debug("tx-verify", request)
+            frame = self._read_frame(port, self.write_response_timeout)
+            self._debug("rx-verify", frame)
+            words = self._apply_response_frame(frame, expected_mem_addr=mem_addr)
+
+        page_data = b"".join(int(word).to_bytes(2, byteorder="big", signed=False) for word in words)
+        offset = address & 0xFF
+        actual_data = page_data[offset : offset + length]
+        if len(actual_data) != length:
+            raise Uart4ProtocolError(
+                f"readback addr 0x{address:04X} returned {len(actual_data)} of {length} bytes"
+            )
+        return actual_data
 
     def _apply_response_frame(self, frame: bytes, expected_mem_addr: int | None = None) -> list[int]:
         command = frame[1]

@@ -136,6 +136,15 @@ class CollectorSettingsOut(BaseModel):
     updated_at: datetime | None = None
 
 
+class PressureGapSettingsIn(BaseModel):
+    pressure_gap: float = Field(ge=0)
+
+
+class PressureGapSettingsOut(BaseModel):
+    pressure_gap: float | None = None
+    updated_at: datetime | None = None
+
+
 class GroupOperationIn(BaseModel):
     action: Literal["run", "stop"]
 
@@ -160,6 +169,7 @@ class MapWriteIn(BaseModel):
     length: int = 2
     value: int | None = None
     data_hex: str | None = None
+    delay_after_seconds: float | None = Field(default=None, ge=0)
 
 
 class MapWriteBatchIn(BaseModel):

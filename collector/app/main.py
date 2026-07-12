@@ -31,7 +31,8 @@ def build_collector() -> tuple[BaseCollector, int]:
         response_timeout = float(get_env("RS485_RESPONSE_TIMEOUT_SECONDS", "0.35"))
         inter_request_delay = float(get_env("RS485_INTER_REQUEST_DELAY_SECONDS", "0.005"))
         write_request_delay = float(get_env("RS485_WRITE_REQUEST_DELAY_SECONDS", "0.005"))
-        write_response_timeout = float(get_env("RS485_WRITE_RESPONSE_TIMEOUT_SECONDS", "0"))
+        write_response_timeout = float(get_env("RS485_WRITE_RESPONSE_TIMEOUT_SECONDS", "0.35"))
+        write_verify_attempts = get_int_env("RS485_WRITE_VERIFY_ATTEMPTS", 3)
         debug_hex = get_env("RS485_DEBUG_HEX", "false").strip().lower() in ("1", "true", "yes", "on")
         slow_address_log_ms = float(get_env("RS485_SLOW_ADDRESS_LOG_MS", "200"))
         settings_poll_interval_cycles = get_int_env("RS485_SETTINGS_POLL_INTERVAL_CYCLES", 5)
@@ -48,6 +49,7 @@ def build_collector() -> tuple[BaseCollector, int]:
                 inter_request_delay=inter_request_delay,
                 write_request_delay=write_request_delay,
                 write_response_timeout=write_response_timeout,
+                write_verify_attempts=write_verify_attempts,
                 debug_hex=debug_hex,
                 slow_address_log_ms=slow_address_log_ms,
                 publish_telemetry_frames=publish_telemetry_frames,

@@ -9,15 +9,16 @@ import {
   ControlStatusDelayedError,
   ControlStatusUnsupportedError,
   fetchCollectorSettings,
+  fetchPressureGapSettings,
   enqueueGroupOperation,
   enqueueMapWriteBatch,
-  enqueueRawUart4BatchCommand,
   fetchModeSettings,
   updateCollectorSettings,
   updateModeSettings,
+  updatePressureGapSettings,
   waitForControlCommand,
 } from "./services/api";
-import type { MapWrite, ModeSettings, RawUart4Frame } from "./services/api";
+import type { MapWrite, ModeSettings } from "./services/api";
 import type { YujinMapValue } from "./types";
 
 type CompressorState = {
@@ -164,6 +165,7 @@ export default function App() {
   const [settingsLevel, setSettingsLevel] = useState<UserLevel>(USER_LEVELS.user);
   const [adminLogoClicks, setAdminLogoClicks] = useState({ count: 0, lastAt: 0 });
   const [modeSequenceBusy, setModeSequenceBusy] = useState(false);
+  const [pressureGap, setPressureGap] = useState<number | null>(null);
   const mapValues = useYujinMapValues();
   const isMobile = useIsMobileViewport();
 
@@ -172,7 +174,13 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const dashboard = useMemo(() => buildDashboardFromMap(mapValues), [mapValues]);
+  useEffect(() => {
+    fetchPressureGapSettings()
+      .then((result) => setPressureGap(result.pressure_gap))
+      .catch((error) => console.error("failed to load pressure gap settings", error));
+  }, []);
+
+  const dashboard = useMemo(() => buildDashboardFromMap(mapValues, pressureGap), [mapValues, pressureGap]);
   const lowPressureText = getLowPressureText(dashboard.lowPressureAlarm);
   const showMainScreen = activeScreen === "main";
   const visibleCompressors = dashboard.compressors.filter((compressor) => compressor.connected);
@@ -277,7 +285,9 @@ export default function App() {
         {activeDialog === "settings" ? (
           <SettingsDialog level={settingsLevel} mapValues={mapValues} onClose={() => setActiveDialog(null)} />
         ) : null}
-        {activeDialog === "control" ? <ControlDialog dashboard={dashboard} onClose={() => setActiveDialog(null)} /> : null}
+        {activeDialog === "control" ? (
+          <ControlDialog dashboard={dashboard} onClose={() => setActiveDialog(null)} onPressureGapChange={setPressureGap} />
+        ) : null}
         {activeDialog === "password" ? (
           <PasswordDialog
             onClose={() => setActiveDialog(null)}
@@ -317,7 +327,7 @@ function useIsMobileViewport() {
   return isMobile;
 }
 
-function buildDashboardFromMap(values: Record<string, YujinMapValue>): DashboardState {
+function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPressureGap: number | null = null): DashboardState {
   const oilfreeSelector = liveMapNumber(values, "0006", 0);
   const compressors = Array.from({ length: 8 }, (_, index) => buildCompressorFromMap(values, index, oilfreeSelector));
   const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
@@ -346,8 +356,8 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
     control: {
       noLoadPressure: scale10(liveMapNumber(values, "0016", 0)),
       loadPressure: scale10(liveMapNumber(values, "0018", 0)),
-      pressureGap: scale10(liveMapNumber(values, "043C", liveMapNumber(values, "001A", 0))),
-      lowAlarmPressure: scale10(liveMapNumber(values, "0054", 0)),
+      pressureGap: savedPressureGap ?? scale10(liveMapNumber(values, "001A", 0)),
+      lowAlarmPressure: scale10(liveMapNumber(values, "001C", 0)),
       runUnits: Math.trunc(liveMapNumber(values, "0026", 0)),
       changeHours: Math.trunc(liveMapNumber(values, "0042", 0)),
       remainMinutes: Math.trunc(liveMapNumber(values, "0048", 0)),
@@ -1009,7 +1019,15 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onClose: () => void }) {
+function ControlDialog({
+  dashboard,
+  onClose,
+  onPressureGapChange,
+}: {
+  dashboard: DashboardState;
+  onClose: () => void;
+  onPressureGapChange: (value: number) => void;
+}) {
   const [sortMode, setSortMode] = useState<"setting" | "time">((dashboard.control.sortModeWord & 0x00ff) === 1 ? "time" : "setting");
   const [operationMode, setOperationMode] = useState<"local" | "remote">(((dashboard.control.operationModeWord >> 8) & 0xff) === 0 ? "local" : "remote");
   const [controlMode, setControlMode] = useState<"single" | "group">(dashboard.control.controlModeWord === 1 ? "group" : "single");
@@ -1038,7 +1056,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     { label: "무부하 압력", key: "noLoadPressure", unit: "bar", step: "0.1", address: 0x16, scale: 10 },
     { label: "부하 압력", key: "loadPressure", unit: "bar", step: "0.1", address: 0x18, scale: 10 },
     { label: "장비별 압력차", key: "pressureGap", unit: "bar", step: "0.1", address: 0x3c, scale: 10 },
-    { label: "저압경보 압력 설정", key: "lowAlarmPressure", unit: "bar", step: "0.1", address: 0x54, scale: 10 },
+    { label: "저압경보 압력 설정", key: "lowAlarmPressure", unit: "bar", step: "0.1", address: 0x1c, scale: 10 },
     { label: "교환 운전 시간", key: "changeHours", unit: "hr", step: "1", address: 0x42, scale: 1 },
     { label: "가동 대수", key: "runUnits", unit: "ea", step: "1", address: 0x26, scale: 1 },
   ];
@@ -1120,30 +1138,17 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     }
   };
 
-  const sendRawControlFrames = async (label: string, source: string, frames: RawUart4Frame[]) => {
-    let commandId: number | null = null;
+  const savePressureGap = async (value: number) => {
     setCommandBusy(true);
-    setCommandStatus(`${label} 명령 전송 중...`);
+    setCommandStatus("장비별 압력차 저장 중...");
     try {
-      const result = await enqueueRawUart4BatchCommand(source, frames);
-      commandId = Number(result.id);
-      setCommandStatus(`${label} #${commandId} 전송 대기...`);
-      await waitForControlCommand(commandId, (status) => {
-        if (status.status === "pending") setCommandStatus(`${label} #${commandId} 대기 중...`);
-        if (status.status === "in_progress") setCommandStatus(`${label} #${commandId} 장비 전송 중...`);
-        if (status.status === "completed") setCommandStatus(`${label} #${commandId} 전송 완료`);
-      });
+      const result = await updatePressureGapSettings(value);
+      const savedValue = result.pressure_gap ?? value;
+      onPressureGapChange(savedValue);
+      setCommandStatus("장비별 압력차 저장 완료");
       return true;
     } catch (error) {
-      if (error instanceof ControlStatusUnsupportedError && commandId !== null) {
-        setCommandStatus(`${label} #${commandId} 등록됨 / backend 갱신 필요`);
-        return true;
-      }
-      if (error instanceof ControlStatusDelayedError) {
-        setCommandStatus(`${label} #${error.commandId} 등록됨 / 완료 확인 지연`);
-        return true;
-      }
-      setCommandStatus(`${label} 실패: ${error instanceof Error ? error.message : String(error)}`);
+      setCommandStatus(`장비별 압력차 실패: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     } finally {
       setCommandBusy(false);
@@ -1162,7 +1167,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
         if (status.status === "pending") setCommandStatus(`명령 #${commandId} 대기 중...`);
         if (status.status === "in_progress") setCommandStatus(`명령 #${commandId} 장비 전송 중...`);
         if (status.status === "completed") setCommandStatus(`명령 #${commandId} 전송 완료`);
-      });
+      }, 180_000);
     } catch (error) {
       if (error instanceof ControlStatusUnsupportedError && commandId !== null) setCommandStatus(`명령 #${commandId} 등록됨 / backend 갱신 필요`);
       else if (error instanceof ControlStatusDelayedError) setCommandStatus(`명령 #${error.commandId} 등록됨 / 완료 확인 지연`);
@@ -1180,8 +1185,7 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
       const value = numberValue(key);
       const packetValue = Math.round(value * control.scale);
       if (key === "pressureGap") {
-        const frames = buildDevicePressureFrames(packetValue, dashboard.compressors.length);
-        const success = await sendRawControlFrames(control.label, "control_dialog_device_pressure", frames);
+        const success = await savePressureGap(value);
         if (success) {
           setAppliedSettings((current) => ({ ...current, [key]: settings[key] }));
         }
@@ -1407,25 +1411,6 @@ function sanitizeNumericInput(value: string, integerOnly: boolean) {
   if (integerOnly) return numeric;
   const [head, ...tails] = numeric.split(".");
   return tails.length > 0 ? `${head}.${tails.join("")}` : head;
-}
-
-function buildDevicePressureFrames(value: number, compressorCount: number): RawUart4Frame[] {
-  const boundedValue = value & 0xffff;
-  const frameForOther04 = (address: number): RawUart4Frame => ({
-    payload_hex: legacyPayloadHex(0xc9, 0x82, address, (boundedValue >> 8) & 0xff, boundedValue & 0xff),
-    append_crc: true,
-    delay_after_seconds: 0.2,
-  });
-  const frames = [frameForOther04(0x3c)];
-  const pressureCount = clamp(compressorCount - 1, 0, 15);
-  for (let index = 0; index < pressureCount; index += 1) {
-    frames.push(frameForOther04(0x1c + index * 2));
-  }
-  return frames;
-}
-
-function legacyPayloadHex(...bytes: number[]) {
-  return bytes.map((byte) => (byte & 0xff).toString(16).padStart(2, "0").toUpperCase()).join("");
 }
 
 function NumericKeypad({
