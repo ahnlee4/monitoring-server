@@ -584,13 +584,14 @@ async def create_group_operation_command(
     payload: GroupOperationIn,
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
+    current_operation_value = current_map_int(db, "0050", 0)
     command = enqueue_control_command(
         db,
         "raw_uart4",
         {
             "source": "group_operation",
             "action": payload.action,
-            **legacy_raw_frame(build_group_operation_payload(payload.action)),
+            **legacy_raw_frame(build_group_operation_payload(current_operation_value, payload.action)),
         },
         supersede_source="group_operation",
     )
