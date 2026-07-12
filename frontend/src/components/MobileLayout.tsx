@@ -162,7 +162,7 @@ function MobileHeader({
         </div>
       </div>
       <div className="mt-[10px] grid grid-cols-2 gap-[8px]">
-        <MobileSummaryTile label="메인 압력" unit="bar" value={formatNumber(dashboard.mainPressure, 1)} />
+        <MobileSummaryTile label="메인 압력" unit="bar" value={formatNumber(dashboard.mainPressure, 2)} />
         <MobileSummaryTile label="현재 시각" value={formatMobileDateTime(now)} />
       </div>
     </header>

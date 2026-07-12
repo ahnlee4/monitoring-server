@@ -333,7 +333,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPress
   const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
   const systemOnline = hasRecentValue(values, "0000", SYSTEM_LINK_GRACE_MS) || hasRecentValue(values, "0002", SYSTEM_LINK_GRACE_MS);
   const displayOrder = readRunSequence(values);
-  const mainPressure = scale10(liveMapNumber(values, "0000", 0));
+  const mainPressure = scaleMainPressure(liveMapNumber(values, "0000", 0));
   const optionDevice = liveMapNumber(values, "004A", 0);
   const lowAlarmStep = liveMapNumber(values, "0054", 0);
   const sortModeWord = Math.trunc(liveMapNumber(values, "0024", 0));
@@ -491,6 +491,11 @@ function scale10(value: number) {
   return Math.round((value / 10) * 10) / 10;
 }
 
+function scaleMainPressure(value: number) {
+  if (value === INVALID_DISPLAY_RAW_VALUE) return Number.NaN;
+  return Math.round(value) / 100;
+}
+
 function formatScaledValue(value: number | undefined, unit: string) {
   if (value === undefined || !Number.isFinite(value)) return "---";
   return `${value.toFixed(1)} ${unit}`;
@@ -565,7 +570,7 @@ function TopPressurePanel({ value }: { value: number }) {
       <span className="block w-full text-center text-[13px] font-black leading-none tracking-[0.14em] text-[#1b5c96]">메인 압력</span>
       <span className="mt-[3px] grid w-full grid-cols-[42px_1fr_42px] items-end leading-none text-[#083f73] drop-shadow-[0_1px_0_rgba(255,255,255,0.45)]">
         <span />
-        <strong className="text-center font-black tabular-nums tracking-[-0.07em] text-[38px]">{hasValue ? value.toFixed(1) : "---"}</strong>
+        <strong className="text-center font-black tabular-nums tracking-[-0.07em] text-[38px]">{hasValue ? value.toFixed(2) : "---"}</strong>
         <small className="pb-[5px] text-left text-[17px] font-black tracking-[-0.03em]">{hasValue ? "bar" : ""}</small>
       </span>
     </TopPanel>
