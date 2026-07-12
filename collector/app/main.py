@@ -12,6 +12,14 @@ from app.models import CollectorBatch
 SENTINEL_BATCH = CollectorBatch(source="collector-stop", recorded_at="")
 
 
+def collector_loop_delay(interval: float, idle_delay: float, batch: CollectorBatch) -> float:
+    if interval > 0:
+        return interval
+    if batch.frames or batch.map_values or batch.heartbeat_keys:
+        return 0.0
+    return max(0.0, idle_delay)
+
+
 def build_collector() -> tuple[BaseCollector, int]:
     driver = get_env("COLLECTOR_DRIVER", "rs485").strip().lower()
     interval = get_int_env("COLLECTOR_INTERVAL_SECONDS", 0)
@@ -175,6 +183,7 @@ def main() -> None:
     settings_poll_seconds = float(get_env("COLLECTOR_SETTINGS_POLL_SECONDS", "2"))
     slow_poll_log_ms = float(get_env("COLLECTOR_SLOW_POLL_LOG_MS", "0"))
     status_log_interval_seconds = float(get_env("COLLECTOR_STATUS_LOG_INTERVAL_SECONDS", "0"))
+    idle_loop_delay_seconds = float(get_env("COLLECTOR_IDLE_LOOP_DELAY_SECONDS", "0.01"))
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
     collector, interval = build_collector()
@@ -234,8 +243,9 @@ def main() -> None:
             )
         if batch.map_values or batch.heartbeat_keys or (publish_telemetry and batch.frames):
             enqueue_latest_batch(publish_queue, batch)
-        if interval > 0:
-            time.sleep(interval)
+        loop_delay = collector_loop_delay(interval, idle_loop_delay_seconds, batch)
+        if loop_delay > 0:
+            time.sleep(loop_delay)
 
 
 if __name__ == "__main__":
