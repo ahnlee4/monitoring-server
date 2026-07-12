@@ -415,13 +415,13 @@ class RS485Collector(BaseCollector):
                 return
             time.sleep(self.write_request_delay)
             try:
-                actual_data = self._read_back_map_bytes(port, address, len(expected_data))
+                verified, actual_description = self._verify_map_write(port, address, expected_data)
             except Uart4ProtocolError as exc:
                 last_error = str(exc)
             else:
-                if actual_data == expected_data:
+                if verified:
                     return
-                last_error = f"readback {actual_data.hex().upper()} != expected {expected_data.hex().upper()}"
+                last_error = actual_description
 
             if attempt < self.write_verify_attempts:
                 print(
@@ -431,6 +431,25 @@ class RS485Collector(BaseCollector):
 
         raise Uart4ProtocolError(
             f"write addr 0x{address:04X} was not confirmed after {self.write_verify_attempts} attempts: {last_error}"
+        )
+
+    def _verify_map_write(self, port: serial.Serial, address: int, expected_data: bytes) -> tuple[bool, str]:
+        operation_status_address = equipment_operation_status_address(address)
+        if operation_status_address is not None and len(expected_data) == 2:
+            command = int.from_bytes(expected_data, byteorder="big", signed=False)
+            if command in {0x0001, 0x0002}:
+                status_data = self._read_back_map_bytes(port, operation_status_address, 2)
+                status = int.from_bytes(status_data, byteorder="big", signed=False)
+                if command == 0x0002:
+                    verified = status != 0
+                else:
+                    verified = status in {0, 7, 8}
+                return verified, f"cp status {status} did not confirm operation command {command}"
+
+        actual_data = self._read_back_map_bytes(port, address, len(expected_data))
+        return (
+            actual_data == expected_data,
+            f"readback {actual_data.hex().upper()} != expected {expected_data.hex().upper()}",
         )
 
     def _read_back_map_bytes(self, port: serial.Serial, address: int, length: int) -> bytes:
@@ -599,6 +618,19 @@ class RS485Collector(BaseCollector):
             self._published_map_cache[item.key] = current_value
             changed.append(item)
         return changed
+
+
+def equipment_operation_status_address(address: int) -> int | None:
+    high_address = (address >> 8) & 0xFF
+    low_address = address & 0xFF
+    if not 0x11 <= high_address <= 0x1C:
+        return None
+    if low_address == 0x1A:
+        return (high_address << 8) | 0x16
+    if low_address == 0x44:
+        return (high_address << 8) | 0x30
+    return None
+
 
 def build_full_read_request(mem_addr: int) -> bytes:
     if not 0 <= mem_addr <= 0xFF:
