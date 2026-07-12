@@ -1,0 +1,4 @@
+services:
+  gateway-nginx:
+    volumes:
+      - ./gateway/nginx/nginx.bootstrap.conf:/etc/nginx/nginx.conf:ro

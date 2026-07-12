@@ -76,6 +76,21 @@ DB 비밀번호에 `@`, `:`, `/` 같은 문자가 포함되면 `GATEWAY_DATABASE
 
 ## 6. 중앙 게이트웨이 실행
 
+최초 설치 시 운영 비밀번호를 자동 생성한다.
+
+```bash
+./scripts/init-gateway-env.sh
+```
+
+TLS 인증서를 아직 설치하지 않았다면 인증서 발급에 필요한 HTTP 경로만 먼저 기동한다. 이 상태에서는 로그인 화면과 API를 외부에 제공하지 않는다.
+
+```bash
+./scripts/start-gateway-bootstrap.sh
+curl -fsS http://127.0.0.1/api/health
+```
+
+인증서를 설치한 후 부트스트랩 구성을 운영 구성으로 교체한다.
+
 ```bash
 ./scripts/start-gateway.sh
 ```
@@ -146,6 +161,23 @@ https://plant-a.tms.theintech.co.kr
 등록 대상은 사설 IP만 허용하며 기본 허용 포트는 80이다. 추가 포트가 필요하면 `.env.gateway`의 `GATEWAY_ALLOWED_TARGET_PORTS`를 검토한 뒤 명시적으로 추가한다.
 
 ## 9. 공유기와 방화벽
+
+### Windows WSL2에서 게이트웨이를 실행하는 경우
+
+관리자 PowerShell에서 현재 WSL IP를 지정해 Windows 포트 중계를 설정한다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup-windows-gateway.ps1 -WslAddress <현재-WSL-IP>
+```
+
+WSL NAT 주소는 WSL이나 Windows 재시작 후 바뀔 수 있으므로, 주소가 바뀌면 스크립트를 다시 실행한다. 이 구성에서는 공유기 포트포워딩 목적지 포트도 Windows 중계 포트에 맞춘다.
+
+```text
+외부 TCP 80  → 192.168.7.140 TCP 8080
+외부 TCP 443 → 192.168.7.140 TCP 8443
+```
+
+네이티브 Ubuntu 서버에서 실행하는 경우에는 아래 기본 구성처럼 같은 포트로 전달한다.
 
 공유기 포트포워딩:
 
