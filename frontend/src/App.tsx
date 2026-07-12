@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, PointerEvent, ReactNode } from "react";
-import { DetailScreen } from "./components/DetailScreen";
+import { DetailScreen, selectDetailCompressors } from "./components/DetailScreen";
 import { EquipmentDetailDialog } from "./components/EquipmentDetailDialog";
 import { MobileLayout } from "./components/MobileLayout";
 import { GsTechSettingsPanel } from "./components/GsTechSettingsPanel";
@@ -82,7 +82,7 @@ type UserLevel = 0 | 1 | 2;
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.136";
+const APP_VERSION = "0.1.137";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -197,6 +197,7 @@ export default function App() {
   const lowPressureText = getLowPressureText(dashboard.lowPressureAlarm);
   const showMainScreen = activeScreen === "main";
   const visibleCompressors = dashboard.compressors.filter((compressor) => compressor.connected);
+  const detailCompressors = useMemo(() => selectDetailCompressors(dashboard.compressors, mapValues), [dashboard.compressors, mapValues]);
   const selectedCompressor = selectedCompressorId
     ? dashboard.compressors.find((compressor) => compressor.id === selectedCompressorId) ?? null
     : null;
@@ -246,6 +247,7 @@ export default function App() {
           <MobileLayout
             activeScreen={activeScreen}
             dashboard={dashboard}
+            detailCompressors={detailCompressors}
             lowPressureText={lowPressureText}
             modeSequenceBusy={modeSequenceBusy}
             now={now}

@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { fetchGsTechSettings } from "../services/api";
+import type { GsTechSettings } from "../services/api";
 import type { YujinMapValue } from "../types";
 
 const INVALID_DISPLAY_RAW_VALUE = 32767;
@@ -68,16 +71,36 @@ export function DetailScreen({
   mapValues: Record<string, YujinMapValue>;
   onOpenCompressorDetail: (id: number) => void;
 }) {
-  const auxiliaryDevices = buildAuxiliaryDevices(mapValues);
+  const [gstechSettings, setGsTechSettings] = useState<GsTechSettings>({
+    dio_bit0: DEFAULT_DIO_BIT0,
+    dio_bit4: DEFAULT_DIO_BIT4,
+    tcp_mode: 0,
+    cctv_enabled: false,
+  });
+
+  useEffect(() => {
+    let alive = true;
+    fetchGsTechSettings()
+      .then((settings) => {
+        if (alive) setGsTechSettings(settings);
+      })
+      .catch((error) => console.error("failed to load GSTECH detail settings", error));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const compressors = selectDetailCompressors(dashboard.compressors, mapValues);
+  const auxiliaryDevices = buildAuxiliaryDevices(mapValues, gstechSettings.dio_bit0, gstechSettings.dio_bit4);
   const devices = [
-    ...dashboard.compressors.map((compressor) => ({ kind: "compressor" as const, compressor })),
+    ...compressors.map((compressor) => ({ kind: "compressor" as const, compressor })),
     ...auxiliaryDevices.map((device) => ({ kind: "auxiliary" as const, device })),
   ];
 
   return (
     <div className="h-full bg-[#eaf4fd] p-[4px]">
       <div className="grid h-full min-h-0 grid-cols-4 auto-rows-[281px] gap-[4px] overflow-y-auto pr-[2px]">
-        {devices.map((device) =>
+        {devices.length ? devices.map((device) =>
           device.kind === "compressor" ? (
             <DetailCompressorCard
               key={`comp-${device.compressor.id}`}
@@ -87,6 +110,10 @@ export function DetailScreen({
           ) : (
             <AuxiliaryDeviceCard key={device.device.id} device={device.device} />
           ),
+        ) : (
+          <div className="col-span-4 flex h-[281px] items-center justify-center rounded-[8px] border border-[#b9d9f3] bg-white text-[22px] font-black text-[#6f879d]">
+            설정된 표시 장비가 없습니다
+          </div>
         )}
       </div>
     </div>
@@ -294,23 +321,44 @@ function getRunText(compressor: DetailCompressor) {
   return compressor.running ? "RUN" : "RDY";
 }
 
-function buildAuxiliaryDevices(values: Record<string, YujinMapValue>) {
-  const useDeviceCount = clamp(Math.trunc(liveMapNumber(values, "004C", 0)), 0, 16);
-  const dioConnectMask = Math.trunc(liveMapNumber(values, "001E", 0));
-  const moduleConnectMask = Math.trunc(liveMapNumber(values, "0020", 0));
+export function selectDetailCompressors(
+  compressors: DetailCompressor[],
+  values: Record<string, YujinMapValue>,
+) {
+  const storedConnectMask = Math.trunc(storedMapNumber(values, "0002", 0));
+  const configuredRaw = Math.trunc(storedMapNumber(values, "004E", 0));
+  const fallbackCount = highestSetBit(storedConnectMask);
+  const configuredCount = clamp(configuredRaw > 0 ? configuredRaw : fallbackCount, 0, compressors.length);
+  const hiddenMask = Math.trunc(storedMapNumber(values, "0008", 0));
+
+  return compressors
+    .filter((compressor) => compressor.id <= configuredCount && !(hiddenMask & (1 << (compressor.id - 1))))
+    .sort((left, right) => left.id - right.id);
+}
+
+function buildAuxiliaryDevices(
+  values: Record<string, YujinMapValue>,
+  dioBit0: number,
+  dioBit4: number,
+) {
+  const useDeviceWord = Math.trunc(storedMapNumber(values, "004C", 0));
+  const moduleCount = clamp((useDeviceWord >> 8) & 0xff, 0, 16);
+  const dioCount = clamp(useDeviceWord & 0xff, 0, 16);
+  const dioConnectMask = Math.trunc(storedMapNumber(values, "001E", 0));
+  const moduleConnectMask = Math.trunc(storedMapNumber(values, "0020", 0));
   const devices: AuxiliaryDevice[] = [];
 
-  for (let index = 0; index < useDeviceCount; index += 1) {
+  for (let index = 0; index < dioCount; index += 1) {
     const dioPrefix = `E${index.toString(16).toUpperCase()}`;
     const modulePrefix = `F${index.toString(16).toUpperCase()}`;
     const dioRecent = hasRecentValue(values, `${dioPrefix}00`);
-    const moduleRecent = hasRecentValue(values, `${modulePrefix}00`);
+    const moduleRecent = index < moduleCount && hasRecentValue(values, `${modulePrefix}00`);
     const connected = Boolean(dioConnectMask & (1 << index)) || dioRecent;
-    const moduleConnected = Boolean(moduleConnectMask & (1 << index)) || moduleRecent;
+    const moduleConnected = index < moduleCount && (Boolean(moduleConnectMask & (1 << index)) || moduleRecent);
     const inputStatus = Math.trunc(liveMapNumber(values, `${dioPrefix}00`, 0));
     const measuredRaw = moduleConnected ? liveMapNumber(values, `${modulePrefix}00`, Number.NaN) : Number.NaN;
 
-    if (DEFAULT_DIO_BIT0 !== 6) {
+    if (dioBit0 !== 6) {
       devices.push(
         buildAuxiliaryDevice({
           category: "dio1",
@@ -318,12 +366,12 @@ function buildAuxiliaryDevices(values: Record<string, YujinMapValue>) {
           index,
           inputStatus: inputStatus & 0x0f,
           measuredRaw,
-          typeIndex: DEFAULT_DIO_BIT0,
+          typeIndex: dioBit0,
         }),
       );
     }
 
-    if (DEFAULT_DIO_BIT4 !== 6) {
+    if (dioBit4 !== 6) {
       devices.push(
         buildAuxiliaryDevice({
           category: "dio2",
@@ -331,7 +379,7 @@ function buildAuxiliaryDevices(values: Record<string, YujinMapValue>) {
           index,
           inputStatus: (inputStatus >> 4) & 0x0f,
           measuredRaw,
-          typeIndex: DEFAULT_DIO_BIT4,
+          typeIndex: dioBit4,
         }),
       );
     }
@@ -401,6 +449,18 @@ function liveMapNumber(values: Record<string, YujinMapValue>, key: string, fallb
   if (raw === undefined || raw === null || raw === "") return fallback;
   const numeric = Number(raw);
   return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function storedMapNumber(values: Record<string, YujinMapValue>, key: string, fallback = 0) {
+  const raw = values[key.toUpperCase()]?.value;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function highestSetBit(mask: number) {
+  let highest = 0;
+  for (let bit = 0; bit < 16; bit += 1) if (mask & (1 << bit)) highest = bit + 1;
+  return highest;
 }
 
 function hasRecentValue(values: Record<string, YujinMapValue>, key: string, maxAgeMs = LIVE_VALUE_MAX_AGE_MS) {

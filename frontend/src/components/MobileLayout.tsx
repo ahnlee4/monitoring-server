@@ -52,6 +52,7 @@ type FullscreenElement = HTMLElement & {
 export function MobileLayout({
   activeScreen,
   dashboard,
+  detailCompressors,
   lowPressureText,
   modeSequenceBusy,
   now,
@@ -63,6 +64,7 @@ export function MobileLayout({
 }: {
   activeScreen: ActiveScreen;
   dashboard: MobileDashboard;
+  detailCompressors: MobileCompressor[];
   lowPressureText: string;
   modeSequenceBusy: boolean;
   now: Date;
@@ -78,10 +80,14 @@ export function MobileLayout({
     <section className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-[#eef4fa] text-[#12263a]">
       <MobileHeader dashboard={dashboard} now={now} onLogoClick={onLogoClick} />
       <main className={`flex min-h-0 flex-1 flex-col px-[12px] pb-[112px] pt-[10px] ${activeScreen === "main" ? "overflow-hidden" : "overflow-y-auto"}`}>
-        {connectedCompressors.length === 0 ? (
+        {activeScreen === "detail" ? (
+          detailCompressors.length ? (
+            <MobileDetailList compressors={detailCompressors} onOpenCompressorDetail={onOpenCompressorDetail} />
+          ) : (
+            <MobileDisconnect />
+          )
+        ) : connectedCompressors.length === 0 ? (
           <MobileDisconnect />
-        ) : activeScreen === "detail" ? (
-          <MobileDetailList compressors={connectedCompressors} onOpenCompressorDetail={onOpenCompressorDetail} />
         ) : (
           <MobileMainList compressors={connectedCompressors} lowPressureText={lowPressureText} onOpenCompressorDetail={onOpenCompressorDetail} />
         )}
