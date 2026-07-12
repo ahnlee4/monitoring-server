@@ -17,6 +17,7 @@ from app.models import AppSetting
 SCHEDULE_SETTINGS_KEY = "schedule_settings"
 PRODUCT_SETTINGS_KEY = "product_settings"
 GSTECH_SETTINGS_KEY = "gstech_settings"
+CONTROL_PROFILE_SETTINGS_KEY = "pressure_gap_settings"
 SEOUL = ZoneInfo("Asia/Seoul")
 
 
@@ -57,6 +58,48 @@ def default_gstech_settings() -> dict:
         "dio_bit4": 1,
         "tcp_mode": 0,
         "cctv_enabled": False,
+    }
+
+
+def default_control_profile() -> dict:
+    return {
+        "pressure_gap": 0.1,
+        "equipment_gaps": [0.1 for _ in range(11)],
+        "inverter_pressure_offset": 0.0,
+        "main_inverter_unit": 0,
+    }
+
+
+def sanitize_control_profile(payload: dict | None) -> dict:
+    defaults = default_control_profile()
+    source = payload if isinstance(payload, dict) else {}
+
+    def decimal(key: str, minimum: float, maximum: float) -> float:
+        try:
+            value = float(source.get(key, defaults[key]))
+        except (TypeError, ValueError):
+            value = float(defaults[key])
+        return round(max(minimum, min(maximum, value)), 1)
+
+    pressure_gap = decimal("pressure_gap", 0.0, 10.0)
+    raw_gaps = source.get("equipment_gaps")
+    equipment_gaps = []
+    for index in range(11):
+        try:
+            value = float(raw_gaps[index]) if isinstance(raw_gaps, list) and index < len(raw_gaps) else pressure_gap
+        except (TypeError, ValueError):
+            value = pressure_gap
+        equipment_gaps.append(round(max(0.0, min(pressure_gap, value)), 1))
+
+    try:
+        main_inverter_unit = int(source.get("main_inverter_unit", defaults["main_inverter_unit"]))
+    except (TypeError, ValueError):
+        main_inverter_unit = 0
+    return {
+        "pressure_gap": pressure_gap,
+        "equipment_gaps": equipment_gaps,
+        "inverter_pressure_offset": decimal("inverter_pressure_offset", -10.0, 10.0),
+        "main_inverter_unit": max(0, min(12, main_inverter_unit)),
     }
 
 

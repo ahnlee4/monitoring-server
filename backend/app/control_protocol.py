@@ -70,6 +70,36 @@ def build_equipment_operation_write(
     }
 
 
+def build_equipment_pressure_write(
+    unit: int,
+    oilfree_selector: int,
+    inverter_units: set[int],
+    unload_value: int,
+    load_value: int,
+    main_inverter_unit: int,
+    inverter_offset: int,
+) -> dict:
+    high_address = 0x10 + unit
+    is_oilfree = bool(oilfree_selector & (1 << (unit - 1)))
+    if unit in inverter_units:
+        low_address = 0x46 if is_oilfree else 0x20
+        value = unload_value + (inverter_offset if unit == main_inverter_unit else 0)
+        return {
+            "key": f"{high_address:02X}{low_address:02X}",
+            "address": (high_address << 8) | low_address,
+            "length": 2,
+            "value": max(0, min(0xFFFF, value)),
+        }
+
+    low_address = 0x4E if is_oilfree else 0x26
+    return {
+        "key": f"{high_address:02X}{low_address:02X}",
+        "address": (high_address << 8) | low_address,
+        "length": 4,
+        "data_hex": f"{max(0, unload_value) & 0xFFFF:04X}{max(0, load_value) & 0xFFFF:04X}",
+    }
+
+
 def build_group_operation_writes(
     current_value: int,
     action: str,
@@ -82,6 +112,13 @@ def build_group_operation_writes(
     run_delay_seconds: float,
     stop_delay_seconds: float,
     stop_additional_units: bool = True,
+    stop_equipment: bool = True,
+    no_load_pressure: int | None = None,
+    load_pressure: int | None = None,
+    equipment_gaps: list[int] | None = None,
+    inverter_units: set[int] | None = None,
+    main_inverter_unit: int = 0,
+    inverter_offset: int = 0,
 ) -> list[dict]:
     ordered = normalize_run_sequence(sequence, available_units)
     usable = [unit for unit in ordered if not repair_mask & (1 << (unit - 1))]
@@ -94,15 +131,31 @@ def build_group_operation_writes(
     }
 
     if action == "run":
-        return [
-            group_write,
-            *[
-                build_equipment_operation_write(unit, oilfree_selector, True, run_delay_seconds)
-                for unit in target_units
-            ],
-        ]
+        writes = [group_write]
+        cumulative_gap = 0
+        gaps = equipment_gaps or []
+        inverter_set = inverter_units or set()
+        for index, unit in enumerate(target_units):
+            if index > 0:
+                cumulative_gap += gaps[index - 1] if index - 1 < len(gaps) else 0
+            if no_load_pressure is not None and load_pressure is not None:
+                writes.append(
+                    build_equipment_pressure_write(
+                        unit,
+                        oilfree_selector,
+                        inverter_set,
+                        no_load_pressure - cumulative_gap,
+                        load_pressure - cumulative_gap,
+                        main_inverter_unit,
+                        inverter_offset,
+                    )
+                )
+            writes.append(build_equipment_operation_write(unit, oilfree_selector, True, run_delay_seconds))
+        return writes
     if action != "stop":
         raise ValueError(f"unsupported group operation action: {action}")
+    if not stop_equipment:
+        return [group_write]
 
     target_set = set(target_units)
     running_set = set(running_units)

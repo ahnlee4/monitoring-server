@@ -145,6 +145,17 @@ class PressureGapSettingsOut(BaseModel):
     updated_at: datetime | None = None
 
 
+class ControlProfileIn(BaseModel):
+    pressure_gap: float = Field(ge=0, le=10)
+    equipment_gaps: list[float]
+    inverter_pressure_offset: float = Field(ge=-10, le=10)
+    main_inverter_unit: int = Field(ge=0, le=12)
+
+
+class ControlProfileOut(ControlProfileIn):
+    updated_at: datetime | None = None
+
+
 class ScheduleSlotIn(BaseModel):
     enabled: bool = False
     time: str = Field(default="00:00", pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -201,6 +212,7 @@ class GsTechSettingsOut(GsTechSettingsIn):
 
 class GroupOperationIn(BaseModel):
     action: Literal["run", "stop"]
+    stop_equipment: bool = True
 
 
 class GroupSettingsIn(BaseModel):

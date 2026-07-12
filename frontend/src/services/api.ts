@@ -40,6 +40,14 @@ export type PressureGapSettings = {
   updated_at?: string | null;
 };
 
+export type ControlProfile = {
+  pressure_gap: number;
+  equipment_gaps: number[];
+  inverter_pressure_offset: number;
+  main_inverter_unit: number;
+  updated_at?: string | null;
+};
+
 export type ScheduleSlot = {
   enabled: boolean;
   time: string;
@@ -190,6 +198,16 @@ export async function updatePressureGapSettings(pressureGap: number) {
   return putJson<PressureGapSettings>(`${apiBase()}/app-settings/pressure-gap`, { pressure_gap: pressureGap });
 }
 
+export async function fetchControlProfile() {
+  const response = await fetchWithTimeout(`${apiBase()}/app-settings/control-profile`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`control-profile ${response.status}`);
+  return (await response.json()) as ControlProfile;
+}
+
+export async function updateControlProfile(settings: ControlProfile) {
+  return putJson<ControlProfile>(`${apiBase()}/app-settings/control-profile`, settings);
+}
+
 export async function fetchScheduleSettings() {
   const response = await fetchWithTimeout(`${apiBase()}/app-settings/schedule-settings`, { cache: "no-store" });
   if (!response.ok) throw new Error(`schedule-settings ${response.status}`);
@@ -237,8 +255,8 @@ export async function enqueueRawUart4BatchCommand(source: string, frames: RawUar
   return postJson<{ id: number }>(`${apiBase()}/control/raw-uart4-batch`, { source, frames });
 }
 
-export async function enqueueGroupOperation(action: "run" | "stop") {
-  return postJson<{ id: number }>(`${apiBase()}/control/group-operation`, { action });
+export async function enqueueGroupOperation(action: "run" | "stop", stopEquipment = true) {
+  return postJson<{ id: number }>(`${apiBase()}/control/group-operation`, { action, stop_equipment: stopEquipment });
 }
 
 export function bytesToHex(bytes: number[]) {

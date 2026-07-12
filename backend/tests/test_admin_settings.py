@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 from app.admin_settings import (
     due_schedule_events,
+    sanitize_control_profile,
     sanitize_gstech_settings,
     sanitize_product_settings,
     sanitize_schedule_settings,
@@ -68,6 +69,21 @@ class AdminSettingsTest(unittest.TestCase):
         settings = sanitize_gstech_settings({"dio_bit0": 3, "dio_bit4": 3})
 
         self.assertNotEqual(settings["dio_bit0"], settings["dio_bit4"])
+
+    def test_control_profile_normalizes_equipment_gaps(self) -> None:
+        settings = sanitize_control_profile(
+            {
+                "pressure_gap": 0.5,
+                "equipment_gaps": [0.2, 9, "bad"],
+                "inverter_pressure_offset": -2.3,
+                "main_inverter_unit": 99,
+            }
+        )
+
+        self.assertEqual(len(settings["equipment_gaps"]), 11)
+        self.assertEqual(settings["equipment_gaps"][:3], [0.2, 0.5, 0.5])
+        self.assertEqual(settings["inverter_pressure_offset"], -2.3)
+        self.assertEqual(settings["main_inverter_unit"], 12)
 
 
 if __name__ == "__main__":

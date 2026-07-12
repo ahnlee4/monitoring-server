@@ -100,6 +100,23 @@ class GroupOperationProtocolTest(unittest.TestCase):
 
         self.assertEqual([write["address"] for write in writes], [0x121A, 0x111A, 0x0050])
 
+    def test_group_stop_can_clear_group_mode_without_stopping_equipment(self) -> None:
+        writes = build_group_operation_writes(
+            current_value=0x0101,
+            action="stop",
+            sequence=[1, 2, 3],
+            available_units=[1, 2, 3],
+            run_units=3,
+            oilfree_selector=0,
+            repair_mask=0,
+            running_units=[1, 2, 3],
+            run_delay_seconds=10,
+            stop_delay_seconds=4,
+            stop_equipment=False,
+        )
+
+        self.assertEqual(writes, [{"key": "0050", "address": 0x0050, "length": 2, "value": 0x0100}])
+
     def test_group_run_skips_repair_units(self) -> None:
         writes = build_group_operation_writes(
             current_value=0,
@@ -115,6 +132,31 @@ class GroupOperationProtocolTest(unittest.TestCase):
         )
 
         self.assertEqual([write["address"] for write in writes], [0x0050, 0x111A, 0x131A])
+
+    def test_group_run_applies_cumulative_pressure_gaps_and_main_inverter_offset(self) -> None:
+        writes = build_group_operation_writes(
+            current_value=0,
+            action="run",
+            sequence=[1, 2, 3],
+            available_units=[1, 2, 3],
+            run_units=3,
+            oilfree_selector=0,
+            repair_mask=0,
+            running_units=[],
+            run_delay_seconds=1,
+            stop_delay_seconds=1,
+            no_load_pressure=80,
+            load_pressure=70,
+            equipment_gaps=[2, 3],
+            inverter_units={2},
+            main_inverter_unit=2,
+            inverter_offset=4,
+        )
+
+        pressure_writes = [write for write in writes if write["address"] in {0x1126, 0x1220, 0x1326}]
+        self.assertEqual(pressure_writes[0]["data_hex"], "00500046")
+        self.assertEqual(pressure_writes[1]["value"], 82)
+        self.assertEqual(pressure_writes[2]["data_hex"], "004B0041")
 
 
 if __name__ == "__main__":

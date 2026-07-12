@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, PointerEvent, ReactNode } from "react";
 import { DetailScreen, selectDetailCompressors } from "./components/DetailScreen";
 import { EquipmentDetailDialog } from "./components/EquipmentDetailDialog";
+import { ControlAdvancedPanel } from "./components/ControlAdvancedPanel";
 import { MobileLayout } from "./components/MobileLayout";
 import { GsTechSettingsPanel } from "./components/GsTechSettingsPanel";
 import { ProductSettingsPanel } from "./components/ProductSettingsPanel";
@@ -18,16 +19,15 @@ import { useYujinMapValues } from "./hooks/useYujinMapValues";
 import {
   ControlStatusDelayedError,
   ControlStatusUnsupportedError,
+  fetchControlProfile,
   fetchProductSettings,
-  fetchPressureGapSettings,
   enqueueGroupOperation,
   enqueueMapWriteBatch,
   fetchModeSettings,
   updateModeSettings,
-  updatePressureGapSettings,
   waitForControlCommand,
 } from "./services/api";
-import type { MapWrite, ModeSettings } from "./services/api";
+import type { ControlProfile, MapWrite, ModeSettings } from "./services/api";
 import type { YujinMapValue } from "./types";
 
 type CompressorState = {
@@ -61,6 +61,7 @@ type DashboardState = {
   firmwareVersion: string;
   lowPressureAlarm: "none" | "warning" | "reserve";
   sortMode: "setting" | "time";
+  configuredCount: number;
   control: {
     noLoadPressure: number;
     loadPressure: number;
@@ -84,7 +85,7 @@ type UserLevel = 0 | 1 | 2;
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.138";
+const APP_VERSION = "0.1.139";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -131,6 +132,7 @@ const emptyDashboard: DashboardState = {
   firmwareVersion: "-",
   lowPressureAlarm: "none",
   sortMode: "setting",
+  configuredCount: 0,
   control: {
     noLoadPressure: 0,
     loadPressure: 0,
@@ -182,7 +184,7 @@ export default function App() {
   const [settingsLevel, setSettingsLevel] = useState<UserLevel>(USER_LEVELS.user);
   const [adminLogoClicks, setAdminLogoClicks] = useState({ count: 0, lastAt: 0 });
   const [modeSequenceBusy, setModeSequenceBusy] = useState(false);
-  const [pressureGap, setPressureGap] = useState<number | null>(null);
+  const [controlProfile, setControlProfile] = useState<ControlProfile | null>(null);
   const [alarmVisible, setAlarmVisible] = useState(true);
   const mapValues = useYujinMapValues();
   const isMobile = useIsMobileViewport();
@@ -199,12 +201,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetchPressureGapSettings()
-      .then((result) => setPressureGap(result.pressure_gap))
-      .catch((error) => console.error("failed to load pressure gap settings", error));
+    fetchControlProfile()
+      .then(setControlProfile)
+      .catch((error) => console.error("failed to load control profile", error));
   }, []);
 
-  const dashboard = useMemo(() => buildDashboardFromMap(mapValues, pressureGap), [mapValues, pressureGap]);
+  const dashboard = useMemo(
+    () => buildDashboardFromMap(mapValues, controlProfile?.pressure_gap ?? null, controlProfile?.main_inverter_unit ?? 0),
+    [controlProfile, mapValues],
+  );
   const lowPressureText = getLowPressureText(dashboard.lowPressureAlarm);
   const showMainScreen = activeScreen === "main";
   const detailCompressors = useMemo(() => selectDetailCompressors(dashboard.compressors, mapValues), [dashboard.compressors, mapValues]);
@@ -317,7 +322,7 @@ export default function App() {
           <SettingsDialog level={settingsLevel} mapValues={mapValues} onClose={() => setActiveDialog(null)} />
         ) : null}
         {activeDialog === "control" ? (
-          <ControlDialog dashboard={dashboard} onClose={() => setActiveDialog(null)} onPressureGapChange={setPressureGap} />
+          <ControlDialog dashboard={dashboard} onClose={() => setActiveDialog(null)} onControlProfileChange={setControlProfile} />
         ) : null}
         {activeDialog === "password" ? (
           <PasswordDialog
@@ -358,7 +363,11 @@ function useIsMobileViewport() {
   return isMobile;
 }
 
-function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPressureGap: number | null = null): DashboardState {
+function buildDashboardFromMap(
+  values: Record<string, YujinMapValue>,
+  savedPressureGap: number | null = null,
+  savedMainInverterUnit = 0,
+): DashboardState {
   const oilfreeSelector = liveMapNumber(values, "0006", 0);
   const compressors = Array.from({ length: 8 }, (_, index) => buildCompressorFromMap(values, index, oilfreeSelector));
   const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
@@ -370,8 +379,8 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPress
   const sortModeWord = Math.trunc(liveMapNumber(values, "0024", 0));
   const operationModeWord = Math.trunc(liveMapNumber(values, "0050", 0));
   const repairMask = Math.trunc(liveMapNumber(values, "0058", 0));
-  const mainInverterUnit = Math.trunc(liveMapNumber(values, "043E", 0));
   const options = buildOptions(optionDevice);
+  const configuredCount = clamp(Math.trunc(liveMapNumber(values, "004E", highestSetBit(connectedMask))), 0, compressors.length);
   const connectedCompressors = compressors.map((compressor, index) => ({
     ...compressor,
     connected: systemOnline && Boolean(connectedMask & (1 << index)),
@@ -382,7 +391,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPress
       (operationModeWord & 0x0001) === 0x0001 &&
       ((sortModeWord >> 8) & 0xff) === 1 &&
       options[1]?.checked === true &&
-      mainInverterUnit === index + 1,
+      savedMainInverterUnit === index + 1,
   }));
   const orderedCompressors = displayOrder
     .flatMap((compNo) => (connectedCompressors[compNo - 1] ? [connectedCompressors[compNo - 1]] : []));
@@ -394,6 +403,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPress
     firmwareVersion: buildFirmwareVersion(values),
     lowPressureAlarm: lowAlarmStep >= 4 && options[7]?.checked ? "reserve" : lowAlarmStep >= 3 ? "warning" : "none",
     sortMode: (sortModeWord & 0x0001) === 0x0001 ? "time" : "setting",
+    configuredCount,
     control: {
       noLoadPressure: scale10(liveMapNumber(values, "0016", 0)),
       loadPressure: scale10(liveMapNumber(values, "0018", 0)),
@@ -541,6 +551,14 @@ function isLiveMapValue(value: YujinMapValue | undefined, maxAgeMs = LIVE_VALUE_
 
 function maskFromCompressors(compressors: CompressorState[]) {
   return compressors.reduce((mask, compressor, index) => (compressor.connected ? mask | (1 << index) : mask), 0);
+}
+
+function highestSetBit(value: number) {
+  let highest = 0;
+  for (let bit = 0; bit < 16; bit += 1) {
+    if (value & (1 << bit)) highest = bit + 1;
+  }
+  return highest;
 }
 
 function scale10(value: number) {
@@ -1110,11 +1128,11 @@ function FactoryDialog({ onClose }: { onClose: () => void }) {
 function ControlDialog({
   dashboard,
   onClose,
-  onPressureGapChange,
+  onControlProfileChange,
 }: {
   dashboard: DashboardState;
   onClose: () => void;
-  onPressureGapChange: (value: number) => void;
+  onControlProfileChange: (profile: ControlProfile) => void;
 }) {
   const [sortMode, setSortMode] = useState<"setting" | "time">((dashboard.control.sortModeWord & 0x00ff) === 1 ? "time" : "setting");
   const [operationMode, setOperationMode] = useState<"local" | "remote">(((dashboard.control.operationModeWord >> 8) & 0xff) === 0 ? "local" : "remote");
@@ -1122,7 +1140,6 @@ function ControlDialog({
   const initialSettings = {
     noLoadPressure: formatEditableScaledValue(dashboard.control.noLoadPressure),
     loadPressure: formatEditableScaledValue(dashboard.control.loadPressure),
-    pressureGap: formatEditableScaledValue(dashboard.control.pressureGap),
     lowAlarmPressure: formatEditableScaledValue(dashboard.control.lowAlarmPressure),
     changeHours: String(dashboard.control.changeHours),
     runUnits: String(dashboard.control.runUnits),
@@ -1131,6 +1148,8 @@ function ControlDialog({
   const [appliedSettings, setAppliedSettings] = useState(initialSettings);
   const [commandStatus, setCommandStatus] = useState("명령 대기 중");
   const [commandBusy, setCommandBusy] = useState(false);
+  const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
+  const [stopEquipmentOnGroupStop, setStopEquipmentOnGroupStop] = useState(!dashboard.options[12]?.checked);
   const [activeControlKey, setActiveControlKey] = useState<keyof typeof settings | null>(null);
   const [replaceNextKeypadInput, setReplaceNextKeypadInput] = useState(false);
   const controls: Array<{
@@ -1143,7 +1162,6 @@ function ControlDialog({
   }> = [
     { label: "무부하 압력", key: "noLoadPressure", unit: "bar", step: "0.1", address: 0x16, scale: 10 },
     { label: "부하 압력", key: "loadPressure", unit: "bar", step: "0.1", address: 0x18, scale: 10 },
-    { label: "장비별 압력차", key: "pressureGap", unit: "bar", step: "0.1", address: 0x3c, scale: 10 },
     { label: "저압경보 압력 설정", key: "lowAlarmPressure", unit: "bar", step: "0.1", address: 0x1c, scale: 10 },
     { label: "교환 운전 시간", key: "changeHours", unit: "hr", step: "1", address: 0x42, scale: 1 },
     { label: "가동 대수", key: "runUnits", unit: "ea", step: "1", address: 0x26, scale: 1 },
@@ -1226,29 +1244,29 @@ function ControlDialog({
     }
   };
 
-  const savePressureGap = async (value: number) => {
-    setCommandBusy(true);
-    setCommandStatus("장비별 압력차 저장 중...");
-    try {
-      const result = await updatePressureGapSettings(value);
-      const savedValue = result.pressure_gap ?? value;
-      onPressureGapChange(savedValue);
-      setCommandStatus("장비별 압력차 저장 완료");
-      return true;
-    } catch (error) {
-      setCommandStatus(`장비별 압력차 실패: ${error instanceof Error ? error.message : String(error)}`);
-      return false;
-    } finally {
-      setCommandBusy(false);
+  const sendGroupOperation = async (action: "run" | "stop", stopEquipment = true) => {
+    if (action === "run") {
+      const configured = dashboard.compressors.slice(0, dashboard.configuredCount);
+      const targetCount = clamp(Math.trunc(Number(settings.runUnits) || 0), 0, configured.length);
+      const targets = configured.slice(0, targetCount);
+      const invalid = targets.find((compressor) =>
+        !compressor.connected || compressor.repair || compressor.fault || (dashboard.options[9]?.checked && compressor.local),
+      );
+      if (invalid) {
+        const reason = !invalid.connected ? "통신 불량" : invalid.repair ? "정비 중" : invalid.fault ? "고장 발생" : "LOCAL 상태";
+        setCommandStatus(`${invalid.id}호기 ${reason}: 통합운전을 시작할 수 없습니다`);
+        return;
+      }
+      if (targets.length === 0) {
+        setCommandStatus("통합운전 대상 장비가 없습니다");
+        return;
+      }
     }
-  };
-
-  const sendGroupOperation = async (action: "run" | "stop") => {
     let commandId: number | null = null;
     setCommandBusy(true);
     setCommandStatus(action === "run" ? "통합운전 명령 전송 중..." : "통합정지 명령 전송 중...");
     try {
-      const result = await enqueueGroupOperation(action);
+      const result = await enqueueGroupOperation(action, stopEquipment);
       commandId = Number(result.id);
       setCommandStatus(`명령 #${commandId} 전송 대기...`);
       await waitForControlCommand(commandId, (status) => {
@@ -1265,6 +1283,17 @@ function ControlDialog({
     }
   };
 
+  const toggleStopEquipmentOption = async () => {
+    const next = !stopEquipmentOnGroupStop;
+    const optionWord = dashboard.options.reduce((word, option, index) => option.checked ? word | (1 << (index + 2)) : word, 0);
+    const nextWord = next ? optionWord & ~(1 << 14) : optionWord | (1 << 14);
+    const success = await sendControlWrites("통합정지 장비 동작", "control_dialog_stop_equipment_option", [
+      { key: "004A", address: 0x4a, length: 2, value: nextWord },
+    ]);
+    if (success) setStopEquipmentOnGroupStop(next);
+  };
+  const openStopConfirm = () => setStopConfirmOpen(true);
+
   const applySetting = async (key: keyof typeof settings) => {
     const control = controls.find((item) => item.key === key);
     if (!control) return;
@@ -1272,13 +1301,6 @@ function ControlDialog({
     try {
       const value = numberValue(key);
       const packetValue = Math.round(value * control.scale);
-      if (key === "pressureGap") {
-        const success = await savePressureGap(value);
-        if (success) {
-          setAppliedSettings((current) => ({ ...current, [key]: settings[key] }));
-        }
-        return;
-      }
       const success = await sendControlWrites(control.label, "control_dialog_setting", [
         {
           key: control.address.toString(16).padStart(4, "0").toUpperCase(),
@@ -1408,8 +1430,16 @@ function ControlDialog({
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-[12px] max-sm:grid-cols-1">
-              <div className="grid min-h-[168px] grid-rows-[40px_1fr] rounded-[10px] border border-[#d9e6f0] bg-white p-[12px]">
+            <ControlAdvancedPanel
+              compressors={dashboard.compressors.slice(0, dashboard.configuredCount)}
+              disabled={commandBusy || dashboard.integratedRun}
+              energyMode={((dashboard.control.sortModeWord >> 8) & 0xff) === 1}
+              onProfileChange={onControlProfileChange}
+              onStatus={setCommandStatus}
+              sortModeWord={dashboard.control.sortModeWord}
+            />
+            <div className="grid grid-cols-1 gap-[12px]">
+              <div className="grid min-h-[104px] grid-rows-[40px_1fr] rounded-[10px] border border-[#d9e6f0] bg-white p-[12px]">
                 <PanelHeading eyebrow="SORT MODE">운전 조건</PanelHeading>
                 <div className="mt-[10px] grid content-start gap-[8px]">
                   <SegmentedOption
@@ -1421,17 +1451,6 @@ function ControlDialog({
                     selected={sortMode}
                     onSelect={(value) => selectSortMode(value as "setting" | "time")}
                   />
-                  <label className="flex h-[46px] items-center justify-between rounded-[7px] border border-[#d9e6f0] bg-[#f8fbfd] px-[12px] text-[16px] font-black text-[#244c75]">
-                    <span>절약모드</span>
-                    <input readOnly className="h-[22px] w-[22px] accent-[#237bd0]" type="checkbox" />
-                  </label>
-                </div>
-              </div>
-              <div className="grid min-h-[168px] grid-rows-[40px_1fr] rounded-[10px] border border-[#d9e6f0] bg-white p-[12px]">
-                <PanelHeading eyebrow="INVERTER">인버터 기준</PanelHeading>
-                <div className="mt-[10px] grid grid-cols-2 content-start gap-[8px]">
-                  <InfoTile label="메인 호기" unit="호기" value="0" />
-                  <InfoTile label="제어압력" unit="bar" value="0.0" />
                 </div>
               </div>
             </div>
@@ -1451,6 +1470,10 @@ function ControlDialog({
                   onSelect={(value) => selectOperationMode(value as "local" | "remote")}
                 />
               </div>
+              <label className="flex min-h-[42px] items-center justify-between rounded-[7px] border border-[#d9e6f0] bg-[#f8fbfd] px-[10px] text-[13px] font-black text-[#244c75]">
+                <span>통합정지 시 장비도 정지</span>
+                <input checked={stopEquipmentOnGroupStop} className="h-[20px] w-[20px] accent-[#237bd0]" disabled={commandBusy} onChange={() => void toggleStopEquipmentOption()} type="checkbox" />
+              </label>
               <div className="grid gap-[6px]">
                 <span className="text-[13px] font-black text-[#6f879d]">제어 모드</span>
                 <SegmentedOption
@@ -1467,7 +1490,7 @@ function ControlDialog({
             <div />
             <div className="grid gap-[8px] pt-[12px]">
               <button className="h-[68px] rounded-[8px] bg-[#d92525] text-[31px] font-black text-white shadow-[0_5px_11px_rgba(208,31,38,0.18)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("run")} type="button">운전</button>
-              <button className="h-[68px] rounded-[8px] bg-[#667380] text-[31px] font-black text-white shadow-[0_5px_11px_rgba(70,82,94,0.14)] disabled:opacity-55" disabled={commandBusy} onClick={() => sendGroupOperation("stop")} type="button">정지</button>
+              <button className="h-[68px] rounded-[8px] bg-[#667380] text-[31px] font-black text-white shadow-[0_5px_11px_rgba(70,82,94,0.14)] disabled:opacity-55" disabled={commandBusy} onClick={openStopConfirm} type="button">정지</button>
             </div>
           </aside>
         </div>
@@ -1489,6 +1512,19 @@ function ControlDialog({
           unit={activeControl.unit}
           value={settings[activeControl.key]}
         />
+      ) : null}
+      {stopConfirmOpen ? (
+        <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/65 p-[16px]">
+          <section className="w-[560px] rounded-[12px] bg-white p-[18px] shadow-2xl">
+            <div className="text-[24px] font-black text-[#173f69]">통합운전 정지</div>
+            <div className="mt-[8px] text-[15px] font-black text-[#6f879d]">통합제어만 해제할지, 현재 장비까지 순차 정지할지 선택하세요.</div>
+            <div className="mt-[18px] grid grid-cols-2 gap-[10px]">
+              <button className="h-[58px] rounded-[8px] border border-[#cfdde8] bg-[#f8fbfd] text-[17px] font-black text-[#45657f]" onClick={() => { setStopConfirmOpen(false); void sendGroupOperation("stop", false); }} type="button">장비는 계속 운전</button>
+              <button className="h-[58px] rounded-[8px] bg-[#667380] text-[17px] font-black text-white" onClick={() => { setStopConfirmOpen(false); void sendGroupOperation("stop", true); }} type="button">장비까지 전체 정지</button>
+            </div>
+            <button className="mt-[10px] h-[42px] w-full rounded-[8px] bg-[#e8eef3] text-[15px] font-black text-[#45657f]" onClick={() => setStopConfirmOpen(false)} type="button">취소</button>
+          </section>
+        </div>
       ) : null}
     </div>
   );

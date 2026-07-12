@@ -15,12 +15,14 @@ from app.config import get_settings
 from app.control_protocol import RUN_SEQUENCE_KEYS, build_group_operation_writes
 from app.database import Base, engine, get_db, SessionLocal
 from app.admin_settings import (
+    CONTROL_PROFILE_SETTINGS_KEY,
     GSTECH_SETTINGS_KEY,
     PRODUCT_SETTINGS_KEY,
     SCHEDULE_SETTINGS_KEY,
     ScheduleRunner,
     load_json_setting,
     sanitize_gstech_settings,
+    sanitize_control_profile,
     sanitize_product_settings,
     sanitize_schedule_settings,
     save_json_setting,
@@ -42,6 +44,8 @@ from app.schemas import (
     CollectorSettingsOut,
     ControlCommandAckIn,
     ControlCommandOut,
+    ControlProfileIn,
+    ControlProfileOut,
     DeviceOut,
     GroupOperationIn,
     GroupSettingsIn,
@@ -241,7 +245,7 @@ def seed_yujin_map() -> None:
 
 MODE_SETTINGS_KEY = "mode_settings"
 COLLECTOR_SETTINGS_KEY = "collector_settings"
-PRESSURE_GAP_SETTINGS_KEY = "pressure_gap_settings"
+PRESSURE_GAP_SETTINGS_KEY = CONTROL_PROFILE_SETTINGS_KEY
 MODE_ALIGN_ROWS = 7
 MODE_ALIGN_COLUMNS = 4
 ALLOWED_COLLECTOR_SERIAL_PORTS = {"/dev/ttyUSB0", "/dev/ttyS7"}
@@ -335,7 +339,7 @@ def load_pressure_gap_settings(db: Session) -> tuple[float | None, datetime | No
         return None, None
     try:
         payload = json.loads(setting.value_json)
-        pressure_gap = max(0.0, float(payload["pressure_gap"]))
+        pressure_gap = sanitize_control_profile(payload)["pressure_gap"]
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return None, setting.updated_at
     return pressure_gap, setting.updated_at
@@ -344,7 +348,16 @@ def load_pressure_gap_settings(db: Session) -> tuple[float | None, datetime | No
 def save_pressure_gap_settings(db: Session, pressure_gap: float) -> AppSetting:
     normalized = round(max(0.0, float(pressure_gap)), 1)
     setting = db.scalar(select(AppSetting).where(AppSetting.key == PRESSURE_GAP_SETTINGS_KEY))
-    value_json = json.dumps({"pressure_gap": normalized}, ensure_ascii=False)
+    current_payload = None
+    if setting:
+        try:
+            current_payload = json.loads(setting.value_json)
+        except (json.JSONDecodeError, TypeError):
+            current_payload = None
+    profile = sanitize_control_profile(current_payload)
+    profile["pressure_gap"] = normalized
+    profile["equipment_gaps"] = [min(normalized, value) for value in profile["equipment_gaps"]]
+    value_json = json.dumps(profile, ensure_ascii=False)
     if not setting:
         setting = AppSetting(key=PRESSURE_GAP_SETTINGS_KEY, value_json=value_json)
         db.add(setting)
@@ -608,6 +621,26 @@ def update_pressure_gap_settings(
     return PressureGapSettingsOut(pressure_gap=pressure_gap, updated_at=setting.updated_at)
 
 
+@app.get("/api/app-settings/control-profile", response_model=ControlProfileOut)
+def get_control_profile(db: Session = Depends(get_db)) -> ControlProfileOut:
+    payload, updated_at = load_json_setting(db, CONTROL_PROFILE_SETTINGS_KEY, sanitize_control_profile)
+    return ControlProfileOut(**payload, updated_at=updated_at)
+
+
+@app.put("/api/app-settings/control-profile", response_model=ControlProfileOut)
+def update_control_profile(
+    payload: ControlProfileIn,
+    db: Session = Depends(get_db),
+) -> ControlProfileOut:
+    normalized, updated_at = save_json_setting(
+        db,
+        CONTROL_PROFILE_SETTINGS_KEY,
+        payload.model_dump(),
+        sanitize_control_profile,
+    )
+    return ControlProfileOut(**normalized, updated_at=updated_at)
+
+
 @app.get("/api/app-settings/schedule-settings", response_model=ScheduleSettingsOut)
 def get_schedule_settings(db: Session = Depends(get_db)) -> ScheduleSettingsOut:
     payload, updated_at = load_json_setting(db, SCHEDULE_SETTINGS_KEY, sanitize_schedule_settings)
@@ -700,6 +733,7 @@ def current_group_operation_writes(
     db: Session,
     action: str,
     run_units_override: int | None = None,
+    stop_equipment: bool = True,
 ) -> list[dict]:
     current_operation_value = current_map_int(db, "0050", 0)
     connected_mask = current_map_int(db, "0002", 0)
@@ -709,12 +743,18 @@ def current_group_operation_writes(
     sequence = [current_map_int(db, key, 0) for key in RUN_SEQUENCE_KEYS]
     oilfree_selector = current_map_int(db, "0006", 0)
     running_units = []
+    inverter_units: set[int] = set()
     for unit in available_units:
         prefix = "2" if oilfree_selector & (1 << (unit - 1)) else "1"
         unit_hex = f"{unit:X}"
         cp_status_offset = "30" if prefix == "2" else "16"
         if current_map_int(db, f"{prefix}{unit_hex}{cp_status_offset}", 0):
             running_units.append(unit)
+        model_offset = "7C" if prefix == "2" else "74"
+        model_value = current_map_int(db, f"{prefix}{unit_hex}{model_offset}", 0)
+        if (prefix == "2" and current_map_int(db, f"{prefix}{unit_hex}7E", 0) == 3) or (prefix == "1" and model_value >= 17):
+            inverter_units.add(unit)
+    control_profile, _ = load_json_setting(db, CONTROL_PROFILE_SETTINGS_KEY, sanitize_control_profile)
     return build_group_operation_writes(
         current_value=current_operation_value,
         action=action,
@@ -727,6 +767,13 @@ def current_group_operation_writes(
         run_delay_seconds=current_map_int(db, "003C", 0),
         stop_delay_seconds=current_map_int(db, "0004", 0),
         stop_additional_units=not bool(current_map_int(db, "004A", 0) & (1 << 14)),
+        stop_equipment=stop_equipment,
+        no_load_pressure=current_map_int(db, "0016", 0),
+        load_pressure=current_map_int(db, "0018", 0),
+        equipment_gaps=[round(float(value) * 10) for value in control_profile["equipment_gaps"]],
+        inverter_units=inverter_units,
+        main_inverter_unit=int(control_profile["main_inverter_unit"]),
+        inverter_offset=round(float(control_profile["inverter_pressure_offset"]) * 10),
     )
 
 
@@ -767,7 +814,7 @@ async def create_group_operation_command(
     payload: GroupOperationIn,
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
-    writes = current_group_operation_writes(db, payload.action)
+    writes = current_group_operation_writes(db, payload.action, stop_equipment=payload.stop_equipment)
     command = enqueue_control_command(
         db,
         "map_write_batch",
