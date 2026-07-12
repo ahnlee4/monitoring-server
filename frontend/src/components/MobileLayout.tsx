@@ -28,6 +28,7 @@ type MobileDashboard = {
   appVersion: string;
   firmwareVersion: string;
   lowPressureAlarm: "none" | "warning" | "reserve";
+  lowPressureStep: number;
   sortMode: "setting" | "time";
   control: {
     noLoadPressure: number;
@@ -40,7 +41,7 @@ type MobileDashboard = {
   compressors: MobileCompressor[];
 };
 
-type ActiveDialog = "cctv" | "settings" | "control" | "minmax" | "password" | null;
+type ActiveDialog = "cctv" | "settings" | "control" | "minmax" | "lowpressure" | "password" | null;
 type ActiveScreen = "main" | "detail";
 type ModeSequenceAction = "previous" | "refresh" | "next";
 type FullscreenDocument = Document & {
@@ -54,6 +55,7 @@ type FullscreenElement = HTMLElement & {
 export function MobileLayout({
   activeScreen,
   alarmVisible,
+  alarmMuted,
   dashboard,
   detailCompressors,
   lowPressureText,
@@ -63,10 +65,12 @@ export function MobileLayout({
   onModeSequenceAction,
   onOpenCompressorDetail,
   onOpenDialog,
+  onToggleAlarmMute,
   onToggleScreen,
 }: {
   activeScreen: ActiveScreen;
   alarmVisible: boolean;
+  alarmMuted: boolean;
   dashboard: MobileDashboard;
   detailCompressors: MobileCompressor[];
   lowPressureText: string;
@@ -76,6 +80,7 @@ export function MobileLayout({
   onModeSequenceAction: (action: ModeSequenceAction) => void;
   onOpenCompressorDetail: (id: number) => void;
   onOpenDialog: (dialog: ActiveDialog) => void;
+  onToggleAlarmMute: () => void;
   onToggleScreen: () => void;
 }) {
   const visibleCompressors = detailCompressors;
@@ -93,15 +98,23 @@ export function MobileLayout({
         ) : visibleCompressors.length === 0 ? (
           <MobileDisconnect />
         ) : (
-          <MobileMainList alarmVisible={alarmVisible} compressors={visibleCompressors} lowPressureText={lowPressureText} onOpenCompressorDetail={onOpenCompressorDetail} />
+          <MobileMainList
+            alarmVisible={alarmVisible}
+            compressors={visibleCompressors}
+            lowPressureText={lowPressureText}
+            onOpenCompressorDetail={onOpenCompressorDetail}
+            onOpenLowPressure={dashboard.lowPressureStep === 5 ? () => onOpenDialog("lowpressure") : undefined}
+          />
         )}
       </main>
       <MobileBottomActions
         activeScreen={activeScreen}
+        alarmMuted={alarmMuted}
         dashboard={dashboard}
         modeSequenceBusy={modeSequenceBusy}
         onModeSequenceAction={onModeSequenceAction}
         onOpenDialog={onOpenDialog}
+        onToggleAlarmMute={onToggleAlarmMute}
         onToggleScreen={onToggleScreen}
       />
     </section>
@@ -225,15 +238,17 @@ function MobileMainList({
   compressors,
   lowPressureText,
   onOpenCompressorDetail,
+  onOpenLowPressure,
 }: {
   alarmVisible: boolean;
   compressors: MobileCompressor[];
   lowPressureText: string;
   onOpenCompressorDetail: (id: number) => void;
+  onOpenLowPressure?: () => void;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-[10px]">
-      {alarmVisible && lowPressureText ? <div className="rounded-[10px] bg-[#fff0f0] px-[12px] py-[10px] text-center text-[15px] font-black text-[#d92525]">{lowPressureText}</div> : null}
+      {alarmVisible && lowPressureText ? <button className="rounded-[10px] bg-[#fff0f0] px-[12px] py-[10px] text-center text-[15px] font-black text-[#d92525] disabled:cursor-default" disabled={!onOpenLowPressure} onClick={onOpenLowPressure} type="button">{lowPressureText}</button> : null}
       <div className="grid min-h-0 flex-1 snap-y snap-mandatory grid-cols-1 auto-rows-[calc((100%_-_10px)/2)] gap-[10px] overflow-y-auto overscroll-contain scroll-smooth pr-[2px]">
         {compressors.map((compressor) => (
           <MobileCompressorCard alarmVisible={alarmVisible} key={compressor.id} compressor={compressor} onOpenDetail={onOpenCompressorDetail} />
@@ -400,27 +415,32 @@ function MobileDisconnect() {
 
 function MobileBottomActions({
   activeScreen,
+  alarmMuted,
   dashboard,
   modeSequenceBusy,
   onModeSequenceAction,
   onOpenDialog,
+  onToggleAlarmMute,
   onToggleScreen,
 }: {
   activeScreen: ActiveScreen;
+  alarmMuted: boolean;
   dashboard: MobileDashboard;
   modeSequenceBusy: boolean;
   onModeSequenceAction: (action: ModeSequenceAction) => void;
   onOpenDialog: (dialog: ActiveDialog) => void;
+  onToggleAlarmMute: () => void;
   onToggleScreen: () => void;
 }) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#d8e6f1] bg-white/95 px-[10px] py-[8px] shadow-[0_-8px_24px_rgba(18,54,88,0.12)] backdrop-blur">
-      <div className="grid grid-cols-5 gap-[6px]">
+      <div className="grid grid-cols-6 gap-[6px]">
         <MobileNavButton active={activeScreen === "main"} label="메인" onClick={activeScreen === "main" ? undefined : onToggleScreen} />
         <MobileNavButton active={activeScreen === "detail"} label="상세" onClick={activeScreen === "detail" ? undefined : onToggleScreen} />
         <MobileNavButton label="통합" onClick={() => onOpenDialog("control")} />
         <MobileNavButton label="설정" onClick={() => onOpenDialog("settings")} />
         <MobileNavButton label="CCTV" onClick={() => onOpenDialog("cctv")} />
+        <MobileNavButton active={alarmMuted} label={alarmMuted ? "소리끔" : "소리"} onClick={onToggleAlarmMute} />
       </div>
       <div className="mt-[7px] grid grid-cols-[1fr_42px_42px_42px] gap-[6px]">
         <div className="flex items-center rounded-[8px] bg-[#eef7ff] px-[10px] text-[12px] font-black text-[#45657f]">

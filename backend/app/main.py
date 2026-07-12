@@ -551,6 +551,8 @@ def normalize_map_write(write: MapWriteIn) -> dict:
     }
     if write.delay_after_seconds is not None:
         normalized["delay_after_seconds"] = write.delay_after_seconds
+    if write.continue_on_verification_failure:
+        normalized["continue_on_verification_failure"] = True
     if write.data_hex is not None:
         normalized["data_hex"] = write.data_hex
     else:

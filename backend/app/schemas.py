@@ -238,6 +238,7 @@ class MapWriteIn(BaseModel):
     value: int | None = None
     data_hex: str | None = None
     delay_after_seconds: float | None = Field(default=None, ge=0)
+    continue_on_verification_failure: bool = False
 
 
 class MapWriteBatchIn(BaseModel):

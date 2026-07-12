@@ -1,11 +1,13 @@
-type ActiveDialog = "cctv" | "settings" | "control" | "minmax" | null;
+type ActiveDialog = "cctv" | "settings" | "control" | "minmax" | "lowpressure" | null;
 type ActiveScreen = "main" | "detail";
 
 type QuickButtonsProps = {
   activeScreen: ActiveScreen;
+  alarmMuted: boolean;
   menuOpen: boolean;
   onOpenDialog: (dialog: ActiveDialog) => void;
   onExportPower: () => void;
+  onToggleAlarmMute: () => void;
   onToggleDetail: () => void;
   setMenuOpen: (open: boolean) => void;
 };
@@ -20,13 +22,16 @@ const PRELOAD_ICONS = ["/setting.png", "/control.png", "/device.png", "/device_b
 
 export function QuickButtons({
   activeScreen,
+  alarmMuted,
   menuOpen,
   onOpenDialog,
   onExportPower,
+  onToggleAlarmMute,
   onToggleDetail,
   setMenuOpen,
 }: QuickButtonsProps) {
   const menuItems: QuickMenuItem[] = [
+    { label: alarmMuted ? "알람음 켜기" : "알람음 끄기", icon: "/setting.png", action: onToggleAlarmMute },
     { label: "CCTV", icon: "/device.png", action: () => onOpenDialog("cctv") },
     { label: "전력 CSV", icon: "/setting.png", action: onExportPower },
     { label: "설정", icon: "/setting.png", action: () => onOpenDialog("settings") },

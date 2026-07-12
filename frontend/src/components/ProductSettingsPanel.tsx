@@ -30,6 +30,7 @@ const OPTION_FIELDS = [
   [14, "통합제어 정지시 컴프레샤 정지안함"],
   [15, "교환운전 테스트"],
 ] as const;
+const VISIBLE_OPTION_FIELDS = OPTION_FIELDS.filter(([bit]) => bit !== 12 && bit !== 13);
 
 const DEFAULT_SETTINGS: ProductSettings = {
   factory_password: "btfss0510",
@@ -100,10 +101,6 @@ export function ProductSettingsPanel({
       type: "password",
       levels: [level],
     },
-    { key: "login_id", label: "로그인 아이디 변경", levels: [FACTORY, ADMIN] },
-    { key: "login_password", label: "로그인 비밀번호 변경", type: "password", levels: [FACTORY, ADMIN] },
-    { key: "save_cycle_seconds", label: "저장 주기 설정", type: "number", min: 1, max: 30, unit: "초", levels: [FACTORY] },
-    { key: "save_period_days", label: "저장 기간 설정", type: "number", min: 1, max: 60, unit: "일", levels: [FACTORY, ADMIN] },
     { key: "backlight_percent", label: "백라이트 퍼센테이지", type: "number", min: 0, max: 100, unit: "%", levels: [FACTORY, ADMIN] },
     { key: "screen_saver_seconds", label: "스크린 세이버 (0=사용안함)", type: "number", min: 0, max: 300, unit: "초", levels: [FACTORY, ADMIN] },
     { key: "alarm_sound_enabled", label: "알람 소리 사용", levels: [FACTORY, ADMIN] },
@@ -138,6 +135,7 @@ export function ProductSettingsPanel({
     try {
       const saved = await updateProductSettings(settings);
       setSettings(saved);
+      window.dispatchEvent(new CustomEvent("product-settings-updated", { detail: saved }));
       setStatus("제품 로컬 설정 저장 완료");
     } catch (error) {
       setStatus(`저장 실패: ${error instanceof Error ? error.message : String(error)}`);
@@ -158,6 +156,7 @@ export function ProductSettingsPanel({
       await waitForControlCommand(Number(command.id), () => {});
       const saved = await updateProductSettings(settings);
       setSettings(saved);
+      window.dispatchEvent(new CustomEvent("product-settings-updated", { detail: saved }));
       setStatus("옵션 그룹 장비 적용 완료");
     } catch (error) {
       setStatus(`옵션 적용 실패: ${error instanceof Error ? error.message : String(error)}`);
@@ -240,9 +239,9 @@ export function ProductSettingsPanel({
       {level !== USER ? (
         <section className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
           <div className="text-[20px] font-black text-[#173f69]">하단 옵션 그룹</div>
-          <div className="mt-[4px] text-[12px] font-bold text-[#6f879d]">원본 Option Device 0x004A의 BIT2~BIT15 설정</div>
+          <div className="mt-[4px] text-[12px] font-bold text-[#6f879d]">원본 Option Device 0x004A 설정 (로그인·데이터 저장 옵션 제외)</div>
           <div className="mt-[10px] grid grid-cols-3 gap-[7px] max-lg:grid-cols-2 max-sm:grid-cols-1">
-            {OPTION_FIELDS.map(([bit, label]) => (
+            {VISIBLE_OPTION_FIELDS.map(([bit, label]) => (
               <label key={bit} className="flex min-h-[44px] items-center gap-[7px] rounded-[7px] border border-[#d9e6f0] bg-[#f8fbfd] px-[9px] text-[12px] font-black text-[#45657f]">
                 <input checked={Boolean(options[bit])} disabled={integratedRun || saving} onChange={(event) => setOptions((current) => ({ ...current, [bit]: event.target.checked }))} type="checkbox" />
                 {label}

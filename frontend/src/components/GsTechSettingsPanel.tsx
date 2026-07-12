@@ -114,7 +114,7 @@ export function GsTechSettingsPanel({ mapValues }: { mapValues: Record<string, Y
     setSaving(true);
     setStatus("GSTECH 로컬 설정 저장 중...");
     try {
-      const saved = await updateGsTechSettings(settings);
+      const saved = await updateGsTechSettings({ ...settings, tcp_mode: 0 });
       setSettings(saved);
       setStatus("DIO / TCP / CCTV 설정 저장 완료");
     } catch (error) {
@@ -168,9 +168,10 @@ export function GsTechSettingsPanel({ mapValues }: { mapValues: Record<string, Y
         <div className="mt-[10px] grid grid-cols-2 gap-[8px] max-sm:grid-cols-1">
           <SettingSelect disabled={disabled} label="DIO BIT0" onChange={(value) => setSettings((current) => ({ ...current, dio_bit0: value }))} options={DIO_ITEMS} value={settings.dio_bit0} />
           <SettingSelect disabled={disabled} label="DIO BIT4" onChange={(value) => setSettings((current) => ({ ...current, dio_bit4: value }))} options={DIO_ITEMS} value={settings.dio_bit4} />
-          <SettingSelect disabled={disabled} label="TCP/IP" onChange={(value) => setSettings((current) => ({ ...current, tcp_mode: value === 1 ? 1 : 0 }))} options={["Server", "Client"]} value={settings.tcp_mode} />
+          <label className="grid gap-[4px] text-[11px] font-black text-[#6f879d]">TCP/IP<input className="h-[38px] rounded-[6px] border border-[#c9deef] bg-[#edf1f4] px-[8px] font-black text-[#45657f]" disabled readOnly value="Server (보드 직접 연결)" /></label>
           <label className="grid gap-[4px] text-[11px] font-black text-[#6f879d]">GSTECH 옵션<select className="h-[38px] rounded-[6px] border border-[#c9deef] bg-white px-[8px] font-black text-[#173f69]" disabled={disabled} onChange={(event) => setSettings((current) => ({ ...current, cctv_enabled: event.target.value === "1" }))} value={settings.cctv_enabled ? "1" : "0"}><option value="1">CCTV 사용</option><option value="0">CCTV 사용안함</option></select></label>
         </div>
+        <div className="mt-[7px] text-[11px] font-bold text-[#6f879d]">현재 Web/Docker 보드는 RS485 장비에 직접 연결되는 Server 역할로 고정됩니다.</div>
         <div className="mt-[10px] flex justify-end"><button className="rounded-[6px] bg-[#237bd0] px-[18px] py-[8px] text-[14px] font-black text-white disabled:opacity-40" disabled={disabled} onClick={() => void saveLocal()} type="button">설정 저장</button></div>
       </section>
 

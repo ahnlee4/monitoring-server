@@ -7,6 +7,7 @@ import { EquipmentMaskSettings } from "./components/EquipmentMaskSettings";
 import { ModeSequenceEditor } from "./components/ModeSequenceEditor";
 import { CctvDialog } from "./components/CctvDialog";
 import { MinMaxDialog } from "./components/MinMaxDialog";
+import { LowPressureDialog } from "./components/LowPressureDialog";
 import { MobileLayout } from "./components/MobileLayout";
 import { GsTechSettingsPanel } from "./components/GsTechSettingsPanel";
 import { ProductSettingsPanel } from "./components/ProductSettingsPanel";
@@ -20,6 +21,7 @@ import {
 } from "./components/AdminSettingsTabs";
 import type { SettingsTabKey } from "./components/AdminSettingsTabs";
 import { useYujinMapValues } from "./hooks/useYujinMapValues";
+import { useRuntimeSettings } from "./hooks/useRuntimeSettings";
 import {
   ControlStatusDelayedError,
   ControlStatusUnsupportedError,
@@ -67,6 +69,7 @@ type DashboardState = {
   appVersion: string;
   firmwareVersion: string;
   lowPressureAlarm: "none" | "warning" | "reserve";
+  lowPressureStep: number;
   sortMode: "setting" | "time";
   configuredCount: number;
   control: {
@@ -85,14 +88,14 @@ type DashboardState = {
   compressors: CompressorState[];
 };
 
-type ActiveDialog = "cctv" | "settings" | "control" | "minmax" | "password" | null;
+type ActiveDialog = "cctv" | "settings" | "control" | "minmax" | "lowpressure" | "password" | null;
 type ActiveScreen = "main" | "detail";
 type UserLevel = 0 | 1 | 2;
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.142";
+const APP_VERSION = "0.1.143";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036", "0038", "000E", "0010", "0012"];
 const MODE_ALIGN_ROWS = 7;
@@ -142,6 +145,7 @@ const emptyDashboard: DashboardState = {
   appVersion: APP_VERSION,
   firmwareVersion: "-",
   lowPressureAlarm: "none",
+  lowPressureStep: 0,
   sortMode: "setting",
   configuredCount: 0,
   control: {
@@ -197,19 +201,12 @@ export default function App() {
   const [adminLogoClicks, setAdminLogoClicks] = useState({ count: 0, lastAt: 0 });
   const [modeSequenceBusy, setModeSequenceBusy] = useState(false);
   const [controlProfile, setControlProfile] = useState<ControlProfile | null>(null);
-  const [alarmVisible, setAlarmVisible] = useState(true);
   const mapValues = useYujinMapValues();
   const isMobile = useIsMobileViewport();
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    fetchProductSettings()
-      .then((settings) => setAlarmVisible(settings.alarm_visible))
-      .catch((error) => console.error("failed to load product display settings", error));
   }, []);
 
   useEffect(() => {
@@ -221,6 +218,9 @@ export default function App() {
   const dashboard = useMemo(
     () => buildDashboardFromMap(mapValues, controlProfile?.pressure_gap ?? null, controlProfile?.main_inverter_unit ?? 0),
     [controlProfile, mapValues],
+  );
+  const runtime = useRuntimeSettings(
+    dashboard.lowPressureAlarm !== "none" || dashboard.compressors.some((compressor) => compressor.connected && (compressor.alarm || compressor.fault)),
   );
   const lowPressureText = getLowPressureText(dashboard.lowPressureAlarm);
   const showMainScreen = activeScreen === "main";
@@ -275,7 +275,8 @@ export default function App() {
         {isMobile ? (
           <MobileLayout
             activeScreen={activeScreen}
-            alarmVisible={alarmVisible}
+            alarmMuted={runtime.alarmMuted}
+            alarmVisible={runtime.alarmVisible}
             dashboard={dashboard}
             detailCompressors={detailCompressors}
             lowPressureText={lowPressureText}
@@ -285,6 +286,7 @@ export default function App() {
             onModeSequenceAction={handleModeSequenceAction}
             onOpenCompressorDetail={setSelectedCompressorId}
             onOpenDialog={openDialog}
+            onToggleAlarmMute={runtime.toggleAlarmMuted}
             onToggleScreen={() => setActiveScreen((screen) => (screen === "detail" ? "main" : "detail"))}
           />
         ) : (
@@ -303,14 +305,14 @@ export default function App() {
                     }}
                   >
                     {visibleCompressors.map((compressor) => (
-                      <CompressorCard alarmVisible={alarmVisible} key={compressor.id} compressor={compressor} onOpenDetail={setSelectedCompressorId} />
+                      <CompressorCard alarmVisible={runtime.alarmVisible} key={compressor.id} compressor={compressor} onOpenDetail={setSelectedCompressorId} />
                     ))}
                   </div>
                 ) : (
                   <DisconnectBanner />
                 )}
-                {alarmVisible && visibleCompressors.length > 0 && lowPressureText ? (
-                  <AlarmStrip tone={dashboard.lowPressureAlarm} text={lowPressureText} />
+                {runtime.alarmVisible && visibleCompressors.length > 0 && lowPressureText ? (
+                  <AlarmStrip onClick={dashboard.lowPressureStep === 5 ? () => setActiveDialog("lowpressure") : undefined} tone={dashboard.lowPressureAlarm} text={lowPressureText} />
                 ) : null}
               </>
             ) : (
@@ -320,12 +322,14 @@ export default function App() {
 
           <Footer
             activeScreen={activeScreen}
+            alarmMuted={runtime.alarmMuted}
             dashboard={dashboard}
             menuOpen={menuOpen}
             modeSequenceBusy={modeSequenceBusy}
             onOpenDialog={openDialog}
             onExportPower={handleExportPower}
             onModeSequenceAction={handleModeSequenceAction}
+            onToggleAlarmMute={runtime.toggleAlarmMuted}
             onToggleDetail={() => setActiveScreen((screen) => (screen === "detail" ? "main" : "detail"))}
             setMenuOpen={setMenuOpen}
           />
@@ -333,6 +337,9 @@ export default function App() {
         )}
         {activeDialog === "cctv" ? <CctvDialog onClose={() => setActiveDialog(null)} /> : null}
         {activeDialog === "minmax" ? <MinMaxDialog mapValues={mapValues} onClose={() => setActiveDialog(null)} /> : null}
+        {activeDialog === "lowpressure" ? (
+          <LowPressureDialog compressors={dashboard.compressors.slice(0, dashboard.configuredCount)} onClose={() => setActiveDialog(null)} runUnits={dashboard.control.runUnits} />
+        ) : null}
         {activeDialog === "settings" ? (
           <SettingsDialog configuredCount={dashboard.configuredCount} level={settingsLevel} mapValues={mapValues} onClose={() => setActiveDialog(null)} />
         ) : null}
@@ -354,6 +361,18 @@ export default function App() {
             integratedRun={dashboard.integratedRun}
             mapValues={mapValues}
             onClose={() => setSelectedCompressorId(null)}
+          />
+        ) : null}
+        {runtime.dimmed ? (
+          <button
+            aria-label="화면 깨우기"
+            className="absolute inset-0 z-[200] cursor-default bg-black"
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              runtime.wake();
+            }}
+            style={{ opacity: runtime.dimOpacity }}
+            type="button"
           />
         ) : null}
       </section>
@@ -426,6 +445,7 @@ function buildDashboardFromMap(
     totalPower: validPowerValues.length ? validPowerValues.reduce((sum, value) => sum + value, 0) : Number.NaN,
     firmwareVersion: buildFirmwareVersion(values),
     lowPressureAlarm: lowAlarmStep >= 4 && options[7]?.checked ? "reserve" : lowAlarmStep >= 3 ? "warning" : "none",
+    lowPressureStep: Math.trunc(lowAlarmStep),
     sortMode: (sortModeWord & 0x0001) === 0x0001 ? "time" : "setting",
     configuredCount,
     control: {
@@ -907,34 +927,38 @@ function FlagCell({ tone, children }: { tone: "alarm" | "fault"; children: React
   );
 }
 
-function AlarmStrip({ tone, text }: { tone: DashboardState["lowPressureAlarm"]; text: string }) {
+function AlarmStrip({ onClick, tone, text }: { onClick?: () => void; tone: DashboardState["lowPressureAlarm"]; text: string }) {
   const toneClass = tone === "reserve" ? "text-[#1c55cc]" : "text-[#d90000]";
 
   return (
-    <div className={`absolute bottom-0 left-0 right-0 z-10 h-[44px] bg-[#c1c1c1] text-center text-[30px] font-black leading-[44px] ${toneClass}`}>
+    <button className={`absolute bottom-0 left-0 right-0 z-10 h-[44px] bg-[#c1c1c1] text-center text-[30px] font-black leading-[44px] ${toneClass}`} disabled={!onClick} onClick={onClick} type="button">
       {text}
-    </div>
+    </button>
   );
 }
 
 function Footer({
   activeScreen,
+  alarmMuted,
   dashboard,
   menuOpen,
   modeSequenceBusy,
   onOpenDialog,
   onExportPower,
   onModeSequenceAction,
+  onToggleAlarmMute,
   onToggleDetail,
   setMenuOpen,
 }: {
   activeScreen: ActiveScreen;
+  alarmMuted: boolean;
   dashboard: DashboardState;
   menuOpen: boolean;
   modeSequenceBusy: boolean;
   onOpenDialog: (dialog: ActiveDialog) => void;
   onExportPower: () => void;
   onModeSequenceAction: (action: ModeSequenceAction) => void;
+  onToggleAlarmMute: () => void;
   onToggleDetail: () => void;
   setMenuOpen: (open: boolean) => void;
 }) {
@@ -948,9 +972,11 @@ function Footer({
       <OptionPanel options={dashboard.options} />
       <QuickButtons
         activeScreen={activeScreen}
+        alarmMuted={alarmMuted}
         menuOpen={menuOpen}
         onExportPower={onExportPower}
         onOpenDialog={onOpenDialog}
+        onToggleAlarmMute={onToggleAlarmMute}
         onToggleDetail={onToggleDetail}
         setMenuOpen={setMenuOpen}
       />

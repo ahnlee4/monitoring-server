@@ -14,6 +14,8 @@ export type MapWrite = {
   length?: number;
   value?: number;
   data_hex?: string;
+  delay_after_seconds?: number;
+  continue_on_verification_failure?: boolean;
 };
 
 export type RawUart4Frame = {
