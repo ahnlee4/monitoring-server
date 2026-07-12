@@ -166,6 +166,10 @@ class RS485Collector(BaseCollector):
         self._last_debug_at: float | None = None
         self._poll_cycle_index = 0
         self._is_injection = [True] * self.comp_qty
+        self._failed_addresses: set[int] = set()
+        self._slow_addresses: set[int] = set()
+        self._last_poll_error: str | None = None
+        self._serial_open_announced = False
 
     def request_control_priority(self) -> None:
         self._control_priority.set()
@@ -180,6 +184,10 @@ class RS485Collector(BaseCollector):
         old_port = self.serial_port
         self.serial_port = serial_port
         self._close_serial()
+        self._serial_open_announced = False
+        self._failed_addresses.clear()
+        self._slow_addresses.clear()
+        self._last_poll_error = None
         print(f"collector-uart4 serial port changed {old_port} -> {self.serial_port}")
 
     def poll(self) -> CollectorBatch:
@@ -231,7 +239,10 @@ class RS485Collector(BaseCollector):
                     time.sleep(self.inter_request_delay)
         except Exception as exc:
             self._close_serial()
-            print(f"collector-rs485 error on {self.serial_port}: {exc}")
+            error = str(exc)
+            if error != self._last_poll_error:
+                print(f"collector-rs485 error on {self.serial_port}: {error}")
+                self._last_poll_error = error
 
         heartbeat_keys = [item.key for item in map_values]
         force_full_snapshot = self._should_publish_full_snapshot()
@@ -267,7 +278,9 @@ class RS485Collector(BaseCollector):
                 timeout=self.response_timeout,
                 write_timeout=self.response_timeout,
             )
-            print(f"collector-uart4 opened {self.serial_port} @ {self.baudrate} 8N1")
+            if not self._serial_open_announced:
+                print(f"collector-uart4 opened {self.serial_port} @ {self.baudrate} 8N1")
+                self._serial_open_announced = True
             return self._serial
 
     def _close_serial(self) -> None:
@@ -299,9 +312,17 @@ class RS485Collector(BaseCollector):
             try:
                 frame = self._read_frame(port)
             except Uart4ProtocolError as exc:
-                print(f"collector-uart4 addr 0x{mem_addr:02X} no valid response: {exc}")
+                if mem_addr not in self._failed_addresses:
+                    print(f"collector-uart4 addr 0x{mem_addr:02X} no valid response: {exc}")
+                    self._failed_addresses.add(mem_addr)
                 return None
 
+        if mem_addr in self._failed_addresses:
+            self._failed_addresses.remove(mem_addr)
+            print(f"collector-uart4 addr 0x{mem_addr:02X} response recovered")
+        if self._last_poll_error is not None:
+            print(f"collector-rs485 connection recovered on {self.serial_port}")
+            self._last_poll_error = None
         self._debug("rx", frame)
         command = frame[1]
         if command == CMD_FULL_READ:
@@ -499,24 +520,34 @@ class RS485Collector(BaseCollector):
         )
 
     def _debug(self, label: str, data: bytes, max_bytes: int = 32) -> None:
-        if self.debug_hex:
-            now = time.monotonic()
-            delta_text = ""
-            if self._last_debug_at is not None:
-                delta_text = f" +{(now - self._last_debug_at) * 1000:.0f}ms"
-            self._last_debug_at = now
+        if not self.debug_hex and label not in {"tx-control", "rx-control", "tx-raw", "rx-raw"}:
+            return
 
-            if label.startswith("rx") and len(data) > max_bytes:
-                head = data[:max_bytes].hex(" ").upper()
-                tail = data[-2:].hex(" ").upper()
-                print(f"collector-uart4 {label}:{delta_text} len={len(data)} {head} ... crc={tail}")
-                return
-            print(f"collector-uart4 {label}:{delta_text} {data.hex(' ').upper()}")
+        now = time.monotonic()
+        delta_text = ""
+        if self._last_debug_at is not None:
+            delta_text = f" +{(now - self._last_debug_at) * 1000:.0f}ms"
+        self._last_debug_at = now
+
+        if label.startswith("rx") and len(data) > max_bytes:
+            head = data[:max_bytes].hex(" ").upper()
+            tail = data[-2:].hex(" ").upper()
+            print(f"collector-uart4 {label}:{delta_text} len={len(data)} {head} ... crc={tail}")
+            return
+        print(f"collector-uart4 {label}:{delta_text} {data.hex(' ').upper()}")
 
     def _log_address_elapsed(self, mem_addr: int, started: float) -> None:
         elapsed_ms = (time.monotonic() - started) * 1000
-        if self.slow_address_log_ms >= 0 and elapsed_ms >= self.slow_address_log_ms:
-            print(f"collector-uart4 addr 0x{mem_addr:02X} slow: {elapsed_ms:.0f}ms")
+        if self.slow_address_log_ms <= 0:
+            return
+        if elapsed_ms >= self.slow_address_log_ms:
+            if mem_addr not in self._slow_addresses:
+                print(f"collector-uart4 addr 0x{mem_addr:02X} slow: {elapsed_ms:.0f}ms")
+                self._slow_addresses.add(mem_addr)
+            return
+        if mem_addr in self._slow_addresses:
+            self._slow_addresses.remove(mem_addr)
+            print(f"collector-uart4 addr 0x{mem_addr:02X} response speed recovered")
 
     def _filter_changed_map_values(self, values: list[MapValueUpdate], force: bool = False) -> list[MapValueUpdate]:
         if force:

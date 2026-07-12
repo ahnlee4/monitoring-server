@@ -24,7 +24,7 @@ def build_collector() -> tuple[BaseCollector, int]:
         inter_request_delay = float(get_env("RS485_INTER_REQUEST_DELAY_SECONDS", "0.005"))
         write_request_delay = float(get_env("RS485_WRITE_REQUEST_DELAY_SECONDS", "0.005"))
         write_response_timeout = float(get_env("RS485_WRITE_RESPONSE_TIMEOUT_SECONDS", "0"))
-        debug_hex = get_env("RS485_DEBUG_HEX", "true").strip().lower() in ("1", "true", "yes", "on")
+        debug_hex = get_env("RS485_DEBUG_HEX", "false").strip().lower() in ("1", "true", "yes", "on")
         slow_address_log_ms = float(get_env("RS485_SLOW_ADDRESS_LOG_MS", "200"))
         settings_poll_interval_cycles = get_int_env("RS485_SETTINGS_POLL_INTERVAL_CYCLES", 5)
         full_snapshot_interval_cycles = get_int_env("RS485_FULL_SNAPSHOT_INTERVAL_CYCLES", 5)
@@ -66,11 +66,18 @@ def run_control_loop(
     command_delay: float,
     poll_seconds: float,
 ) -> None:
+    last_fetch_error: str | None = None
     while True:
         try:
             commands = client.fetch_control_commands(limit=command_limit)
+            if last_fetch_error is not None:
+                print("collector control command connection recovered")
+                last_fetch_error = None
         except Exception as exc:
-            print(f"collector control command fetch error: {exc}")
+            error = str(exc)
+            if error != last_fetch_error:
+                print(f"collector control command fetch error: {error}")
+                last_fetch_error = error
             commands = []
 
         for command in commands:
@@ -112,7 +119,14 @@ def enqueue_latest_batch(queue: Queue[CollectorBatch], batch: CollectorBatch) ->
         pass
 
 
-def run_publish_loop(client: BackendClient, queue: Queue[CollectorBatch], publish_telemetry: bool) -> None:
+def run_publish_loop(
+    client: BackendClient,
+    queue: Queue[CollectorBatch],
+    publish_telemetry: bool,
+    status_log_interval_seconds: float,
+) -> None:
+    last_status_log_at = 0.0
+    last_map_error: str | None = None
     while True:
         batch = queue.get()
         if batch is SENTINEL_BATCH:
@@ -129,13 +143,22 @@ def run_publish_loop(client: BackendClient, queue: Queue[CollectorBatch], publis
             try:
                 start = time.monotonic()
                 client.publish_map_batch(batch)
+                if last_map_error is not None:
+                    print("collector yujin map connection recovered")
+                    last_map_error = None
                 elapsed_ms = (time.monotonic() - start) * 1000
-                print(
-                    "sent yujin map batch "
-                    f"changed={len(batch.map_values)} heartbeat={len(batch.heartbeat_keys)} in {elapsed_ms:.0f}ms"
-                )
+                now = time.monotonic()
+                if status_log_interval_seconds > 0 and now - last_status_log_at >= status_log_interval_seconds:
+                    print(
+                        "sent yujin map batch "
+                        f"changed={len(batch.map_values)} heartbeat={len(batch.heartbeat_keys)} in {elapsed_ms:.0f}ms"
+                    )
+                    last_status_log_at = now
             except Exception as exc:
-                print(f"collector yujin map publish error: {exc}")
+                error = str(exc)
+                if error != last_map_error:
+                    print(f"collector yujin map publish error: {error}")
+                    last_map_error = error
         queue.task_done()
 
 
@@ -151,6 +174,7 @@ def main() -> None:
     control_poll_seconds = float(get_env("COLLECTOR_CONTROL_POLL_SECONDS", "0.1"))
     settings_poll_seconds = float(get_env("COLLECTOR_SETTINGS_POLL_SECONDS", "2"))
     slow_poll_log_ms = float(get_env("COLLECTOR_SLOW_POLL_LOG_MS", "0"))
+    status_log_interval_seconds = float(get_env("COLLECTOR_STATUS_LOG_INTERVAL_SECONDS", "0"))
     token = get_env("COLLECTOR_TOKEN", "change-me")
 
     collector, interval = build_collector()
@@ -176,11 +200,12 @@ def main() -> None:
     publish_queue: Queue[CollectorBatch] = Queue(maxsize=1)
     threading.Thread(
         target=run_publish_loop,
-        args=(data_client, publish_queue, publish_telemetry),
+        args=(data_client, publish_queue, publish_telemetry, status_log_interval_seconds),
         daemon=True,
     ).start()
 
     last_settings_poll = 0.0
+    last_settings_error: str | None = None
     while True:
         if settings_poll_seconds >= 0 and time.monotonic() - last_settings_poll >= settings_poll_seconds:
             last_settings_poll = time.monotonic()
@@ -189,13 +214,19 @@ def main() -> None:
                 serial_port = str(collector_settings.get("serial_port") or "").strip()
                 if serial_port and hasattr(collector, "update_serial_port"):
                     collector.update_serial_port(serial_port)
+                if last_settings_error is not None:
+                    print("collector settings connection recovered")
+                    last_settings_error = None
             except Exception as exc:
-                print(f"collector settings fetch error: {exc}")
+                error = str(exc)
+                if error != last_settings_error:
+                    print(f"collector settings fetch error: {error}")
+                    last_settings_error = error
 
         poll_started = time.monotonic()
         batch = collector.poll()
         poll_elapsed_ms = (time.monotonic() - poll_started) * 1000
-        if slow_poll_log_ms >= 0 and poll_elapsed_ms >= slow_poll_log_ms:
+        if slow_poll_log_ms > 0 and poll_elapsed_ms >= slow_poll_log_ms:
             print(
                 "collector poll cycle: "
                 f"{poll_elapsed_ms:.0f}ms frames={len(batch.frames)} "
