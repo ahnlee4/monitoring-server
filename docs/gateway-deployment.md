@@ -95,6 +95,20 @@ curl -fsS http://127.0.0.1/api/health
 ./scripts/start-gateway.sh
 ```
 
+인증서 갱신 확인과 Nginx 재로딩은 다음 스크립트로 실행한다.
+
+```bash
+./scripts/renew-gateway-cert.sh
+```
+
+Windows 작업 스케줄러에서 매일 또는 매주 위 스크립트를 실행하도록 등록한다. WSL 명령 예시는 다음과 같다.
+
+```powershell
+wsl.exe -d Ubuntu --cd /home/lee/projects/monitoring-server ./scripts/renew-gateway-cert.sh
+```
+
+`setup-windows-gateway.ps1`을 사용하면 매일 03:17에 위 갱신 명령을 실행하는 Windows 작업도 함께 등록된다.
+
 상태와 로그 확인:
 
 ```bash

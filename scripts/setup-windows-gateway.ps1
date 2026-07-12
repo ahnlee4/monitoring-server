@@ -3,7 +3,9 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^\d{1,3}(\.\d{1,3}){3}$')]
-    [string]$WslAddress
+    [string]$WslAddress,
+    [string]$WslDistribution = 'Ubuntu',
+    [string]$ProjectPath = '/home/lee/projects/monitoring-server'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,6 +31,27 @@ foreach ($rule in $rules) {
         -LocalPort $rule.ListenPort | Out-Null
 }
 
+$taskName = 'Monitoring Gateway Certificate Renewal'
+$taskAction = New-ScheduledTaskAction `
+    -Execute 'wsl.exe' `
+    -Argument "-d $WslDistribution --cd $ProjectPath ./scripts/renew-gateway-cert.sh"
+$taskTrigger = New-ScheduledTaskTrigger -Daily -At '03:17'
+$taskPrincipal = New-ScheduledTaskPrincipal `
+    -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) `
+    -LogonType Interactive `
+    -RunLevel Highest
+$taskSettings = New-ScheduledTaskSettingsSet `
+    -StartWhenAvailable `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+Register-ScheduledTask `
+    -TaskName $taskName `
+    -Action $taskAction `
+    -Trigger $taskTrigger `
+    -Principal $taskPrincipal `
+    -Settings $taskSettings `
+    -Force | Out-Null
+
 Write-Host "Windows gateway forwarding configured for WSL $WslAddress"
 Write-Host 'Router: external 80 -> 192.168.7.140:8080'
 Write-Host 'Router: external 443 -> 192.168.7.140:8443'
+Write-Host "Scheduled task registered: $taskName"

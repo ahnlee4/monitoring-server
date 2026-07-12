@@ -11,7 +11,10 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
-if [[ ! -f "${CERT_DIR}/fullchain.pem" || ! -f "${CERT_DIR}/privkey.pem" ]]; then
+if ! docker run --rm \
+  -v /etc/letsencrypt:/etc/letsencrypt:ro \
+  nginx:1.27-alpine \
+  sh -c "test -f '${CERT_DIR}/fullchain.pem' && test -f '${CERT_DIR}/privkey.pem'"; then
   echo "TLS 인증서를 찾을 수 없습니다: ${CERT_DIR}" >&2
   echo "tms.theintech.co.kr 및 하위 서버 도메인을 포함한 인증서를 먼저 설치하세요." >&2
   exit 1
