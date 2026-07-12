@@ -146,6 +146,7 @@ class RS485Collector(BaseCollector):
         publish_telemetry_frames: bool = False,
         settings_poll_interval_cycles: int = 5,
         full_snapshot_interval_cycles: int = 5,
+        power_poll_interval_cycles: int = 1,
     ) -> None:
         self.serial_port = serial_port
         self.baudrate = baudrate
@@ -160,6 +161,7 @@ class RS485Collector(BaseCollector):
         self.publish_telemetry_frames = publish_telemetry_frames
         self.settings_poll_interval_cycles = max(0, settings_poll_interval_cycles)
         self.full_snapshot_interval_cycles = max(0, full_snapshot_interval_cycles)
+        self.power_poll_interval_cycles = max(0, power_poll_interval_cycles)
         self._serial: serial.Serial | None = None
         self._serial_lock = threading.RLock()
         self._control_priority = threading.Event()
@@ -203,6 +205,7 @@ class RS485Collector(BaseCollector):
                 return CollectorBatch(source="collector-uart4", recorded_at=recorded_at)
             port = self._open_serial()
             poll_settings = self._should_poll_settings_maps()
+            poll_power = self._should_poll_power_maps()
             self._poll_cycle_index += 1
             system_words = self._poll_address(port, 0x00)
             if system_words is not None:
@@ -239,6 +242,18 @@ class RS485Collector(BaseCollector):
                 map_values.extend(words_to_map_values(comp_index, words, self._is_injection[comp_index]))
                 if comp_index < self.comp_qty - 1:
                     time.sleep(self.inter_request_delay)
+
+            if poll_power:
+                for comp_index in range(min(self.comp_qty, 8)):
+                    if self._control_priority.is_set():
+                        break
+                    mem_addr = 0x31 + comp_index
+                    words = self._poll_address(port, mem_addr)
+                    if words is not None:
+                        self._word_cache[mem_addr] = words
+                        map_values.extend(words_to_generic_map_values(mem_addr, words))
+                    if comp_index < min(self.comp_qty, 8) - 1:
+                        time.sleep(self.inter_request_delay)
         except Exception as exc:
             self._close_serial()
             error = str(exc)
@@ -258,6 +273,9 @@ class RS485Collector(BaseCollector):
 
     def _should_poll_settings_maps(self) -> bool:
         return self.settings_poll_interval_cycles > 0 and self._poll_cycle_index % self.settings_poll_interval_cycles == 0
+
+    def _should_poll_power_maps(self) -> bool:
+        return self.power_poll_interval_cycles > 0 and self._poll_cycle_index % self.power_poll_interval_cycles == 0
 
     def _should_publish_full_snapshot(self) -> bool:
         return (

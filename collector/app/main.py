@@ -37,6 +37,7 @@ def build_collector() -> tuple[BaseCollector, int]:
         slow_address_log_ms = float(get_env("RS485_SLOW_ADDRESS_LOG_MS", "200"))
         settings_poll_interval_cycles = get_int_env("RS485_SETTINGS_POLL_INTERVAL_CYCLES", 5)
         full_snapshot_interval_cycles = get_int_env("RS485_FULL_SNAPSHOT_INTERVAL_CYCLES", 5)
+        power_poll_interval_cycles = get_int_env("RS485_POWER_POLL_INTERVAL_CYCLES", 1)
         publish_telemetry_frames = (
             get_env("COLLECTOR_PUBLISH_TELEMETRY", "false").strip().lower() in ("1", "true", "yes", "on")
         )
@@ -55,6 +56,7 @@ def build_collector() -> tuple[BaseCollector, int]:
                 publish_telemetry_frames=publish_telemetry_frames,
                 settings_poll_interval_cycles=settings_poll_interval_cycles,
                 full_snapshot_interval_cycles=full_snapshot_interval_cycles,
+                power_poll_interval_cycles=power_poll_interval_cycles,
             ),
             interval,
         )

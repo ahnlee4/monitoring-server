@@ -206,6 +206,7 @@ def seed_yujin_map() -> None:
         *schema["expanded_examples"]["oilfree"],
         *schema["expanded_examples"]["dio"],
         *schema["expanded_examples"]["module"],
+        *schema["expanded_examples"]["power"],
     ]
     with SessionLocal() as db:
         for item in entries:

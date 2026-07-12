@@ -329,6 +329,28 @@ MODULE_TEMPLATE = [
 ]
 
 
+POWER_TEMPLATE = [
+    TemplateEntry("00", 2, 2, False, "0", "Phase Current R"),
+    TemplateEntry("02", 2, 2, False, "0", "Phase Current S"),
+    TemplateEntry("04", 2, 2, False, "0", "Phase Current T"),
+    TemplateEntry("06", 2, 2, False, "0", "Phase Voltage R"),
+    TemplateEntry("08", 2, 2, False, "0", "Phase Voltage S"),
+    TemplateEntry("0A", 2, 2, False, "0", "Phase Voltage T"),
+    TemplateEntry("0C", 2, 2, False, "0", "Line Voltage RS"),
+    TemplateEntry("0E", 2, 2, False, "0", "Line Voltage ST"),
+    TemplateEntry("10", 2, 2, False, "0", "Line Voltage TR"),
+    TemplateEntry("12", 2, 2, False, "0", "Active Power"),
+    TemplateEntry("14", 2, 2, False, "0", "Reactive Power"),
+    TemplateEntry("16", 2, 2, False, "0", "Apparent Power"),
+    TemplateEntry("18", 2, 2, False, "0", "Active Energy"),
+    TemplateEntry("1A", 2, 2, False, "0", "Reactive Energy"),
+    TemplateEntry("1C", 2, 2, False, "0", "Apparent Energy"),
+    TemplateEntry("1E", 2, 2, False, "0", "Load Factor"),
+    TemplateEntry("20", 2, 2, False, "0", "Power Factor"),
+    TemplateEntry("22", 2, 2, False, "0", "Frequency"),
+]
+
+
 REQUEST_ADDRESS_MAP = {
     0: "00",
     1: "01",
@@ -426,6 +448,7 @@ def build_yujin_map_schema() -> dict:
             "oilfree_template_count": len(OILFREE_TEMPLATE),
             "dio_template_count": len(DIO_TEMPLATE),
             "module_template_count": len(MODULE_TEMPLATE),
+            "power_template_count": len(POWER_TEMPLATE),
             "injection_equip_count": 15,
             "oilfree_equip_count": 15,
             "dio_group_count": 16,
@@ -437,6 +460,7 @@ def build_yujin_map_schema() -> dict:
                 + len(OILFREE_TEMPLATE) * 15
                 + len(DIO_TEMPLATE) * 16
                 + len(MODULE_TEMPLATE) * 16
+                + len(POWER_TEMPLATE) * 8
             ),
         },
         "data_type_names": DATA_TYPE_NAMES,
@@ -448,11 +472,13 @@ def build_yujin_map_schema() -> dict:
             "oilfree": [entry.to_dict() for entry in OILFREE_TEMPLATE],
             "dio": [entry.to_dict() for entry in DIO_TEMPLATE],
             "module": [entry.to_dict() for entry in MODULE_TEMPLATE],
+            "power": [entry.to_dict() for entry in POWER_TEMPLATE],
         },
         "expanded_examples": {
             "injection": _build_template_entries("1", INJECTION_TEMPLATE, "injection", 15),
             "oilfree": _build_template_entries("2", OILFREE_TEMPLATE, "oilfree", 15),
             "dio": _build_template_entries("E", DIO_TEMPLATE, "dio", 16),
             "module": _build_template_entries("F", MODULE_TEMPLATE, "module", 16),
+            "power": _build_template_entries("3", POWER_TEMPLATE, "power", 8),
         },
     }
