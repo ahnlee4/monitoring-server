@@ -4,6 +4,14 @@ import { DetailScreen } from "./components/DetailScreen";
 import { EquipmentDetailDialog } from "./components/EquipmentDetailDialog";
 import { MobileLayout } from "./components/MobileLayout";
 import { QuickButtons } from "./components/QuickButtons";
+import {
+  MapSettingsPanel,
+  NETWORK_SETTING_FIELDS,
+  PRODUCT_SETTING_FIELDS,
+  SettingsTabBar,
+  settingsTabsForLevel,
+} from "./components/AdminSettingsTabs";
+import type { SettingsTabKey } from "./components/AdminSettingsTabs";
 import { useYujinMapValues } from "./hooks/useYujinMapValues";
 import {
   ControlStatusDelayedError,
@@ -73,7 +81,7 @@ type UserLevel = 0 | 1 | 2;
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.134";
+const APP_VERSION = "0.1.135";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -92,9 +100,9 @@ const USER_PASSWORDS: Record<UserLevel, string> = {
   [USER_LEVELS.user]: "1234",
 };
 const USER_LEVEL_LABELS: Record<UserLevel, string> = {
-  [USER_LEVELS.admin]: "관리자",
-  [USER_LEVELS.manager]: "매니저",
-  [USER_LEVELS.user]: "일반",
+  [USER_LEVELS.admin]: "공장 관리자",
+  [USER_LEVELS.manager]: "관리자",
+  [USER_LEVELS.user]: "사용자",
 };
 const OPTION_LABELS = [
   "고장발생시 모드 변경",
@@ -209,7 +217,11 @@ export default function App() {
     }
   };
   const openDialog = (dialog: ActiveDialog) => {
-    if (dialog === "settings") setSettingsLevel(USER_LEVELS.user);
+    if (dialog === "settings") {
+      setMenuOpen(false);
+      setActiveDialog("password");
+      return;
+    }
     setActiveDialog(dialog);
   };
   const handleLogoClick = () => {
@@ -1595,7 +1607,7 @@ function SegmentedOption({
 
 function PasswordDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess: (level: UserLevel) => void }) {
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("상단 로고 관리자 진입 비밀번호를 입력하세요");
+  const [message, setMessage] = useState("설정 화면에 진입할 비밀번호를 입력하세요");
   const submitPassword = (event: FormEvent) => {
     event.preventDefault();
     const matchedLevel = (Object.entries(USER_PASSWORDS).find(([, expected]) => expected === password)?.[0] ?? "") as `${UserLevel}` | "";
@@ -1613,7 +1625,7 @@ function PasswordDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
     <DialogShell onClose={onClose} subtitle="원본 프로그램과 동일하게 권한별 설정 화면을 엽니다" title="비밀번호 입력">
       <form className="grid max-h-[calc(100dvh-92px)] gap-[14px] overflow-y-auto bg-[#f6f9fc] p-[18px] max-sm:max-h-[calc(100dvh-80px)] max-sm:gap-[10px] max-sm:p-[12px]" onSubmit={submitPassword}>
         <label className="grid gap-[8px]">
-          <span className="text-[16px] font-black text-[#45657f] max-sm:text-[13px]">관리자 / 매니저 / 일반 비밀번호</span>
+          <span className="text-[16px] font-black text-[#45657f] max-sm:text-[13px]">공장 관리자 / 관리자 / 사용자 비밀번호</span>
           <input
             autoFocus
             className="h-[58px] rounded-[8px] border border-[#c9deef] bg-white px-[16px] text-center text-[28px] font-black tracking-[0.16em] text-[#173f69] outline-none focus:border-[#237bd0] max-sm:h-[48px] max-sm:text-[22px]"
@@ -1789,7 +1801,7 @@ function rotateSequence(sequence: number[], direction: 1 | -1) {
 
 function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapValues: Record<string, YujinMapValue>; onClose: () => void }) {
   type ModeCellTarget = { rowIndex: number; colIndex: number; kind: "align" | "index" } | { kind: "count" };
-  const factories = ["공장 1", "공장 2", "공장 3", "공장 4", "공장 5"];
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTabKey>(() => settingsTabsForLevel(level)[0].key);
   const [modeRows, setModeRows] = useState(() => createDefaultModeRows());
   const [selectedModeIndex, setSelectedModeIndex] = useState(0);
   const [useModeCount, setUseModeCount] = useState("1");
@@ -1800,7 +1812,6 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
   const [collectorPortStatus, setCollectorPortStatus] = useState("통신 포트 설정값 불러오는 중...");
   const [saving, setSaving] = useState(false);
   const [collectorSaving, setCollectorSaving] = useState(false);
-  const isAdmin = level === USER_LEVELS.admin;
 
   useEffect(() => {
     let alive = true;
@@ -1961,60 +1972,10 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
 
   return (
     <DialogShell onClose={onClose} subtitle={`${USER_LEVEL_LABELS[level]} 권한으로 표시 가능한 항목만 보여줍니다`} title={`설정 - ${USER_LEVEL_LABELS[level]}`} wide>
-      <div className={`grid max-h-[690px] ${isAdmin ? "grid-cols-[300px_1fr]" : "grid-cols-1"} gap-[14px] overflow-y-auto bg-[#f6f9fc] p-[16px] max-sm:max-h-[calc(100dvh-80px)] max-sm:grid-cols-1 max-sm:p-[12px]`}>
-        {isAdmin ? (
-          <aside className="grid content-start gap-[12px]">
-            <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-              <PanelHeading eyebrow="NETWORK">접속 정보</PanelHeading>
-              <div className="mt-[12px] grid gap-[8px]">
-                <SettingSummary label="Connect IP" value="121.164.120.200" />
-                <SettingSummary label="Port" value="1502" />
-                <SettingSummary label="Login PW" value="1234" />
-                <SettingSummary label="Setting PW" value="471112" />
-              </div>
-            </div>
-            <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-              <PanelHeading eyebrow="DIO">DIO BIT</PanelHeading>
-              <div className="mt-[12px] grid gap-[8px]">
-                <SettingSummary label="BIT0" value="운전" />
-                <SettingSummary label="BIT4" value="고장" />
-              </div>
-            </div>
-            <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-              <PanelHeading eyebrow="RS485">통신 포트</PanelHeading>
-              <div className="mt-[12px] grid gap-[8px]">
-                <button
-                  className={`h-[48px] rounded-[8px] border text-[18px] font-black ${
-                    collectorPort === "/dev/ttyUSB0"
-                      ? "border-[#237bd0] bg-[#237bd0] text-white"
-                      : "border-[#d9e6f0] bg-[#f8fbfd] text-[#173f69]"
-                  }`}
-                  disabled={collectorSaving}
-                  onClick={() => saveCollectorPort("/dev/ttyUSB0")}
-                  type="button"
-                >
-                  USB0 외장 컨버터
-                </button>
-                <button
-                  className={`h-[48px] rounded-[8px] border text-[18px] font-black ${
-                    collectorPort === "/dev/ttyS7"
-                      ? "border-[#237bd0] bg-[#237bd0] text-white"
-                      : "border-[#d9e6f0] bg-[#f8fbfd] text-[#173f69]"
-                  }`}
-                  disabled={collectorSaving}
-                  onClick={() => saveCollectorPort("/dev/ttyS7")}
-                  type="button"
-                >
-                  S7 내장 RS485
-                </button>
-                <div className="rounded-[8px] bg-[#eef7ff] px-[10px] py-[8px] text-[12px] font-black leading-tight text-[#45657f]">
-                  {collectorPortStatus}
-                </div>
-              </div>
-            </div>
-          </aside>
-        ) : null}
-        <div className="grid content-start gap-[14px]">
+      <div className="grid max-h-[690px] gap-[12px] overflow-y-auto bg-[#f6f9fc] p-[16px] max-sm:max-h-[calc(100dvh-80px)] max-sm:p-[12px]">
+        <SettingsTabBar activeTab={activeSettingsTab} level={level} onSelect={setActiveSettingsTab} />
+
+        {activeSettingsTab === "sequence" ? (
           <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
             <PanelHeading eyebrow="MODE TABLE">사용모드 / 정렬 설정</PanelHeading>
             <div className="mt-[12px] grid gap-[6px]">
@@ -2087,22 +2048,45 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
             </div>
             <div className="mt-[8px] rounded-[8px] bg-[#eef7ff] px-[10px] py-[8px] text-[13px] font-black text-[#45657f]">{saveStatus}</div>
           </div>
-          {isAdmin ? (
-            <div className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
-              <PanelHeading eyebrow="FACTORY">공장 정보</PanelHeading>
-              <div className="mt-[12px] grid grid-cols-2 gap-[8px] max-sm:grid-cols-1">
-                {factories.map((factory, index) => (
-                  <div key={factory} className="grid min-h-[74px] content-center rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[11px] text-center">
-                    <div className="text-[17px] font-black leading-none text-[#173f69]">{factory}</div>
-                    <div className="mt-[9px] break-all text-[14px] font-bold leading-tight text-[#6f879d]">192.168.0.{10 + index}</div>
-                  </div>
-                ))}
-              </div>
+        ) : null}
+
+        {activeSettingsTab === "network" ? (
+          <MapSettingsPanel fields={NETWORK_SETTING_FIELDS} level={level} mapValues={mapValues} title="Network 설정" />
+        ) : null}
+
+        {activeSettingsTab === "product" ? (
+          <MapSettingsPanel fields={PRODUCT_SETTING_FIELDS} level={level} mapValues={mapValues} title="제품 설정" />
+        ) : null}
+
+        {activeSettingsTab === "gstech" ? (
+          <section className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
+            <PanelHeading eyebrow="GSTECH / RS485">통신 포트 설정</PanelHeading>
+            <div className="mt-[12px] grid grid-cols-2 gap-[10px] max-sm:grid-cols-1">
+              <button
+                className={`h-[58px] rounded-[8px] border text-[18px] font-black ${collectorPort === "/dev/ttyUSB0" ? "border-[#237bd0] bg-[#237bd0] text-white" : "border-[#d9e6f0] bg-[#f8fbfd] text-[#173f69]"}`}
+                disabled={collectorSaving}
+                onClick={() => saveCollectorPort("/dev/ttyUSB0")}
+                type="button"
+              >
+                USB0 외장 컨버터
+              </button>
+              <button
+                className={`h-[58px] rounded-[8px] border text-[18px] font-black ${collectorPort === "/dev/ttyS7" ? "border-[#237bd0] bg-[#237bd0] text-white" : "border-[#d9e6f0] bg-[#f8fbfd] text-[#173f69]"}`}
+                disabled={collectorSaving}
+                onClick={() => saveCollectorPort("/dev/ttyS7")}
+                type="button"
+              >
+                S7 내장 RS485
+              </button>
             </div>
-          ) : null}
-        </div>
+            <div className="mt-[10px] rounded-[8px] bg-[#eef7ff] px-[10px] py-[9px] text-[13px] font-black text-[#45657f]">{collectorPortStatus}</div>
+            <div className="mt-[12px] rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[12px] text-[13px] font-bold leading-relaxed text-[#6f879d]">
+              원본의 센서 보정, 4~20mA 채널 및 DIO 세부 설정은 실제 모듈 주소와 연결되는 항목만 순차적으로 추가합니다.
+            </div>
+          </section>
+        ) : null}
       </div>
-      {activeModeCell ? (
+      {activeSettingsTab === "sequence" && activeModeCell ? (
         <NumericKeypad
           allowDecimal={false}
           disabled={saving}
@@ -2117,15 +2101,6 @@ function SettingsDialog({ level, mapValues, onClose }: { level: UserLevel; mapVa
         />
       ) : null}
     </DialogShell>
-  );
-}
-
-function SettingSummary({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[11px]">
-      <div className="text-[12px] font-black text-[#6f879d]">{label}</div>
-      <div className="mt-[6px] text-[18px] font-black leading-none text-[#173f69]">{value}</div>
-    </div>
   );
 }
 
