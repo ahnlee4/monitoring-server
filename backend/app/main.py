@@ -12,6 +12,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
+from app.control_protocol import build_group_operation_payload
 from app.database import Base, engine, get_db, SessionLocal
 from app.models import (
     Alarm,
@@ -583,14 +584,13 @@ async def create_group_operation_command(
     payload: GroupOperationIn,
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
-    run_value = 0x01 if payload.action == "run" else 0x00
     command = enqueue_control_command(
         db,
         "raw_uart4",
         {
             "source": "group_operation",
             "action": payload.action,
-            **legacy_raw_frame([0xC9, 0x60, 0x50, 0x00, run_value]),
+            **legacy_raw_frame(build_group_operation_payload(payload.action)),
         },
         supersede_source="group_operation",
     )
