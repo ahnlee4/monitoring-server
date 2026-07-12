@@ -50,6 +50,8 @@ type CompressorState = {
   inverter: boolean;
   isOilfree: boolean;
   totalHours: number;
+  repair: boolean;
+  mainInverter: boolean;
 };
 
 type DashboardState = {
@@ -82,7 +84,7 @@ type UserLevel = 0 | 1 | 2;
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.137";
+const APP_VERSION = "0.1.138";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036"];
 const MODE_ALIGN_ROWS = 7;
@@ -166,6 +168,8 @@ function emptyCompressor(index: number): CompressorState {
     inverter: false,
     isOilfree: false,
     totalHours: 0,
+    repair: false,
+    mainInverter: false,
   };
 }
 
@@ -179,12 +183,19 @@ export default function App() {
   const [adminLogoClicks, setAdminLogoClicks] = useState({ count: 0, lastAt: 0 });
   const [modeSequenceBusy, setModeSequenceBusy] = useState(false);
   const [pressureGap, setPressureGap] = useState<number | null>(null);
+  const [alarmVisible, setAlarmVisible] = useState(true);
   const mapValues = useYujinMapValues();
   const isMobile = useIsMobileViewport();
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    fetchProductSettings()
+      .then((settings) => setAlarmVisible(settings.alarm_visible))
+      .catch((error) => console.error("failed to load product display settings", error));
   }, []);
 
   useEffect(() => {
@@ -196,8 +207,8 @@ export default function App() {
   const dashboard = useMemo(() => buildDashboardFromMap(mapValues, pressureGap), [mapValues, pressureGap]);
   const lowPressureText = getLowPressureText(dashboard.lowPressureAlarm);
   const showMainScreen = activeScreen === "main";
-  const visibleCompressors = dashboard.compressors.filter((compressor) => compressor.connected);
   const detailCompressors = useMemo(() => selectDetailCompressors(dashboard.compressors, mapValues), [dashboard.compressors, mapValues]);
+  const visibleCompressors = detailCompressors;
   const selectedCompressor = selectedCompressorId
     ? dashboard.compressors.find((compressor) => compressor.id === selectedCompressorId) ?? null
     : null;
@@ -246,6 +257,7 @@ export default function App() {
         {isMobile ? (
           <MobileLayout
             activeScreen={activeScreen}
+            alarmVisible={alarmVisible}
             dashboard={dashboard}
             detailCompressors={detailCompressors}
             lowPressureText={lowPressureText}
@@ -273,13 +285,13 @@ export default function App() {
                     }}
                   >
                     {visibleCompressors.map((compressor) => (
-                      <CompressorCard key={compressor.id} compressor={compressor} onOpenDetail={setSelectedCompressorId} />
+                      <CompressorCard alarmVisible={alarmVisible} key={compressor.id} compressor={compressor} onOpenDetail={setSelectedCompressorId} />
                     ))}
                   </div>
                 ) : (
                   <DisconnectBanner />
                 )}
-                {visibleCompressors.length > 0 && lowPressureText ? (
+                {alarmVisible && visibleCompressors.length > 0 && lowPressureText ? (
                   <AlarmStrip tone={dashboard.lowPressureAlarm} text={lowPressureText} />
                 ) : null}
               </>
@@ -357,11 +369,20 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPress
   const lowAlarmStep = liveMapNumber(values, "0054", 0);
   const sortModeWord = Math.trunc(liveMapNumber(values, "0024", 0));
   const operationModeWord = Math.trunc(liveMapNumber(values, "0050", 0));
+  const repairMask = Math.trunc(liveMapNumber(values, "0058", 0));
+  const mainInverterUnit = Math.trunc(liveMapNumber(values, "043E", 0));
+  const options = buildOptions(optionDevice);
   const connectedCompressors = compressors.map((compressor, index) => ({
     ...compressor,
     connected: systemOnline && Boolean(connectedMask & (1 << index)),
     name: `${index + 1}호기`,
     model: compressor.model,
+    repair: Boolean(repairMask & (1 << index)),
+    mainInverter:
+      (operationModeWord & 0x0001) === 0x0001 &&
+      ((sortModeWord >> 8) & 0xff) === 1 &&
+      options[1]?.checked === true &&
+      mainInverterUnit === index + 1,
   }));
   const orderedCompressors = displayOrder
     .flatMap((compNo) => (connectedCompressors[compNo - 1] ? [connectedCompressors[compNo - 1]] : []));
@@ -370,7 +391,8 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPress
     ...emptyDashboard,
     integratedRun: (liveMapNumber(values, "0050", 0) & 0x0001) === 0x0001,
     mainPressure,
-    lowPressureAlarm: lowAlarmStep > 0 ? "warning" : "none",
+    firmwareVersion: buildFirmwareVersion(values),
+    lowPressureAlarm: lowAlarmStep >= 4 && options[7]?.checked ? "reserve" : lowAlarmStep >= 3 ? "warning" : "none",
     sortMode: (sortModeWord & 0x0001) === 0x0001 ? "time" : "setting",
     control: {
       noLoadPressure: scale10(liveMapNumber(values, "0016", 0)),
@@ -384,7 +406,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPress
       sortModeWord,
       operationModeWord,
     },
-    options: buildOptions(optionDevice),
+    options,
     compressors: orderedCompressors,
   };
 }
@@ -454,7 +476,7 @@ function buildCompressorFromMap(
     runMode,
     operationStatus: cpStatus,
     local: runMode === 0,
-    running: cpStatus !== 0,
+    running: cpStatus > 0 && cpStatus < 7,
     connected,
     alarm: alarm !== 0,
     fault: faultLow !== 0 || faultHigh !== 0 || faultInv !== 0,
@@ -462,6 +484,13 @@ function buildCompressorFromMap(
     isOilfree,
     totalHours: Math.trunc(runHoursHigh * 65536 + runHoursLow),
   };
+}
+
+function buildFirmwareVersion(values: Record<string, YujinMapValue>) {
+  const major = values["015A"]?.value?.trim() ?? "";
+  const revision = values["015C"]?.value?.trim() ?? "";
+  if (!major && !revision) return "-";
+  return `${major}${revision.padStart(4, "0")}`;
 }
 
 function getOilfreeModelName(model1: number, version1: number, version2: number) {
@@ -643,12 +672,16 @@ function TopPanel({
   );
 }
 
-function CompressorCard({ compressor, onOpenDetail }: { compressor: CompressorState; onOpenDetail: (id: number) => void }) {
+function CompressorCard({ alarmVisible, compressor, onOpenDetail }: { alarmVisible: boolean; compressor: CompressorState; onOpenDetail: (id: number) => void }) {
   const pressureLabel = compressor.inverter ? "설정압력" : "무부하/부하";
-  const secondValue = compressor.inverter
+  const secondValue = !compressor.connected
+    ? "--- bar"
+    : compressor.inverter
     ? formatScaledValue(compressor.controlPressure, "bar")
     : formatScaledValue(compressor.noLoadPressure, "bar");
-  const thirdValue = compressor.inverter ? formatIntegerValue(compressor.rpm, "rpm") : formatScaledValue(compressor.loadPressure, "bar");
+  const thirdValue = !compressor.connected
+    ? compressor.inverter ? "--- rpm" : "--- bar"
+    : compressor.inverter ? formatIntegerValue(compressor.rpm, "rpm") : formatScaledValue(compressor.loadPressure, "bar");
   const titleTone = compressorTitleTone(compressor.id);
 
   return (
@@ -662,17 +695,19 @@ function CompressorCard({ compressor, onOpenDetail }: { compressor: CompressorSt
           className="flex items-center justify-center overflow-hidden border border-[#75b4ee] px-[6px] text-center text-[20px] font-bold leading-none shadow-[2px_2px_1px_#ababab]"
           style={{ backgroundColor: titleTone.background, color: titleTone.color }}
         >
-          {compressor.name} ({compressor.model})
+          {compressor.name} ({compressor.connected ? compressor.model : "---"})
         </div>
-        <MetricRow label="압력" value={formatScaledValue(compressor.pressure, "bar", 2)} />
+        <MetricRow label="압력" value={compressor.connected ? formatScaledValue(compressor.pressure, "bar", 2) : "--- bar"} />
         <TripleRow label={pressureLabel} valueA={secondValue} valueB={thirdValue} />
-        <MetricRow label="온도" value={formatScaledValue(compressor.temperature, "℃")} />
+        <MetricRow label="온도" value={compressor.connected ? formatScaledValue(compressor.temperature, "℃") : "--- ℃"} />
         <div className="relative grid grid-cols-2 gap-[2px]">
-          <StatusCell tone={compressor.local ? "local" : "remote"}>{formatRunMode(compressor.runMode)}</StatusCell>
-          <StatusCell tone={compressor.running ? "running" : "stop"}>{formatOperationStatus(compressor.operationStatus)}</StatusCell>
-          <StatusFlagOverlay alarm={compressor.alarm} fault={compressor.fault} />
+          <StatusCell tone={compressor.connected && compressor.local ? "local" : "remote"}>{compressor.connected ? formatRunMode(compressor.runMode) : "---"}</StatusCell>
+          <StatusCell tone={compressor.connected && compressor.running ? "running" : "stop"}>{compressor.connected ? formatOperationStatus(compressor.operationStatus) : "통신 불량"}</StatusCell>
+          {compressor.repair ? <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#ffe35b] text-[25px] font-black text-[#111827]">정 비</div> : null}
+          {alarmVisible ? <StatusFlagOverlay alarm={compressor.alarm} fault={compressor.fault} /> : null}
         </div>
-        <MetricRow label="총 운전시간" value={formatIntegerValue(compressor.totalHours, "hr")} />
+        <MetricRow label="총 운전시간" value={compressor.connected ? formatIntegerValue(compressor.totalHours, "hr") : "--- hr"} />
+        {compressor.mainInverter ? <div className="absolute right-[6px] top-[48px] z-20 rounded-[5px] bg-[#7b2cbf] px-[8px] py-[4px] text-[12px] font-black text-white">MAIN INV</div> : null}
       </div>
     </button>
   );
