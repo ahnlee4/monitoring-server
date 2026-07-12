@@ -325,6 +325,9 @@ class RS485Collector(BaseCollector):
         if command.command_type == "raw_uart4":
             self._execute_raw_uart4_command(command)
             return
+        if command.command_type == "raw_uart4_batch":
+            self._execute_raw_uart4_batch_command(command)
+            return
         if command.command_type != "map_write_batch":
             raise ValueError(f"unsupported control command: {command.command_type}")
 
@@ -348,11 +351,24 @@ class RS485Collector(BaseCollector):
             time.sleep(self.write_request_delay)
 
     def _execute_raw_uart4_command(self, command: ControlCommand) -> None:
-        payload = command.payload
+        self._send_raw_uart4_frame(command.payload)
+        time.sleep(self.write_request_delay)
+
+    def _execute_raw_uart4_batch_command(self, command: ControlCommand) -> None:
+        frames = command.payload.get("frames", [])
+        if not isinstance(frames, list) or not frames:
+            raise ValueError("raw UART4 batch command has no frames")
+        for frame_payload in frames:
+            if not isinstance(frame_payload, dict):
+                raise ValueError("raw UART4 batch frame must be an object")
+            self._send_raw_uart4_frame(frame_payload)
+            delay_after = float(frame_payload.get("delay_after_seconds") or self.write_request_delay)
+            time.sleep(max(0.0, delay_after))
+
+    def _send_raw_uart4_frame(self, payload: dict) -> None:
         request = bytes_from_hex(str(payload["payload_hex"]))
         if bool(payload.get("append_crc", True)):
             request = append_crc(request)
-        request = normalize_legacy_setting_crc(request)
         port = self._open_serial()
         with self._serial_lock:
             port.reset_input_buffer()
@@ -365,7 +381,6 @@ class RS485Collector(BaseCollector):
                     self._debug("rx-raw", frame)
                 except Uart4ProtocolError as exc:
                     print(f"collector-uart4 raw command no immediate response: {exc}")
-        time.sleep(self.write_request_delay)
 
     def _read_control_response(self, port: serial.Serial, address: int) -> None:
         if self.write_response_timeout <= 0:
@@ -660,18 +675,6 @@ def signed_16(value: int) -> int:
 def append_crc(payload: bytes) -> bytes:
     crc = crc16(payload)
     return payload + bytes([(crc >> 8) & 0xFF, crc & 0xFF])
-
-
-def append_crc_low_first(payload: bytes) -> bytes:
-    crc = crc16(payload)
-    return payload + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
-
-
-def normalize_legacy_setting_crc(request: bytes) -> bytes:
-    if len(request) < 5 or request[0] != FRAME_MASTER_ID or request[1] not in (0x80, 0x82, 0x83):
-        return request
-
-    return append_crc_low_first(request[:-2])
 
 
 def validate_crc(frame: bytes) -> None:

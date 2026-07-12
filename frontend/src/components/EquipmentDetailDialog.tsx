@@ -374,7 +374,7 @@ function getMapPrefix(compressor: EquipmentCompressor) {
 }
 
 function getCpStatusAddress(compressor: EquipmentCompressor) {
-  const highAddr = compressor.id + 1;
+  const highAddr = 0x10 + compressor.id;
   const lowAddr = compressor.isOilfree ? 0x44 : 0x1a;
   return (highAddr << 8) | lowAddr;
 }

@@ -174,6 +174,18 @@ class RawUart4CommandIn(BaseModel):
     wait_response: bool = False
 
 
+class RawUart4FrameIn(BaseModel):
+    payload_hex: str
+    append_crc: bool = True
+    wait_response: bool = False
+    delay_after_seconds: float | None = None
+
+
+class RawUart4BatchCommandIn(BaseModel):
+    source: str = "frontend"
+    frames: list[RawUart4FrameIn]
+
+
 class ControlCommandAckIn(BaseModel):
     status: Literal["completed", "failed"]
     error: str | None = None

@@ -11,12 +11,13 @@ import {
   fetchCollectorSettings,
   enqueueGroupOperation,
   enqueueMapWriteBatch,
+  enqueueRawUart4BatchCommand,
   fetchModeSettings,
   updateCollectorSettings,
   updateModeSettings,
   waitForControlCommand,
 } from "./services/api";
-import type { MapWrite, ModeSettings } from "./services/api";
+import type { MapWrite, ModeSettings, RawUart4Frame } from "./services/api";
 import type { YujinMapValue } from "./types";
 
 type CompressorState = {
@@ -326,6 +327,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
   const optionDevice = liveMapNumber(values, "004A", 0);
   const lowAlarmStep = liveMapNumber(values, "0054", 0);
   const sortModeWord = Math.trunc(liveMapNumber(values, "0024", 0));
+  const operationModeWord = Math.trunc(liveMapNumber(values, "0050", 0));
   const connectedCompressors = compressors.map((compressor, index) => ({
     ...compressor,
     connected: systemOnline && Boolean(connectedMask & (1 << index)),
@@ -344,14 +346,14 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>): Dashboard
     control: {
       noLoadPressure: scale10(liveMapNumber(values, "0016", 0)),
       loadPressure: scale10(liveMapNumber(values, "0018", 0)),
-      pressureGap: scale10(liveMapNumber(values, "001A", 0)),
+      pressureGap: scale10(liveMapNumber(values, "043C", liveMapNumber(values, "001A", 0))),
       lowAlarmPressure: scale10(liveMapNumber(values, "0054", 0)),
       runUnits: Math.trunc(liveMapNumber(values, "0026", 0)),
-      changeHours: Math.trunc(liveMapNumber(values, "0046", 0)),
+      changeHours: Math.trunc(liveMapNumber(values, "0042", 0)),
       remainMinutes: Math.trunc(liveMapNumber(values, "0048", 0)),
-      controlModeWord: Math.trunc(liveMapNumber(values, "0034", 0)),
+      controlModeWord: Math.trunc(liveMapNumber(values, "0022", 0)),
       sortModeWord,
-      operationModeWord: Math.trunc(liveMapNumber(values, "0080", 0)),
+      operationModeWord,
     },
     options: buildOptions(optionDevice),
     compressors: orderedCompressors,
@@ -1035,9 +1037,9 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
   }> = [
     { label: "무부하 압력", key: "noLoadPressure", unit: "bar", step: "0.1", address: 0x16, scale: 10 },
     { label: "부하 압력", key: "loadPressure", unit: "bar", step: "0.1", address: 0x18, scale: 10 },
-    { label: "장비별 압력차", key: "pressureGap", unit: "bar", step: "0.1", address: 0x1a, scale: 10 },
+    { label: "장비별 압력차", key: "pressureGap", unit: "bar", step: "0.1", address: 0x3c, scale: 10 },
     { label: "저압경보 압력 설정", key: "lowAlarmPressure", unit: "bar", step: "0.1", address: 0x54, scale: 10 },
-    { label: "교환 운전 시간", key: "changeHours", unit: "hr", step: "1", address: 0x46, scale: 1 },
+    { label: "교환 운전 시간", key: "changeHours", unit: "hr", step: "1", address: 0x42, scale: 1 },
     { label: "가동 대수", key: "runUnits", unit: "ea", step: "1", address: 0x26, scale: 1 },
   ];
   const updateSetting = (key: keyof typeof settings, value: string) => {
@@ -1118,6 +1120,36 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     }
   };
 
+  const sendRawControlFrames = async (label: string, source: string, frames: RawUart4Frame[]) => {
+    let commandId: number | null = null;
+    setCommandBusy(true);
+    setCommandStatus(`${label} 명령 전송 중...`);
+    try {
+      const result = await enqueueRawUart4BatchCommand(source, frames);
+      commandId = Number(result.id);
+      setCommandStatus(`${label} #${commandId} 전송 대기...`);
+      await waitForControlCommand(commandId, (status) => {
+        if (status.status === "pending") setCommandStatus(`${label} #${commandId} 대기 중...`);
+        if (status.status === "in_progress") setCommandStatus(`${label} #${commandId} 장비 전송 중...`);
+        if (status.status === "completed") setCommandStatus(`${label} #${commandId} 전송 완료`);
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof ControlStatusUnsupportedError && commandId !== null) {
+        setCommandStatus(`${label} #${commandId} 등록됨 / backend 갱신 필요`);
+        return true;
+      }
+      if (error instanceof ControlStatusDelayedError) {
+        setCommandStatus(`${label} #${error.commandId} 등록됨 / 완료 확인 지연`);
+        return true;
+      }
+      setCommandStatus(`${label} 실패: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    } finally {
+      setCommandBusy(false);
+    }
+  };
+
   const sendGroupOperation = async (action: "run" | "stop") => {
     let commandId: number | null = null;
     setCommandBusy(true);
@@ -1147,6 +1179,14 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
     try {
       const value = numberValue(key);
       const packetValue = Math.round(value * control.scale);
+      if (key === "pressureGap") {
+        const frames = buildDevicePressureFrames(packetValue, dashboard.compressors.length);
+        const success = await sendRawControlFrames(control.label, "control_dialog_device_pressure", frames);
+        if (success) {
+          setAppliedSettings((current) => ({ ...current, [key]: settings[key] }));
+        }
+        return;
+      }
       const success = await sendControlWrites(control.label, "control_dialog_setting", [
         {
           key: control.address.toString(16).padStart(4, "0").toUpperCase(),
@@ -1190,8 +1230,8 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
 
     const success = await sendControlWrites("운전 위치", "control_dialog_operation_mode", [
       {
-        key: "0080",
-        address: 0x80,
+        key: "0050",
+        address: 0x50,
         length: 2,
         value: setWordHighByte(dashboard.control.operationModeWord, nextMode === "local" ? 0 : 1),
       },
@@ -1211,8 +1251,8 @@ function ControlDialog({ dashboard, onClose }: { dashboard: DashboardState; onCl
 
     const success = await sendControlWrites("제어 모드", "control_dialog_control_mode", [
       {
-        key: "0034",
-        address: 0x34,
+        key: "0022",
+        address: 0x22,
         length: 2,
         value: nextMode === "group" ? 1 : 0,
       },
@@ -1367,6 +1407,25 @@ function sanitizeNumericInput(value: string, integerOnly: boolean) {
   if (integerOnly) return numeric;
   const [head, ...tails] = numeric.split(".");
   return tails.length > 0 ? `${head}.${tails.join("")}` : head;
+}
+
+function buildDevicePressureFrames(value: number, compressorCount: number): RawUart4Frame[] {
+  const boundedValue = value & 0xffff;
+  const frameForOther04 = (address: number): RawUart4Frame => ({
+    payload_hex: legacyPayloadHex(0xc9, 0x82, address, (boundedValue >> 8) & 0xff, boundedValue & 0xff),
+    append_crc: true,
+    delay_after_seconds: 0.2,
+  });
+  const frames = [frameForOther04(0x3c)];
+  const pressureCount = clamp(compressorCount - 1, 0, 15);
+  for (let index = 0; index < pressureCount; index += 1) {
+    frames.push(frameForOther04(0x1c + index * 2));
+  }
+  return frames;
+}
+
+function legacyPayloadHex(...bytes: number[]) {
+  return bytes.map((byte) => (byte & 0xff).toString(16).padStart(2, "0").toUpperCase()).join("");
 }
 
 function NumericKeypad({

@@ -16,6 +16,13 @@ export type MapWrite = {
   data_hex?: string;
 };
 
+export type RawUart4Frame = {
+  payload_hex: string;
+  append_crc?: boolean;
+  wait_response?: boolean;
+  delay_after_seconds?: number;
+};
+
 export type ModeSettings = {
   rows: Array<{ no: string; values: string[] }>;
   selected_mode_index: number;
@@ -136,6 +143,10 @@ export async function enqueueRawUart4Command(source: string, payload: number[], 
     append_crc: appendCrc,
     wait_response: waitResponse,
   });
+}
+
+export async function enqueueRawUart4BatchCommand(source: string, frames: RawUart4Frame[]) {
+  return postJson<{ id: number }>(`${apiBase()}/control/raw-uart4-batch`, { source, frames });
 }
 
 export async function enqueueGroupOperation(action: "run" | "stop") {

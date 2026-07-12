@@ -38,6 +38,7 @@ from app.schemas import (
     ModeSettingsIn,
     ModeSettingsOut,
     OverviewOut,
+    RawUart4BatchCommandIn,
     RawUart4CommandIn,
     TelemetryIngestRequest,
     TelemetryRecordOut,
@@ -68,6 +69,7 @@ CONTROL_COMMAND_SOURCE_PRIORITY = {
     "control_dialog_control_mode": 1,
     "control_dialog_sort_mode": 1,
     "control_dialog_setting": 2,
+    "control_dialog_device_pressure": 2,
     "settings_apply_sequence": 2,
     "settings_mode_index": 3,
     "settings_use_mode_count": 3,
@@ -373,7 +375,7 @@ def control_command_source(command: ControlCommand) -> str:
 
 def control_command_priority(command: ControlCommand) -> tuple[int, datetime, int]:
     source = control_command_source(command)
-    if command.command_type == "raw_uart4":
+    if command.command_type in {"raw_uart4", "raw_uart4_batch"}:
         source_priority = CONTROL_COMMAND_SOURCE_PRIORITY.get(source, 3)
     else:
         source_priority = CONTROL_COMMAND_SOURCE_PRIORITY.get(source, 9)
@@ -480,6 +482,28 @@ def normalize_hex_payload(value: str) -> str:
     return compact.upper()
 
 
+def legacy_raw_frame(payload: list[int], append_crc: bool = True, wait_response: bool = False) -> dict:
+    return {
+        "payload_hex": "".join(f"{byte & 0xFF:02X}" for byte in payload),
+        "append_crc": append_crc,
+        "wait_response": wait_response,
+    }
+
+
+def legacy_map_write_frame(address: int, value: int, length: int = 2) -> dict:
+    data = int(value).to_bytes(length, byteorder="big", signed=False)
+    payload = [
+        0xC9,
+        0x20,
+        (address >> 8) & 0xFF,
+        address & 0xFF,
+        (length >> 8) & 0xFF,
+        length & 0xFF,
+        *data,
+    ]
+    return legacy_raw_frame(payload)
+
+
 @app.get("/api/yujin/map-schema")
 def yujin_map_schema() -> dict:
     return build_yujin_map_schema()
@@ -559,22 +583,14 @@ async def create_group_operation_command(
     payload: GroupOperationIn,
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
-    current = current_map_int(db, "0050", 0)
-    next_value = (current & 0xFF00) | (0x01 if payload.action == "run" else 0x00)
+    run_value = 0x01 if payload.action == "run" else 0x00
     command = enqueue_control_command(
         db,
-        "map_write_batch",
+        "raw_uart4",
         {
             "source": "group_operation",
             "action": payload.action,
-            "writes": [
-                {
-                    "key": "0050",
-                    "address": 0x50,
-                    "length": 2,
-                    "value": next_value,
-                }
-            ],
+            **legacy_raw_frame([0xC9, 0x60, 0x50, 0x00, run_value]),
         },
         supersede_source="group_operation",
     )
@@ -587,33 +603,24 @@ async def create_group_settings_command(
     payload: GroupSettingsIn,
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
-    writes = [
-        {"key": "0016", "address": 0x16, "length": 2, "value": round(payload.no_load_pressure * 10)},
-        {"key": "0018", "address": 0x18, "length": 2, "value": round(payload.load_pressure * 10)},
-        {"key": "001A", "address": 0x1A, "length": 2, "value": round(payload.pressure_gap * 10)},
-        {"key": "0054", "address": 0x54, "length": 2, "value": round(payload.low_alarm_pressure * 10)},
-        {"key": "0026", "address": 0x26, "length": 2, "value": int(payload.run_units)},
-        {"key": "0046", "address": 0x46, "length": 2, "value": int(payload.change_hours)},
-        {"key": "0034", "address": 0x34, "length": 2, "value": 1 if payload.control_mode == "group" else 0},
-        {
-            "key": "0024",
-            "address": 0x24,
-            "length": 2,
-            "value": set_word_low_byte(current_map_int(db, "0024", 0), 1 if payload.sort_mode == "time" else 0),
-        },
-        {
-            "key": "0080",
-            "address": 0x80,
-            "length": 2,
-            "value": set_word_high_byte(current_map_int(db, "0080", 0), 0 if payload.operation_mode == "local" else 1),
-        },
+    pressure_gap_value = round(payload.pressure_gap * 10)
+    frames = [
+        legacy_map_write_frame(0x16, round(payload.no_load_pressure * 10)),
+        legacy_map_write_frame(0x18, round(payload.load_pressure * 10)),
+        legacy_raw_frame([0xC9, 0x82, 0x3C, (pressure_gap_value >> 8) & 0xFF, pressure_gap_value & 0xFF]),
+        legacy_map_write_frame(0x54, round(payload.low_alarm_pressure * 10)),
+        legacy_map_write_frame(0x26, int(payload.run_units)),
+        legacy_map_write_frame(0x42, int(payload.change_hours)),
+        legacy_map_write_frame(0x22, 1 if payload.control_mode == "group" else 0),
+        legacy_map_write_frame(0x24, set_word_low_byte(current_map_int(db, "0024", 0), 1 if payload.sort_mode == "time" else 0)),
+        legacy_map_write_frame(0x50, set_word_high_byte(current_map_int(db, "0050", 0), 0 if payload.operation_mode == "local" else 1)),
     ]
     command = enqueue_control_command(
         db,
-        "map_write_batch",
+        "raw_uart4_batch",
         {
             "source": "group_settings",
-            "writes": writes,
+            "frames": frames,
         },
     )
     await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
@@ -654,6 +661,33 @@ async def create_raw_uart4_command(
             "payload_hex": normalize_hex_payload(payload.payload_hex),
             "append_crc": payload.append_crc,
             "wait_response": payload.wait_response,
+        },
+    )
+    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    return command_out(command)
+
+
+@app.post("/api/control/raw-uart4-batch", response_model=ControlCommandOut)
+async def create_raw_uart4_batch_command(
+    payload: RawUart4BatchCommandIn,
+    db: Session = Depends(get_db),
+) -> ControlCommandOut:
+    if not payload.frames:
+        raise HTTPException(status_code=422, detail="frames cannot be empty")
+    command = enqueue_control_command(
+        db,
+        "raw_uart4_batch",
+        {
+            "source": payload.source,
+            "frames": [
+                {
+                    "payload_hex": normalize_hex_payload(frame.payload_hex),
+                    "append_crc": frame.append_crc,
+                    "wait_response": frame.wait_response,
+                    "delay_after_seconds": frame.delay_after_seconds,
+                }
+                for frame in payload.frames
+            ],
         },
     )
     await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
