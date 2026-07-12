@@ -31,6 +31,8 @@ type CompressorState = {
   loadPressure: number;
   controlPressure?: number;
   rpm?: number;
+  runMode: number;
+  operationStatus: number;
   local: boolean;
   running: boolean;
   connected: boolean;
@@ -145,6 +147,8 @@ function emptyCompressor(index: number): CompressorState {
     loadPressure: 0,
     controlPressure: 0,
     rpm: 0,
+    runMode: 0,
+    operationStatus: 0,
     local: false,
     running: false,
     connected: false,
@@ -365,7 +369,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPress
       sortModeWord,
       operationModeWord,
     },
-    options: buildOptions(optionDevice),
+    options: buildOptions(optionDevice, sortModeWord),
     compressors: orderedCompressors,
   };
 }
@@ -402,7 +406,8 @@ function buildCompressorFromMap(
   };
 
   const pressure = scalePressure100(read("00", "00", 0));
-  const temperature = scale10(read("0C", "02", 0));
+  const temperatureRaw = read("0C", "02", 0);
+  const temperature = isOilfree ? scaleOilfreeTemperature(temperatureRaw) : scaleInjectionTemperature(temperatureRaw);
   const noLoadPressure = scale10(read("4E", "26", 0));
   const loadPressure = scale10(read("50", "28", 0));
   const controlPressure = scale10(read("46", "20", 0));
@@ -413,15 +418,14 @@ function buildCompressorFromMap(
   const faultInv = read("2E", "0E", 0);
   const runMode = read("3A", "18", 0);
   const cpStatus = read("30", "16", 0);
-  const extRunStop = read("44", "1A", 0);
-  const model1 = Math.trunc(read("7C", "7C", 0));
-  const version1 = Math.trunc(read("7E", "7E", 0));
-  const version2 = Math.trunc(read("80", "80", 0));
+  const model1 = Math.trunc(read("7C", "74", 0));
+  const version1 = Math.trunc(read("7E", "76", 0));
+  const version2 = Math.trunc(read("80", "78", 0));
   const runHoursLow = read("9A", "68", 0);
   const runHoursHigh = read("9C", "6A", 0);
   const connected = hasRecentValue(values, `${primaryPrefix}00`, DEVICE_LINK_GRACE_MS) || hasRecentValue(values, `${fallbackPrefix}00`, DEVICE_LINK_GRACE_MS);
-  const modelName = connected ? getOilfreeModelName(model1, version1, version2) : "-";
-  const isInverter = version1 === 3 || rpm > 0 || controlPressure > 0;
+  const modelName = connected ? (isOilfree ? getOilfreeModelName(model1, version1, version2) : getInjectionModelName(model1)) : "-";
+  const isInverter = modelName.includes("V");
 
   return {
     ...emptyCompressor(index),
@@ -432,8 +436,10 @@ function buildCompressorFromMap(
     loadPressure,
     controlPressure,
     rpm,
-    local: extRunStop === 0,
-    running: runMode !== 0 || cpStatus !== 0,
+    runMode,
+    operationStatus: cpStatus,
+    local: runMode === 0,
+    running: cpStatus !== 0,
     connected,
     alarm: alarm !== 0,
     fault: faultLow !== 0 || faultHigh !== 0 || faultInv !== 0,
@@ -453,13 +459,22 @@ function getOilfreeModelName(model1: number, version1: number, version2: number)
   return `Micos ${model}${cooling}${version}`;
 }
 
-function buildOptions(optionDevice: number) {
+function getInjectionModelName(model: number) {
+  const modelMap = [
+    "11", "15", "15D", "22", "22D", "37", "55", "75", "110", "150", "190", "225", "260", "300", "375", "450", "",
+    "37V", "55V", "75V", "110V", "150V", "190V", "225V", "260V", "300V", "22V",
+  ];
+  return modelMap[model] ? `Micos ${modelMap[model]}` : "-";
+}
+
+function buildOptions(optionDevice: number, sortModeWord: number) {
   const base = emptyDashboard.options;
   const bit = (position: number) => Boolean(optionDevice & (1 << position));
 
   return base.map((option, index) => {
-    const mappedBits = [0, 1, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 7];
-    return { ...option, checked: optionDevice ? bit(mappedBits[index] ?? index) : false };
+    const mappedBits = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 7];
+    const checked = index === 13 ? ((Math.trunc(sortModeWord) >> 8) & 0xff) === 1 : bit(mappedBits[index] ?? index);
+    return { ...option, checked };
   });
 }
 
@@ -494,6 +509,17 @@ function scale10(value: number) {
 function scalePressure100(value: number) {
   if (value === INVALID_DISPLAY_RAW_VALUE) return Number.NaN;
   return Math.round(value) / 100;
+}
+
+function scaleInjectionTemperature(value: number) {
+  if (value === INVALID_DISPLAY_RAW_VALUE) return Number.NaN;
+  const normalized = value > 2000 ? -(value - 2000) : value;
+  return scale10(normalized);
+}
+
+function scaleOilfreeTemperature(value: number) {
+  if (value === INVALID_DISPLAY_RAW_VALUE) return Number.NaN;
+  return value;
 }
 
 function formatScaledValue(value: number | undefined, unit: string, digits = 1) {
@@ -629,14 +655,23 @@ function CompressorCard({ compressor, onOpenDetail }: { compressor: CompressorSt
         <TripleRow label={pressureLabel} valueA={secondValue} valueB={thirdValue} />
         <MetricRow label="온도" value={formatScaledValue(compressor.temperature, "℃")} />
         <div className="relative grid grid-cols-2 gap-[2px]">
-          <StatusCell tone={compressor.local ? "local" : "remote"}>{compressor.local ? "로 컬" : "리모트"}</StatusCell>
-          <StatusCell tone={compressor.running ? "running" : "stop"}>{compressor.running ? "부 하" : "정 지"}</StatusCell>
+          <StatusCell tone={compressor.local ? "local" : "remote"}>{formatRunMode(compressor.runMode)}</StatusCell>
+          <StatusCell tone={compressor.running ? "running" : "stop"}>{formatOperationStatus(compressor.operationStatus)}</StatusCell>
           <StatusFlagOverlay alarm={compressor.alarm} fault={compressor.fault} />
         </div>
         <MetricRow label="총 운전시간" value={formatIntegerValue(compressor.totalHours, "hr")} />
       </div>
     </button>
   );
+}
+
+function formatRunMode(runMode: number) {
+  return ["로 컬", "리모트", "스케쥴", "스케쥴 대기"][Math.trunc(runMode)] ?? "---";
+}
+
+function formatOperationStatus(operationStatus: number) {
+  const labels = ["정 지", "자동 정지", "운전 시작", "운전 시작", "운전 시작", "무부하", "부 하", "정지 지연", "에어 배기"];
+  return labels[Math.trunc(operationStatus)] ?? "---";
 }
 
 function DisconnectBanner() {

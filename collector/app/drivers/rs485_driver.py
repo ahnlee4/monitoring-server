@@ -40,7 +40,7 @@ class CompField:
 
 
 COMP_FIELDS: tuple[CompField, ...] = (
-    CompField("SERVICE_PRESSURE", signed=True, scale=0.1, unit="bar"),
+    CompField("SERVICE_PRESSURE", signed=True, scale=0.01, unit="bar"),
     CompField("P2", signed=True, scale=0.1, unit="bar"),
     CompField("P3", signed=True, scale=0.1, unit="bar"),
     CompField("P4", signed=True, scale=0.1, unit="bar"),
@@ -546,10 +546,9 @@ class RS485Collector(BaseCollector):
             "fault_inv": int(values.get("fault_inv", 0)),
         }
         has_fault = any(value != 0 for value in fault_values.values())
-        run_mode = int(values.get("run_mode", 0))
         cp_status = int(values.get("cp_status", 0))
 
-        status = "alarm" if has_fault else "running" if run_mode or cp_status else "idle"
+        status = "alarm" if has_fault else "running" if cp_status else "idle"
         alarms = [
             AlarmEvent(level="warning", message=f"{key}=0x{value:04X}", active=True)
             for key, value in fault_values.items()

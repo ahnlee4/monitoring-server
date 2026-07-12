@@ -627,11 +627,8 @@ async def create_group_operation_command(
     for unit in available_units:
         prefix = "2" if oilfree_selector & (1 << (unit - 1)) else "1"
         unit_hex = f"{unit:X}"
-        run_mode_offset = "3A" if prefix == "2" else "18"
         cp_status_offset = "30" if prefix == "2" else "16"
-        if current_map_int(db, f"{prefix}{unit_hex}{run_mode_offset}", 0) or current_map_int(
-            db, f"{prefix}{unit_hex}{cp_status_offset}", 0
-        ):
+        if current_map_int(db, f"{prefix}{unit_hex}{cp_status_offset}", 0):
             running_units.append(unit)
     writes = build_group_operation_writes(
         current_value=current_operation_value,
