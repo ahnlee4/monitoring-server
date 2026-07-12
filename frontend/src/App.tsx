@@ -333,7 +333,7 @@ function buildDashboardFromMap(values: Record<string, YujinMapValue>, savedPress
   const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
   const systemOnline = hasRecentValue(values, "0000", SYSTEM_LINK_GRACE_MS) || hasRecentValue(values, "0002", SYSTEM_LINK_GRACE_MS);
   const displayOrder = readRunSequence(values);
-  const mainPressure = scaleMainPressure(liveMapNumber(values, "0000", 0));
+  const mainPressure = scalePressure100(liveMapNumber(values, "0000", 0));
   const optionDevice = liveMapNumber(values, "004A", 0);
   const lowAlarmStep = liveMapNumber(values, "0054", 0);
   const sortModeWord = Math.trunc(liveMapNumber(values, "0024", 0));
@@ -401,7 +401,7 @@ function buildCompressorFromMap(
     );
   };
 
-  const pressure = scale10(read("00", "00", 0));
+  const pressure = scalePressure100(read("00", "00", 0));
   const temperature = scale10(read("0C", "02", 0));
   const noLoadPressure = scale10(read("4E", "26", 0));
   const loadPressure = scale10(read("50", "28", 0));
@@ -491,14 +491,14 @@ function scale10(value: number) {
   return Math.round((value / 10) * 10) / 10;
 }
 
-function scaleMainPressure(value: number) {
+function scalePressure100(value: number) {
   if (value === INVALID_DISPLAY_RAW_VALUE) return Number.NaN;
   return Math.round(value) / 100;
 }
 
-function formatScaledValue(value: number | undefined, unit: string) {
+function formatScaledValue(value: number | undefined, unit: string, digits = 1) {
   if (value === undefined || !Number.isFinite(value)) return "---";
-  return `${value.toFixed(1)} ${unit}`;
+  return `${value.toFixed(digits)} ${unit}`;
 }
 
 function formatIntegerValue(value: number | undefined, unit = "") {
@@ -625,7 +625,7 @@ function CompressorCard({ compressor, onOpenDetail }: { compressor: CompressorSt
         >
           {compressor.name} ({compressor.model})
         </div>
-        <MetricRow label="압력" value={formatScaledValue(compressor.pressure, "bar")} />
+        <MetricRow label="압력" value={formatScaledValue(compressor.pressure, "bar", 2)} />
         <TripleRow label={pressureLabel} valueA={secondValue} valueB={thirdValue} />
         <MetricRow label="온도" value={formatScaledValue(compressor.temperature, "℃")} />
         <div className="relative grid grid-cols-2 gap-[2px]">

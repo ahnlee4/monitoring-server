@@ -263,7 +263,7 @@ function MobileCompressorCard({
         </span>
       </div>
       <div className="grid h-full min-h-0 grid-cols-2 grid-rows-2 gap-[clamp(6px,0.9dvh,9px)]">
-        <MobileValue prominent label="압력" unit="bar" value={formatNumber(compressor.pressure, 1)} />
+        <MobileValue prominent label="압력" unit="bar" value={formatNumber(compressor.pressure, 2)} />
         <MobileValue prominent label="온도" unit="℃" value={formatNumber(compressor.temperature, 1)} />
         <MobileValue prominent label={compressor.inverter ? "제어압력" : "무부하"} unit="bar" value={formatNumber(compressor.inverter ? compressor.controlPressure : compressor.noLoadPressure, 1)} />
         <MobileValue prominent label={compressor.inverter ? "회전수" : "부하"} unit={compressor.inverter ? "rpm" : "bar"} value={compressor.inverter ? formatInteger(compressor.rpm) : formatNumber(compressor.loadPressure, 1)} />
@@ -313,7 +313,7 @@ function MobileDetailCard({
           <MobileBadge tone={compressor.running ? "red" : "gray"}>{compressor.running ? "RUN" : "RDY"}</MobileBadge>
         </div>
         <div className="mt-[10px] grid grid-cols-2 gap-[7px]">
-          <MobileValue label="압력" unit="bar" value={formatNumber(compressor.pressure, 1)} />
+          <MobileValue label="압력" unit="bar" value={formatNumber(compressor.pressure, 2)} />
           <MobileValue label="온도" unit="℃" value={formatNumber(compressor.temperature, 1)} />
           <MobileValue label="시간" unit="hr" value={formatInteger(compressor.totalHours)} />
           <MobileValue label={compressor.inverter ? "회전" : "부하"} unit={compressor.inverter ? "rpm" : "bar"} value={compressor.inverter ? formatInteger(compressor.rpm) : formatNumber(compressor.loadPressure, 1)} />

@@ -103,7 +103,7 @@ function DetailCompressorCard({
   const imageSrc = getCompressorImage(compressor);
   const runText = getRunText(compressor);
   const modeText = compressor.local ? "LOC" : "REM";
-  const pressureText = compressor.connected ? formatScaledValue(compressor.pressure, "bar") : "--- bar";
+  const pressureText = compressor.connected ? formatScaledValue(compressor.pressure, "bar", 2) : "--- bar";
   const machineType = compressor.inverter ? "INVERTER" : "STANDARD";
 
   return (
@@ -412,9 +412,9 @@ function isLiveMapValue(value: YujinMapValue | undefined, maxAgeMs = LIVE_VALUE_
   return Date.now() - new Date(value.updated_at).getTime() <= maxAgeMs;
 }
 
-function formatScaledValue(value: number | undefined, unit: string) {
+function formatScaledValue(value: number | undefined, unit: string, digits = 1) {
   if (value === undefined || !Number.isFinite(value)) return "---";
-  return `${value.toFixed(1)} ${unit}`;
+  return `${value.toFixed(digits)} ${unit}`;
 }
 
 function formatIntegerValue(value: number | undefined, unit = "") {

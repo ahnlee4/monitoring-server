@@ -191,7 +191,7 @@ function buildSettingItems(compressor: EquipmentCompressor): DetailItem[] {
         { label: "운전 상태", value: compressor.running ? "운전" : "정지" },
         { label: "제어 압력", value: formatScaledValue(compressor.controlPressure, "bar") },
         { label: "회전수", value: formatIntegerValue(compressor.rpm, "rpm") },
-        { label: "현재 압력", value: formatScaledValue(compressor.pressure, "bar") },
+        { label: "현재 압력", value: formatScaledValue(compressor.pressure, "bar", 2) },
         { label: "현재 온도", value: formatScaledValue(compressor.temperature, "℃") },
         { label: "총 운전 시간", value: formatIntegerValue(compressor.totalHours, "hr") },
       ]
@@ -202,7 +202,7 @@ function buildSettingItems(compressor: EquipmentCompressor): DetailItem[] {
         { label: "운전 상태", value: compressor.running ? "운전" : "정지" },
         { label: "무부하 압력", value: formatScaledValue(compressor.noLoadPressure, "bar") },
         { label: "부하 압력", value: formatScaledValue(compressor.loadPressure, "bar") },
-        { label: "현재 압력", value: formatScaledValue(compressor.pressure, "bar") },
+        { label: "현재 압력", value: formatScaledValue(compressor.pressure, "bar", 2) },
         { label: "현재 온도", value: formatScaledValue(compressor.temperature, "℃") },
         { label: "총 운전 시간", value: formatIntegerValue(compressor.totalHours, "hr") },
       ];
@@ -324,7 +324,7 @@ function buildStatusItems(compressor: EquipmentCompressor, values: Record<string
   const prefix = getMapPrefix(compressor);
   const readWord = (offset: number) => liveMapNumber(values, `${prefix}${offset.toString(16).padStart(2, "0")}`, Number.NaN);
   const baseItems = [
-    { label: "압력", value: formatScaledValue(compressor.pressure, "bar") },
+    { label: "압력", value: formatScaledValue(compressor.pressure, "bar", 2) },
     { label: "온도", value: formatScaledValue(compressor.temperature, "℃") },
     { label: "운전 상태", value: compressor.running ? "운전" : "정지" },
     { label: "운전 위치", value: compressor.local ? "LOCAL" : "REMOTE" },
@@ -335,7 +335,7 @@ function buildStatusItems(compressor: EquipmentCompressor, values: Record<string
   if (compressor.isOilfree) {
     return [
       ...baseItems,
-      { label: "토출 압력", value: formatScaledValue(scale10(readWord(0x04)), "bar") },
+      { label: "토출 압력", value: formatScaledValue(scalePressure100(readWord(0x04)), "bar", 2) },
       { label: "토출 온도", value: formatScaledValue(scale10(readWord(0x0c)), "℃") },
       { label: "알림 WORD", value: formatRawWord(readWord(0x28)), alarm: compressor.alarm },
     ];
@@ -417,9 +417,14 @@ function scale10(value: number) {
   return Math.round((value / 10) * 10) / 10;
 }
 
-function formatScaledValue(value: number | undefined, unit: string) {
+function scalePressure100(value: number) {
+  if (value === INVALID_DISPLAY_RAW_VALUE) return Number.NaN;
+  return Math.round(value) / 100;
+}
+
+function formatScaledValue(value: number | undefined, unit: string, digits = 1) {
   if (value === undefined || !Number.isFinite(value)) return "---";
-  return `${value.toFixed(1)} ${unit}`;
+  return `${value.toFixed(digits)} ${unit}`;
 }
 
 function formatIntegerValue(value: number | undefined, unit = "") {
