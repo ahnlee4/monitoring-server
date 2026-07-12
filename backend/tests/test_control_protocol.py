@@ -46,7 +46,7 @@ class GroupOperationProtocolTest(unittest.TestCase):
         self.assertEqual([write["value"] for write in writes], [0x0101, 0x0002, 0x0002])
         self.assertEqual(writes[1]["delay_after_seconds"], 4)
 
-    def test_group_stop_stops_running_units_in_reverse_then_clears_flag(self) -> None:
+    def test_group_stop_stops_all_target_units_in_reverse_then_clears_flag(self) -> None:
         writes = build_group_operation_writes(
             current_value=0x0101,
             action="stop",
@@ -60,8 +60,41 @@ class GroupOperationProtocolTest(unittest.TestCase):
             stop_delay_seconds=2,
         )
 
-        self.assertEqual([write["address"] for write in writes], [0x131A, 0x111A, 0x0050])
-        self.assertEqual([write["value"] for write in writes], [0x0001, 0x0001, 0x0100])
+        self.assertEqual([write["address"] for write in writes], [0x121A, 0x111A, 0x0050, 0x131A])
+        self.assertEqual([write["value"] for write in writes], [0x0001, 0x0001, 0x0100, 0x0001])
+
+    def test_group_stop_does_not_depend_on_target_cp_status(self) -> None:
+        writes = build_group_operation_writes(
+            current_value=0x0001,
+            action="stop",
+            sequence=[1, 2, 3],
+            available_units=[1, 2, 3],
+            run_units=3,
+            oilfree_selector=0,
+            repair_mask=0,
+            running_units=[3],
+            run_delay_seconds=10,
+            stop_delay_seconds=4,
+        )
+
+        self.assertEqual([write["address"] for write in writes], [0x131A, 0x121A, 0x111A, 0x0050])
+
+    def test_group_stop_can_leave_non_target_running_units_untouched(self) -> None:
+        writes = build_group_operation_writes(
+            current_value=0x0001,
+            action="stop",
+            sequence=[1, 2, 3],
+            available_units=[1, 2, 3],
+            run_units=2,
+            oilfree_selector=0,
+            repair_mask=0,
+            running_units=[1, 2, 3],
+            run_delay_seconds=10,
+            stop_delay_seconds=4,
+            stop_additional_units=False,
+        )
+
+        self.assertEqual([write["address"] for write in writes], [0x121A, 0x111A, 0x0050])
 
     def test_group_run_skips_repair_units(self) -> None:
         writes = build_group_operation_writes(

@@ -641,6 +641,7 @@ async def create_group_operation_command(
         running_units=running_units,
         run_delay_seconds=current_map_int(db, "003C", 0),
         stop_delay_seconds=current_map_int(db, "0004", 0),
+        stop_additional_units=not bool(current_map_int(db, "004A", 0) & (1 << 14)),
     )
     command = enqueue_control_command(
         db,
