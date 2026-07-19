@@ -122,11 +122,8 @@ fieldset > legend { margin-bottom: 9px; color: #c4d5e5; font-size: 13px; font-we
 .permission-fieldset { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: rgba(6, 17, 29, .46); }
 .permission-fieldset.is-disabled { opacity: .72; }
 .permission-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.permission-title > div { display: grid; gap: 3px; }
-.permission-title > div > span, .permission-title > span { color: var(--muted); font-size: 11px; }
-.permission-title > strong, .permission-title > div > strong { color: #d8e7f4; font-size: 13px; }
-.permission-count { padding: 5px 9px; border-radius: 999px; background: rgba(124, 153, 180, .12); white-space: nowrap; }
-.permission-count strong { color: var(--accent); }
+.permission-title > span { color: var(--muted); font-size: 11px; }
+.permission-title > strong { color: #d8e7f4; font-size: 13px; }
 .permission-selector { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
 .permission-selector-create { max-height: 160px; overflow: auto; padding-right: 2px; }
 .permission-option { position: relative; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 9px; min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: #0a192a; cursor: pointer; transition: border-color .2s, background .2s; }
@@ -172,12 +169,7 @@ fieldset > legend { margin-bottom: 9px; color: #c4d5e5; font-size: 13px; font-we
 .status-badge.pending { background: rgba(255, 196, 87, .13); color: #f2c56f; }
 .compact-button { padding: 8px 11px; font-size: 10px; white-space: nowrap; }
 .access-card-body { display: grid; gap: 12px; padding: 16px 19px; }
-.access-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 54px; padding: 9px 19px; border-top: 1px solid var(--line); background: rgba(7, 19, 32, .38); }
-.access-card-actions p { margin: 0; color: var(--muted); font-size: 10px; }
-.access-card-actions p span { color: var(--accent); }
-.quick-select { display: flex; gap: 14px; }
-.text-button { padding: 5px 0; border: 0; background: transparent; color: #84a3bc; font-size: 10px; }
-.text-button:hover { color: var(--accent); }
+.access-card-actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; min-height: 54px; padding: 9px 19px; border-top: 1px solid var(--line); background: rgba(7, 19, 32, .38); }
 .access-card-actions .save-access { padding: 9px 13px; font-size: 10px; }
 .access-primary-actions { display: flex; gap: 8px; }
 .access-primary-actions button { padding: 9px 13px; font-size: 10px; }
@@ -752,10 +744,7 @@ summary:focus-visible {
   border-color: var(--line);
   background: #f8fafc;
 }
-.permission-title > strong,
-.permission-title > div > strong { color: #26364b; }
-.permission-count { background: #eaf1fb; }
-.permission-count strong { color: var(--accent-strong); }
+.permission-title > strong { color: #26364b; }
 .permission-mark {
   border-color: #9cacc0;
   background: #fff;
@@ -810,9 +799,7 @@ summary:focus-visible {
   border-color: var(--line);
   background: #f8fafc;
 }
-.access-card-actions p,
 .user-identity p { font-size: 11px; }
-.access-card-actions p span { color: var(--accent-strong); }
 .access-primary-actions { gap: 8px; }
 .access-card.has-changes .save-access {
   border-color: var(--accent);
@@ -820,12 +807,6 @@ summary:focus-visible {
   color: #fff;
   box-shadow: 0 4px 12px rgba(37, 99, 235, .18);
 }
-.text-button {
-  color: #526d91;
-  font-size: 11px;
-  font-weight: 700;
-}
-.text-button:hover { color: var(--accent-strong); }
 .compact-button {
   min-height: 36px;
   padding: 8px 12px;

@@ -267,10 +267,7 @@ function accessRows() {
           </div>
           <div class="access-card-body">
             <div class="permission-title">
-              <div>
-                <strong>${user.isAdmin ? "모든 활성 서버" : "접속 서버"}</strong>
-              </div>
-              <span class="permission-count"><strong>${accessCount}</strong>개 허용</span>
+              <strong>${user.isAdmin ? "모든 활성 서버" : "접속 서버"}</strong>
             </div>
             <div class="permission-selector ${user.isAdmin ? "is-readonly" : ""}">
               ${permissionOptions({ user, disabled: user.isAdmin })}
@@ -281,10 +278,6 @@ function accessRows() {
               ? ""
               : `
                 <div class="access-card-actions">
-                  <div class="quick-select">
-                    <button class="text-button select-all-access" type="button" data-user="${user.id}">전체 선택</button>
-                    <button class="text-button clear-access" type="button" data-user="${user.id}">해제</button>
-                  </div>
                   <div class="access-primary-actions">
                     <button class="secondary save-access" type="button" data-user="${user.id}">권한 저장</button>
                     ${
@@ -490,8 +483,6 @@ function adminView() {
     });
   });
   document.querySelectorAll(".toggle-server").forEach((button) => button.addEventListener("click", toggleServer));
-  document.querySelectorAll(".select-all-access").forEach((button) => button.addEventListener("click", selectAllAccess));
-  document.querySelectorAll(".clear-access").forEach((button) => button.addEventListener("click", clearAccess));
   document.querySelectorAll(".access-server-checkbox").forEach((input) => input.addEventListener("change", markAccessDirty));
   document.querySelector(".cancel-user-edit").addEventListener("click", () => document.querySelector("#user-dialog").close());
   document.querySelector("#user-edit-form").addEventListener("submit", submitUserUpdate);
@@ -561,10 +552,8 @@ function updateAccessCardState(userId, dirty = true) {
   const card = document.querySelector(`[data-user-card] input[data-user="${userId}"]`)?.closest(".access-card");
   if (!card) return;
   const selectedCount = card.querySelectorAll(`input[data-user="${userId}"]:checked`).length;
-  const count = card.querySelector(".permission-count strong");
   const saveButton = card.querySelector(".save-access");
   const approveButton = card.querySelector(".approve-user");
-  if (count) count.textContent = String(selectedCount);
   card.classList.toggle("has-changes", dirty);
   if (saveButton) saveButton.textContent = dirty ? "변경사항 저장" : "권한 저장";
   if (approveButton) {
@@ -579,21 +568,6 @@ function updateAccessCardState(userId, dirty = true) {
 
 function markAccessDirty(event) {
   updateAccessCardState(Number(event.currentTarget.dataset.user));
-}
-
-function setAccessSelection(userId, checked) {
-  document.querySelectorAll(`input[data-user="${userId}"]:not(:disabled)`).forEach((input) => {
-    input.checked = checked;
-  });
-  updateAccessCardState(userId);
-}
-
-function selectAllAccess(event) {
-  setAccessSelection(Number(event.currentTarget.dataset.user), true);
-}
-
-function clearAccess(event) {
-  setAccessSelection(Number(event.currentTarget.dataset.user), false);
 }
 
 async function submitServer(event) {
