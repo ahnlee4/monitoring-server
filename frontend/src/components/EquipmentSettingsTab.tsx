@@ -61,27 +61,90 @@ export function EquipmentSettingsTab({
   };
 
   const disabled = commandBusy || integratedRun || !compressor.connected;
+  const disabledReason = !compressor.connected
+    ? "장비 통신이 끊겨 설정을 전송할 수 없습니다"
+    : integratedRun
+      ? "통합 운전 중에는 개별 장비 설정을 변경할 수 없습니다"
+      : "";
+
   return (
-    <div className="grid h-full min-h-0 grid-rows-[1fr_auto] gap-[9px]">
-      <div className="grid min-h-0 auto-rows-[78px] grid-cols-2 gap-[8px] overflow-y-auto rounded-[10px] border border-[#d9e6f0] bg-white p-[10px] max-sm:grid-cols-1">
-        {fields.map((field) => (
-          <label className="grid grid-rows-[20px_1fr] rounded-[8px] border border-[#d9e6f0] bg-[#f8fbfd] p-[9px]" key={field.key}>
-            <span className="text-[13px] font-black text-[#6f879d]">{field.label}</span>
-            <span className="grid grid-cols-[1fr_36px_50px] items-center gap-[5px]">
-              <input className="min-w-0 rounded-[6px] border border-[#c9deef] bg-white px-[7px] py-[5px] text-right text-[20px] font-black text-[#173f69] outline-none focus:border-[#237bd0]" disabled={disabled} inputMode={field.scale === 1 ? "numeric" : "decimal"} onChange={(event) => setValues((current) => ({ ...current, [field.key]: sanitizeDecimal(event.target.value, field.scale === 1) }))} type="text" value={values[field.key]} />
-              <span className="text-[11px] font-black text-[#6f879d]">{field.unit}</span>
-              <button className="h-[34px] rounded-[6px] bg-[#237bd0] text-[12px] font-black text-white disabled:opacity-40" disabled={disabled} onClick={(event) => { event.preventDefault(); void save(field); }} type="button">저장</button>
+    <div className="grid h-full min-h-0 grid-rows-[46px_minmax(0,1fr)_40px] gap-[8px]">
+      <header className="flex items-center justify-between rounded-[10px] border border-[#d3e1eb] bg-white px-[12px]">
+        <div>
+          <div className="text-[12px] font-black text-[#274e70]">압력 및 자동 정지 설정</div>
+          <div className="mt-[2px] text-[9px] font-bold text-[#8398a9]">값을 확인한 후 항목별로 적용합니다</div>
+        </div>
+        <span className="rounded-full bg-[#e8f3fb] px-[9px] py-[5px] text-[9px] font-black text-[#397397]">
+          {compressor.inverter ? "INVERTER PROFILE" : "STANDARD PROFILE"}
+        </span>
+      </header>
+
+      <div className="grid min-h-0 grid-cols-2 grid-rows-2 gap-[8px] max-sm:grid-cols-1 max-sm:grid-rows-none max-sm:overflow-y-auto">
+        {fields.map((field, index) => (
+          <label
+            className="grid min-h-0 grid-rows-[auto_1fr_auto] rounded-[11px] border border-[#d4e1eb] bg-white p-[12px] shadow-[0_2px_5px_rgba(22,61,92,0.05)]"
+            key={field.key}
+          >
+            <span className="flex items-center gap-[8px]">
+              <span className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-[#1d72b5] text-[9px] font-black text-white">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span className="text-[12px] font-black text-[#47657c]">{field.label}</span>
             </span>
+
+            <span className="flex items-center justify-center py-[8px]">
+              <span className="grid h-[54px] w-full grid-cols-[minmax(0,1fr)_52px] overflow-hidden rounded-[9px] border border-[#bcd0df] bg-[#f7fafc] focus-within:border-[#1d72b5] focus-within:ring-2 focus-within:ring-[#1d72b5]/10">
+                <input
+                  className="min-w-0 bg-transparent px-[13px] text-right text-[28px] font-black text-[#173f69] outline-none disabled:text-[#95a7b5]"
+                  disabled={disabled}
+                  inputMode={field.scale === 1 ? "numeric" : "decimal"}
+                  onChange={(event) => setValues((current) => ({
+                    ...current,
+                    [field.key]: sanitizeDecimal(event.target.value, field.scale === 1),
+                  }))}
+                  type="text"
+                  value={values[field.key]}
+                />
+                <span className="flex items-center justify-center border-l border-[#d3e0e9] bg-[#edf3f7] text-[11px] font-black text-[#6e879a]">
+                  {field.unit}
+                </span>
+              </span>
+            </span>
+
+            <button
+              className="h-[36px] rounded-[8px] bg-[#1d72b5] text-[11px] font-black text-white shadow-[0_3px_7px_rgba(29,114,181,0.18)] transition-colors hover:bg-[#155f99] disabled:bg-[#9aabb8] disabled:shadow-none"
+              disabled={disabled}
+              onClick={(event) => {
+                event.preventDefault();
+                void save(field);
+              }}
+              type="button"
+            >
+              이 값 적용
+            </button>
           </label>
         ))}
       </div>
-      <div className="grid grid-cols-4 gap-[6px] rounded-[8px] bg-[#eef7ff] p-[7px] text-center text-[11px] font-black text-[#45657f] max-sm:grid-cols-2">
-        <span>{compressor.isOilfree ? "OILFREE" : "INJECTION"}</span>
-        <span>{compressor.inverter ? "INVERTER" : "STANDARD"}</span>
-        <span>{compressor.local ? "LOCAL" : "REMOTE"}</span>
-        <span>{compressor.running ? "운전" : "정지"}</span>
-      </div>
+
+      <footer className={`flex items-center justify-between rounded-[9px] border px-[10px] ${disabledReason ? "border-[#ecc3a0] bg-[#fff6ed]" : "border-[#cde2d8] bg-[#eef9f4]"}`}>
+        <span className={`text-[10px] font-black ${disabledReason ? "text-[#a75c21]" : "text-[#267258]"}`}>
+          {disabledReason || "설정값 전송 가능"}
+        </span>
+        <div className="flex gap-[5px] text-[8px] font-black">
+          <SettingBadge label={compressor.isOilfree ? "OILFREE" : "INJECTION"} />
+          <SettingBadge label={compressor.local ? "LOCAL" : "REMOTE"} />
+          <SettingBadge label={compressor.running ? "RUN" : "STOP"} />
+        </div>
+      </footer>
     </div>
+  );
+}
+
+function SettingBadge({ label }: { label: string }) {
+  return (
+    <span className="rounded-full border border-[#bfd3e2] bg-white px-[7px] py-[3px] text-[#5d788d]">
+      {label}
+    </span>
   );
 }
 

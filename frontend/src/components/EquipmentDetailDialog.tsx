@@ -7,12 +7,17 @@ import {
 } from "../services/api";
 import type { MapWrite } from "../services/api";
 import type { YujinMapValue } from "../types";
+import { EquipmentDetailSummary } from "./EquipmentDetailSummary";
 import { EquipmentLogTable } from "./EquipmentLogTable";
+import {
+  EquipmentEmptyState,
+  EquipmentMetricGrid,
+} from "./EquipmentMetricGrid";
+import type { EquipmentDetailItem } from "./EquipmentMetricGrid";
 import { EquipmentSettingsTab } from "./EquipmentSettingsTab";
 import { buildEquipmentStatusItems } from "./equipmentStatusData";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
-const INVALID_DISPLAY_RAW_VALUE = 32767;
 
 type EquipmentCompressor = {
   id: number;
@@ -35,13 +40,12 @@ type EquipmentCompressor = {
 };
 
 type DetailTab = "setting" | "status" | "error" | "log";
-type DetailItem = { label: string; value: string; alarm?: boolean };
 
-const TABS: Array<{ key: DetailTab; label: string }> = [
-  { key: "setting", label: "SETTING" },
-  { key: "status", label: "STATUS" },
-  { key: "error", label: "ERROR" },
-  { key: "log", label: "LOG TABLE" },
+const TABS: Array<{ caption: string; key: DetailTab; label: string }> = [
+  { key: "setting", label: "SETTING", caption: "장비 설정" },
+  { key: "status", label: "STATUS", caption: "상세 상태" },
+  { key: "error", label: "ERROR", caption: "알림·고장" },
+  { key: "log", label: "LOG TABLE", caption: "운전 기록" },
 ];
 
 export function EquipmentDetailDialog({
@@ -62,7 +66,6 @@ export function EquipmentDetailDialog({
   const repairActive = Boolean(repairMask & (1 << (compressor.id - 1)));
   const statusItems = buildEquipmentStatusItems(compressor, mapValues);
   const errorItems = buildErrorItems(compressor, mapValues);
-  const visibleItems = activeTab === "status" ? statusItems : [];
 
   const sendWrites = async (label: string, source: string, writes: MapWrite[]) => {
     let commandId: number | null = null;
@@ -129,184 +132,133 @@ export function EquipmentDetailDialog({
   };
 
   return (
-    <div className="absolute inset-0 z-[55] flex items-center justify-center bg-black/60 p-[16px] max-sm:p-[8px]">
-      <section className="grid h-[760px] w-[576px] grid-rows-[56px_1fr_auto_48px] overflow-hidden rounded-[12px] border border-[#d3e0eb] bg-[#f6f9fc] shadow-[0_14px_34px_rgba(15,43,72,0.32)] max-sm:h-[calc(100dvh-16px)] max-sm:w-full max-sm:grid-rows-[auto_minmax(0,1fr)_auto] max-sm:rounded-[10px]">
-        <header className="grid grid-cols-[1fr_48px] border-b border-[#dbe7f1] bg-white px-[8px] py-[7px] max-sm:grid-cols-[1fr_42px] max-sm:gap-[7px] max-sm:px-[9px] max-sm:py-[9px]">
-          <div className="grid grid-cols-4 rounded-[8px] border border-[#d3e7f8] bg-[#edf6fe] p-[4px] max-sm:rounded-[7px] max-sm:p-[3px]">
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                className={`min-h-[38px] rounded-[6px] text-[16px] font-black transition-colors max-sm:min-h-[34px] max-sm:text-[12px] ${
-                  activeTab === tab.key ? "bg-[#237bd0] text-white shadow-[0_4px_10px_rgba(35,123,208,0.28)]" : "text-[#3e6488]"
-                }`}
-                onClick={() => setActiveTab(tab.key)}
-                type="button"
-              >
-                {tab.label}
-              </button>
-            ))}
+    <div className="absolute inset-0 z-[55] flex items-center justify-center bg-[#07182a]/75 p-[12px] backdrop-blur-[2px]">
+      <section className="grid h-[720px] max-h-[calc(100dvh-24px)] w-[1050px] max-w-[calc(100vw-24px)] grid-rows-[68px_minmax(0,1fr)] overflow-hidden rounded-[15px] border border-[#b8cbd9] bg-[#edf3f7] shadow-[0_22px_70px_rgba(4,22,39,0.45)] max-sm:h-[calc(100dvh-12px)] max-sm:max-h-none max-sm:max-w-[calc(100vw-12px)] max-sm:grid-rows-[64px_minmax(0,1fr)] max-sm:rounded-[10px]">
+        <header className="flex items-center justify-between border-b border-[#c9d8e3] bg-white px-[16px] max-sm:px-[10px]">
+          <div className="flex min-w-0 items-center gap-[12px]">
+            <div className="flex h-[42px] min-w-[58px] items-center justify-center rounded-[9px] bg-[#176eb2] px-[10px] text-[18px] font-black text-white shadow-[0_4px_10px_rgba(23,110,178,0.22)]">
+              #{String(compressor.id).padStart(2, "0")}
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-[20px] font-black leading-none text-[#173f69] max-sm:text-[16px]">
+                {compressor.name}
+              </div>
+              <div className="mt-[6px] flex items-center gap-[7px] text-[10px] font-black text-[#7890a4]">
+                <span>{compressor.model === "-" ? "모델 정보 없음" : compressor.model}</span>
+                <span className="h-[3px] w-[3px] rounded-full bg-[#9eb1c1]" />
+                <span>{compressor.isOilfree ? "OILFREE" : "INJECTION"}</span>
+              </div>
+            </div>
           </div>
-          <button
-            aria-label="닫기"
-            className="ml-[8px] flex items-center justify-center rounded-[8px] border border-[#cfdde8] bg-[#f3f7fa] text-[28px] font-black leading-none text-[#45657f] transition-colors hover:bg-[#e8f0f6] max-sm:ml-0 max-sm:rounded-[7px] max-sm:text-[25px]"
-            onClick={onClose}
-            type="button"
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-[8px]">
+            <span className={`rounded-full px-[9px] py-[5px] text-[10px] font-black ${compressor.connected ? "bg-[#e2f6ee] text-[#147354]" : "bg-[#fbe7e9] text-[#b72e3a]"}`}>
+              {compressor.connected ? "통신 정상" : "통신 끊김"}
+            </span>
+            <span className={`rounded-full px-[9px] py-[5px] text-[10px] font-black ${compressor.running ? "bg-[#e1f0ff] text-[#1769aa]" : "bg-[#edf1f4] text-[#677b8c]"}`}>
+              {compressor.running ? "운전 중" : "정지"}
+            </span>
+            <button
+              aria-label="상세 화면 닫기"
+              className="ml-[4px] flex h-[40px] w-[40px] items-center justify-center rounded-[9px] border border-[#d1dde6] bg-[#f4f7f9] text-[25px] font-black leading-none text-[#49667e] transition-colors hover:border-[#afc5d5] hover:bg-[#e7eef3]"
+              onClick={onClose}
+              type="button"
+            >
+              ×
+            </button>
+          </div>
         </header>
 
-        <div className="min-h-0 overflow-hidden p-[12px] max-sm:p-[9px]">
-          {activeTab === "error" ? <ErrorTab items={errorItems} compressorName={compressor.name} /> : null}
-          {activeTab === "log" ? <EquipmentLogTable equipmentNo={compressor.id} /> : null}
-          {activeTab === "setting" ? (
-            <EquipmentSettingsTab
-              commandBusy={commandBusy}
-              compressor={compressor}
-              integratedRun={integratedRun}
-              mapValues={mapValues}
-              onSend={sendWrites}
-              onStatus={setCommandStatus}
-            />
-          ) : null}
-          {activeTab === "status" ? <MetricGrid items={visibleItems} /> : null}
-        </div>
+        <div className="grid min-h-0 grid-cols-[252px_minmax(0,1fr)] max-sm:grid-cols-1">
+          <EquipmentDetailSummary
+            alarm={compressor.alarm}
+            commandBusy={commandBusy}
+            commandStatus={commandStatus}
+            connected={compressor.connected}
+            fault={compressor.fault}
+            inverter={compressor.inverter}
+            isOilfree={compressor.isOilfree}
+            local={compressor.local}
+            onOperate={sendOperate}
+            onToggleRepair={toggleRepair}
+            pressure={compressor.pressure}
+            repairActive={repairActive}
+            rpm={compressor.rpm}
+            running={compressor.running}
+            temperature={compressor.temperature}
+            totalHours={compressor.totalHours}
+          />
 
-        <div className="border-t border-[#dbe7f1] bg-white px-[12px] py-[10px] max-sm:px-[9px] max-sm:py-[8px]">
-          {activeTab === "setting" ? (
-            <OperatePanel
-              commandBusy={commandBusy}
-              commandStatus={commandStatus}
-              connected={compressor.connected}
-              onOperate={sendOperate}
-              onToggleRepair={toggleRepair}
-              repairActive={repairActive}
-            />
-          ) : (
-            <div className="flex h-[28px] items-center justify-center text-[13px] font-black text-[#6f879d]">{commandStatus}</div>
-          )}
-        </div>
+          <main className="grid min-h-0 grid-rows-[60px_minmax(0,1fr)] bg-[#edf3f7]">
+            <nav className="border-b border-[#cad9e4] bg-[#e3ebf1] px-[10px] pt-[8px]">
+              <div className="grid h-full grid-cols-4 gap-[5px]">
+                {TABS.map((tab) => (
+                  <button
+                    key={tab.key}
+                    className={`grid content-center rounded-t-[9px] border border-b-0 px-[8px] text-left transition-colors ${
+                      activeTab === tab.key
+                        ? "border-[#bdcfdd] bg-white text-[#176eb2] shadow-[0_-2px_8px_rgba(26,73,108,0.06)]"
+                        : "border-transparent bg-transparent text-[#5f788d] hover:bg-white/50"
+                    }`}
+                    onClick={() => setActiveTab(tab.key)}
+                    type="button"
+                  >
+                    <span className="text-[13px] font-black leading-none max-sm:text-[10px]">{tab.label}</span>
+                    <span className={`mt-[4px] text-[9px] font-bold ${activeTab === tab.key ? "text-[#5f8faf]" : "text-[#8a9eae]"}`}>
+                      {tab.caption}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </nav>
 
-        <button className="m-[8px] mt-0 rounded-[8px] bg-[#237bd0] text-[20px] font-black text-white shadow-[0_5px_12px_rgba(35,123,208,0.2)] disabled:opacity-45 max-sm:hidden" onClick={onClose} type="button">
-          닫기
-        </button>
+            <div className="min-h-0 overflow-hidden p-[10px]">
+              {activeTab === "error" ? <ErrorTab items={errorItems} compressorName={compressor.name} /> : null}
+              {activeTab === "log" ? <EquipmentLogTable equipmentNo={compressor.id} /> : null}
+              {activeTab === "setting" ? (
+                <EquipmentSettingsTab
+                  commandBusy={commandBusy}
+                  compressor={compressor}
+                  integratedRun={integratedRun}
+                  mapValues={mapValues}
+                  onSend={sendWrites}
+                  onStatus={setCommandStatus}
+                />
+              ) : null}
+              {activeTab === "status" ? <EquipmentMetricGrid items={statusItems} /> : null}
+            </div>
+          </main>
+        </div>
       </section>
     </div>
   );
 }
 
-function ErrorTab({ compressorName, items }: { compressorName: string; items: DetailItem[] }) {
-  if (items.length === 0) {
-    return <EmptyTab title={`${compressorName} 고장/알림 없음`} description="현재 수신된 알림 또는 고장 비트가 없습니다" />;
-  }
-
-  return <MetricGrid items={items} />;
-}
-
-function MetricGrid({ items }: { items: DetailItem[] }) {
-  return (
-    <div className="grid h-full auto-rows-[82px] grid-cols-2 gap-[9px] overflow-y-auto rounded-[10px] border border-[#d9e6f0] bg-white p-[12px] pr-[8px] max-sm:auto-rows-[68px] max-sm:grid-cols-1 max-sm:gap-[7px] max-sm:rounded-[8px] max-sm:p-[8px] max-sm:pr-[6px]">
-      {items.map((item) => (
-        <MetricCard key={item.label} item={item} />
-      ))}
-    </div>
-  );
-}
-
-function MetricCard({ item }: { item: DetailItem }) {
-  const valueParts = splitValueUnit(item.value);
-
-  return (
-    <div className={`grid min-h-0 grid-rows-[24px_1fr] rounded-[8px] border bg-[#f8fbfd] p-[10px] max-sm:grid-rows-[20px_1fr] max-sm:p-[8px] ${item.alarm ? "border-[#f1b2b2]" : "border-[#d9e6f0]"}`}>
-      <div className={`flex items-center text-[14px] font-black leading-none max-sm:text-[12px] ${item.alarm ? "text-[#d92525]" : "text-[#6f879d]"}`}>
-        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{item.label}</span>
-      </div>
-      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_48px] items-end max-sm:grid-cols-[minmax(0,1fr)_36px]">
-        <div className={`flex min-w-0 items-end justify-end text-right text-[24px] font-black leading-none max-sm:text-[21px] ${item.alarm ? "text-[#d92525]" : "text-[#173f69]"}`}>
-          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{valueParts.value}</span>
-        </div>
-        <div className={`flex items-end justify-start pb-[1px] pl-[5px] text-[13px] font-black leading-none max-sm:pl-[4px] max-sm:text-[11px] ${item.alarm ? "text-[#d92525]" : "text-[#6f879d]"}`}>
-          {valueParts.unit}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OperatePanel({
-  commandBusy,
-  commandStatus,
-  connected,
-  onOperate,
-  onToggleRepair,
-  repairActive,
+function ErrorTab({
+  compressorName,
+  items,
 }: {
-  commandBusy: boolean;
-  commandStatus: string;
-  connected: boolean;
-  onOperate: (nextRunning: boolean) => void;
-  onToggleRepair: () => void;
-  repairActive: boolean;
+  compressorName: string;
+  items: EquipmentDetailItem[];
 }) {
-  return (
-    <div className="grid gap-[8px] max-sm:gap-[6px]">
-      <div className="grid h-[58px] grid-cols-3 gap-[9px] max-sm:h-[48px] max-sm:gap-[6px]">
-        <button
-          className="rounded-[8px] border border-[#237bd0] bg-[#eef7ff] text-[20px] font-black text-[#173f69] shadow-[0_5px_11px_rgba(35,123,208,0.12)] disabled:opacity-45 max-sm:rounded-[7px] max-sm:text-[14px]"
-          disabled={commandBusy || !connected}
-          onClick={onToggleRepair}
-          type="button"
-        >
-          {repairActive ? "정비 해제" : "정비 설정"}
-        </button>
-        <button
-          className="rounded-[8px] bg-[#d92525] text-[23px] font-black text-white shadow-[0_5px_11px_rgba(208,31,38,0.18)] disabled:opacity-45 max-sm:rounded-[7px] max-sm:text-[17px]"
-          disabled={commandBusy || !connected}
-          onClick={() => onOperate(true)}
-          type="button"
-        >
-          운전
-        </button>
-        <button
-          className="rounded-[8px] bg-[#667380] text-[23px] font-black text-white shadow-[0_5px_11px_rgba(70,82,94,0.14)] disabled:opacity-45 max-sm:rounded-[7px] max-sm:text-[17px]"
-          disabled={commandBusy || !connected}
-          onClick={() => onOperate(false)}
-          type="button"
-        >
-          정지
-        </button>
-      </div>
-      <div className="h-[20px] truncate rounded-[7px] bg-[#eef7ff] px-[10px] text-[12px] font-black leading-[20px] text-[#237bd0] max-sm:h-[24px] max-sm:leading-[24px]">{commandStatus}</div>
-    </div>
-  );
-}
-
-function splitValueUnit(text: string) {
-  const value = text.trim();
-  const units = new Set(["bar", "℃", "rpm", "hr", "min", "ea", "mbar"]);
-  const parts = value.split(/\s+/);
-  const unit = parts.at(-1) ?? "";
-
-  if (parts.length > 1 && units.has(unit)) {
-    return { value: parts.slice(0, -1).join(" "), unit };
+  if (items.length === 0) {
+    return (
+      <EquipmentEmptyState
+        title={`${compressorName} 고장/알림 없음`}
+        description="현재 수신된 알림 또는 고장 비트가 없습니다"
+      />
+    );
   }
 
-  return { value, unit: "" };
+  return <EquipmentMetricGrid items={items} />;
 }
 
-function EmptyTab({ description, title }: { description: string; title: string }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center rounded-[10px] border border-[#d9e6f0] bg-white px-[14px] text-center max-sm:rounded-[8px]">
-      <div className="text-[28px] font-black text-[#173f69] max-sm:text-[20px]">{title}</div>
-      <div className="mt-[10px] text-[15px] font-black text-[#6f879d] max-sm:text-[13px]">{description}</div>
-    </div>
-  );
-}
-
-function buildErrorItems(compressor: EquipmentCompressor, values: Record<string, YujinMapValue>): DetailItem[] {
+function buildErrorItems(
+  compressor: EquipmentCompressor,
+  values: Record<string, YujinMapValue>,
+): EquipmentDetailItem[] {
   const prefix = getMapPrefix(compressor);
   const readWord = (offset: number) => liveMapNumber(values, `${prefix}${offset.toString(16).padStart(2, "0")}`, 0);
-  const items: DetailItem[] = [];
+  const items: EquipmentDetailItem[] = [];
   const injectionAlarms = ["에어필터 사용시간 초과", "오일필터 사용시간 초과", "세퍼레이터 사용시간 초과", "오일 사용시간 초과", "오일온도 과온", "구리스 사용시간 초과"];
   const injectionFaults = ["메인모터 과부하 정지", "팬모터 과부하 정지", "오일온도 과온 정지", "온도센서 연결 이상", "압력센서 연결 이상", "압력 과압축 정지", "워터플로어 스위치 이상", "운전확인신호 이상"];
   const oilfreeAlarms = ["에어필터 사용시간 초과", "오일필터 사용시간 초과", "구리스 사용시간 초과", "오일 사용시간 초과", "에어클리너 차압 LOW", "1단 토출온도", "2단 토출온도", "오일온도 과온", "", "에어클리너 차압센서 연결이상", "오일온도 저온", "팬모터 과부하", "오일압력", "2단 흡입온도 과온"];
@@ -326,7 +278,12 @@ function buildErrorItems(compressor: EquipmentCompressor, values: Record<string,
   return items;
 }
 
-function appendActiveBits(items: DetailItem[], word: number, labels: string[], kind: string) {
+function appendActiveBits(
+  items: EquipmentDetailItem[],
+  word: number,
+  labels: string[],
+  kind: string,
+) {
   labels.forEach((label, bit) => {
     if (label && (Math.trunc(word) & (1 << bit))) items.push({ label: kind, value: label, alarm: true });
   });
@@ -373,30 +330,4 @@ function liveMapNumber(values: Record<string, YujinMapValue>, key: string, fallb
 function isLiveMapValue(value: YujinMapValue | undefined, maxAgeMs = LIVE_VALUE_MAX_AGE_MS) {
   if (!value?.updated_at || value.source === "seed") return false;
   return Date.now() - new Date(value.updated_at).getTime() <= maxAgeMs;
-}
-
-function scale10(value: number) {
-  if (value === INVALID_DISPLAY_RAW_VALUE) return Number.NaN;
-  return Math.round((value / 10) * 10) / 10;
-}
-
-function scalePressure100(value: number) {
-  if (value === INVALID_DISPLAY_RAW_VALUE) return Number.NaN;
-  return Math.round(value) / 100;
-}
-
-function formatScaledValue(value: number | undefined, unit: string, digits = 1) {
-  if (value === undefined || !Number.isFinite(value)) return "---";
-  return `${value.toFixed(digits)} ${unit}`;
-}
-
-function formatIntegerValue(value: number | undefined, unit = "") {
-  if (value === undefined || !Number.isFinite(value) || value === INVALID_DISPLAY_RAW_VALUE) return "---";
-  const formatted = Math.trunc(value).toLocaleString("ko-KR");
-  return unit ? `${formatted} ${unit}` : formatted;
-}
-
-function formatRawWord(value: number) {
-  if (!Number.isFinite(value)) return "---";
-  return `0x${(Math.trunc(value) & 0xffff).toString(16).padStart(4, "0").toUpperCase()}`;
 }
