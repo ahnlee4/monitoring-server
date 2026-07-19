@@ -185,6 +185,7 @@ fieldset > legend { margin-bottom: 9px; color: #c4d5e5; font-size: 13px; font-we
 .server-endpoint span { color: var(--muted); font-size: 9px; font-weight: 700; }
 code { color: #c1d5e7; font-size: 11px; }
 .managed-server-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.managed-server-actions button { width: 72px; min-width: 72px; padding-right: 8px; padding-left: 8px; }
 .pause-button { border: 1px solid rgba(255, 196, 87, .25); background: rgba(255, 196, 87, .08); color: #e8bd70; }
 .pause-button:hover { background: rgba(255, 196, 87, .14); }
 .management-empty { padding: 40px; border: 1px dashed var(--line); border-radius: 14px; color: var(--muted); text-align: center; }
@@ -382,7 +383,7 @@ code { color: #c1d5e7; font-size: 11px; }
   .server-pane .managed-server-card { grid-template-columns: 1fr; }
   .server-pane .server-endpoint { grid-column: 1; }
   .server-pane .managed-server-actions { grid-column: 1; grid-row: auto; flex-direction: row; }
-  .managed-server-actions button { flex: 1; }
+  .managed-server-actions button { flex: 1; width: auto; min-width: 0; }
   .split-actions { grid-template-columns: 1fr 1fr; }.split-actions span { display: none; }
   .registration-page { width: min(100% - 24px, 1240px); padding-top: 18px; }
   .simple-registration { width: min(100% - 24px, 720px); }
