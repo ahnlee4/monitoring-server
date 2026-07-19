@@ -15,6 +15,35 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(128))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    contact_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    contact_value: Mapped[str | None] = mapped_column(
+        String(254),
+        unique=True,
+        index=True,
+        nullable=True,
+    )
+    contact_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    approval_status: Mapped[str] = mapped_column(
+        String(16),
+        default="approved",
+        server_default="approved",
+    )
+    signup_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    privacy_agreed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    privacy_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     server_access: Mapped[list["UserServerAccess"]] = relationship(
@@ -68,6 +97,35 @@ class PortalSession(Base):
     user: Mapped[User] = relationship(back_populates="sessions")
 
 
+class EmailVerification(Base):
+    __tablename__ = "portal_email_verifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    code_hash: Mapped[str] = mapped_column(String(255))
+    verification_token_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=True,
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    remote_addr: Mapped[str] = mapped_column(String(64), default="")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+
+
 class AuditLog(Base):
     __tablename__ = "portal_audit_logs"
 
@@ -79,4 +137,3 @@ class AuditLog(Base):
     remote_addr: Mapped[str] = mapped_column(String(64), default="")
     detail: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
-

@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     bootstrap_admin_password: str = ""
     trusted_origins: str = "https://tms.theintech.co.kr"
     allowed_target_ports: str = "80,443"
+    registration_enabled: bool = True
+    smtp_host: str = "smtp.naver.com"
+    smtp_port: int = 465
+    smtp_username: str = "ahnlee4@naver.com"
+    smtp_password: str = ""
+    smtp_from: str = "ahnlee4@naver.com"
+    email_verification_ttl_minutes: int = 10
+    email_verification_cooldown_seconds: int = 60
+    email_verification_hourly_limit: int = 5
+    email_verification_max_attempts: int = 5
 
     @property
     def trusted_origins_set(self) -> set[str]:
@@ -29,4 +39,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

@@ -10,9 +10,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.audit import audit
 from app.config import Settings, get_settings
 from app.database import Base, Database, get_db
-from app.models import AuditLog, MonitoringServer, PortalSession, User, UserServerAccess
+from app.email_sender import SmtpVerificationEmailSender, VerificationEmailSender
+from app.migrations import apply_schema_migrations
+from app.models import MonitoringServer, PortalSession, User, UserServerAccess
+from app.registration_api import router as registration_router
 from app.schemas import (
     LoginIn,
     PasswordChangeIn,
@@ -43,24 +47,6 @@ FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 class AuthContext:
     user: User
     session: PortalSession
-
-
-def remote_address(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",", 1)[0].strip()[:64]
-    return request.client.host[:64] if request.client else ""
-
-
-def audit(db: Session, request: Request, action: str, user_id: int | None, detail: str = "") -> None:
-    db.add(
-        AuditLog(
-            user_id=user_id,
-            action=action,
-            remote_addr=remote_address(request),
-            detail=detail[:1000],
-        )
-    )
 
 
 def lookup_auth(request: Request, db: Session) -> AuthContext | None:
@@ -118,6 +104,15 @@ def serialize_user(user: User, server_ids: list[int] | None = None) -> dict:
         "displayName": user.display_name,
         "isAdmin": user.is_admin,
         "isActive": user.is_active,
+        "contactType": user.contact_type,
+        "contactValue": user.contact_value,
+        "contactVerified": user.contact_verified_at is not None,
+        "approvalStatus": user.approval_status,
+        "signupRequestedAt": (
+            user.signup_requested_at.isoformat()
+            if user.signup_requested_at
+            else None
+        ),
         **({"serverIds": server_ids} if server_ids is not None else {}),
     }
 
@@ -146,12 +141,17 @@ def validated_server_ids(db: Session, values: list[int]) -> list[int]:
     return server_ids
 
 
-def create_app(settings_override: Settings | None = None) -> FastAPI:
+def create_app(
+    settings_override: Settings | None = None,
+    email_sender_override: VerificationEmailSender | None = None,
+) -> FastAPI:
     configuration = settings_override or get_settings()
     database = Database(configuration.portal_database_url)
+    sender = email_sender_override or SmtpVerificationEmailSender(configuration)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        apply_schema_migrations(database.engine)
         Base.metadata.create_all(bind=database.engine)
         with database.session_factory() as db:
             db.execute(delete(PortalSession).where(PortalSession.expires_at <= utcnow()))
@@ -175,6 +175,8 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
     portal = FastAPI(title="Monitoring Gateway Portal", lifespan=lifespan)
     portal.state.settings = configuration
     portal.state.database = database
+    portal.state.email_sender = sender
+    portal.include_router(registration_router)
 
     @portal.middleware("http")
     async def validate_origin(request: Request, call_next):
@@ -193,10 +195,24 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
         db.execute(delete(PortalSession).where(PortalSession.expires_at <= utcnow()))
         username = payload.username.strip().lower()
         user = db.scalar(select(User).where(User.username == username))
-        if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
+        if not user or not verify_password(payload.password, user.password_hash):
             audit(db, request, "login_failed", user.id if user else None, f"username={username}")
             db.commit()
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="아이디 또는 비밀번호가 올바르지 않습니다.")
+        if user.approval_status == "pending":
+            audit(db, request, "login_pending", user.id)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="관리자 승인 대기 중입니다. 서버 권한 배정과 승인이 완료된 후 로그인할 수 있습니다.",
+            )
+        if not user.is_active:
+            audit(db, request, "login_inactive", user.id)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="사용이 중지된 계정입니다. 관리자에게 문의하세요.",
+            )
 
         raw_token = new_session_token()
         csrf_token = new_csrf_token()
@@ -359,6 +375,14 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
                 raise HTTPException(status_code=409, detail="현재 로그인한 계정의 관리자 권한은 변경할 수 없습니다.")
             if next_is_active != user.is_active:
                 raise HTTPException(status_code=409, detail="현재 로그인한 계정의 활성 상태는 변경할 수 없습니다.")
+        if (
+            user.approval_status == "pending"
+            and payload.is_active is True
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="가입 승인 버튼으로 서버 권한과 함께 승인하세요.",
+            )
 
         removes_active_admin = user.is_admin and user.is_active and not (next_is_admin and next_is_active)
         if removes_active_admin:
@@ -435,7 +459,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
             if not other_active_admin:
                 raise HTTPException(status_code=409, detail="활성 관리자 계정은 최소 1개 이상 유지해야 합니다.")
 
-        audit(db, request, "user_deleted", context.user.id, f"user_id={user.id};username={user.username}")
+        audit(db, request, "user_deleted", context.user.id, f"user_id={user.id}")
         db.delete(user)
         db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -455,6 +479,43 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
         db.execute(delete(UserServerAccess).where(UserServerAccess.user_id == user_id))
         db.add_all(UserServerAccess(user_id=user_id, server_id=server_id) for server_id in server_ids)
         audit(db, request, "user_access_updated", context.user.id, f"user_id={user_id};servers={server_ids}")
+        db.commit()
+        return serialize_user(user, server_ids)
+
+    @portal.post("/api/admin/users/{user_id}/approve")
+    def approve_user(
+        user_id: int,
+        request: Request,
+        context: AuthContext = Depends(require_admin_csrf),
+        db: Session = Depends(get_db),
+    ) -> dict:
+        user = db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        if user.approval_status != "pending":
+            raise HTTPException(status_code=409, detail="이미 처리된 가입 신청입니다.")
+        server_ids = sorted(
+            db.scalars(
+                select(UserServerAccess.server_id).where(
+                    UserServerAccess.user_id == user.id
+                )
+            ).all()
+        )
+        if not server_ids:
+            raise HTTPException(
+                status_code=409,
+                detail="서버 권한을 한 개 이상 저장한 후 가입을 승인하세요.",
+            )
+        user.approval_status = "approved"
+        user.is_active = True
+        user.approved_at = utcnow()
+        audit(
+            db,
+            request,
+            "signup_approved",
+            context.user.id,
+            f"user_id={user.id};servers={server_ids}",
+        )
         db.commit()
         return serialize_user(user, server_ids)
 
@@ -568,6 +629,8 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
 
     @portal.get("/")
     @portal.get("/login")
+    @portal.get("/signup")
+    @portal.get("/privacy")
     @portal.get("/admin")
     def portal_index() -> FileResponse:
         return FileResponse(FRONTEND_DIR / "index.html")

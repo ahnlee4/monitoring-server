@@ -1,10 +1,33 @@
+import sqlite3
+
 from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
 
 
-def build_client(tmp_path) -> TestClient:
+class FakeEmailSender:
+    configured = True
+
+    def __init__(self) -> None:
+        self.messages: list[dict] = []
+
+    def send_verification_code(
+        self,
+        recipient: str,
+        code: str,
+        expires_minutes: int,
+    ) -> None:
+        self.messages.append(
+            {
+                "recipient": recipient,
+                "code": code,
+                "expires_minutes": expires_minutes,
+            }
+        )
+
+
+def build_client(tmp_path, email_sender=None) -> TestClient:
     settings = Settings(
         portal_database_url=f"sqlite:///{tmp_path / 'portal.db'}",
         base_domain="tms.test",
@@ -15,7 +38,10 @@ def build_client(tmp_path) -> TestClient:
         trusted_origins="http://tms.test",
         allowed_target_ports="80",
     )
-    return TestClient(create_app(settings), base_url="http://tms.test")
+    return TestClient(
+        create_app(settings, email_sender_override=email_sender),
+        base_url="http://tms.test",
+    )
 
 
 def login(client: TestClient, username: str, password: str) -> dict:
@@ -282,3 +308,202 @@ def test_current_administrator_cannot_remove_own_access(tmp_path) -> None:
         deleted = client.delete(f"/api/admin/users/{user_id}", headers=headers)
         assert deleted.status_code == 409
         assert client.get("/api/admin/users").status_code == 200
+
+
+def test_phone_signup_requires_server_assignment_and_admin_approval(tmp_path) -> None:
+    with build_client(tmp_path) as client:
+        signup = client.post(
+            "/api/signup/register",
+            headers={"Origin": "http://tms.test"},
+            json={
+                "username": "phone-user",
+                "password": "phone-user-password",
+                "display_name": "휴대전화 가입자",
+                "contact_type": "phone",
+                "contact_value": "010-1234-5678",
+                "privacy_agreed": True,
+            },
+        )
+        assert signup.status_code == 201
+        assert signup.json()["status"] == "pending"
+
+        pending_login = client.post(
+            "/api/auth/login",
+            headers={"Origin": "http://tms.test"},
+            json={"username": "phone-user", "password": "phone-user-password"},
+        )
+        assert pending_login.status_code == 403
+        assert "승인 대기" in pending_login.json()["detail"]
+
+        admin_login = login(client, "admin", "initial-admin-password")
+        headers = {
+            "Origin": "http://tms.test",
+            "X-CSRF-Token": admin_login["csrfToken"],
+        }
+        users = client.get("/api/admin/users").json()
+        phone_user = next(user for user in users if user["username"] == "phone-user")
+        assert phone_user["approvalStatus"] == "pending"
+        assert phone_user["isActive"] is False
+        assert phone_user["contactType"] == "phone"
+        assert phone_user["contactValue"] == "01012345678"
+        assert phone_user["contactVerified"] is False
+
+        approval_without_server = client.post(
+            f"/api/admin/users/{phone_user['id']}/approve",
+            headers=headers,
+        )
+        assert approval_without_server.status_code == 409
+
+        server = client.post(
+            "/api/admin/servers",
+            headers=headers,
+            json={
+                "slug": "phone-plant",
+                "name": "휴대전화 가입자 현장",
+                "target_host": "192.168.10.31",
+                "target_port": 80,
+            },
+        )
+        assert server.status_code == 201
+        server_id = server.json()["id"]
+        assigned = client.put(
+            f"/api/admin/users/{phone_user['id']}/servers",
+            headers=headers,
+            json={"server_ids": [server_id]},
+        )
+        assert assigned.status_code == 200
+
+        approved = client.post(
+            f"/api/admin/users/{phone_user['id']}/approve",
+            headers=headers,
+        )
+        assert approved.status_code == 200
+        assert approved.json()["approvalStatus"] == "approved"
+        assert approved.json()["isActive"] is True
+
+        client.cookies.clear()
+        login(client, "phone-user", "phone-user-password")
+        servers = client.get("/api/servers")
+        assert servers.status_code == 200
+        assert [server["slug"] for server in servers.json()] == ["phone-plant"]
+
+
+def test_email_signup_requires_verification_code(tmp_path) -> None:
+    sender = FakeEmailSender()
+    with build_client(tmp_path, email_sender=sender) as client:
+        options = client.get("/api/signup/options")
+        assert options.status_code == 200
+        assert options.json()["emailVerificationAvailable"] is True
+
+        sent = client.post(
+            "/api/signup/email/send",
+            headers={"Origin": "http://tms.test"},
+            json={"email": "New.User@Example.com"},
+        )
+        assert sent.status_code == 200
+        assert sender.messages[-1]["recipient"] == "new.user@example.com"
+
+        missing_verification = client.post(
+            "/api/signup/register",
+            headers={"Origin": "http://tms.test"},
+            json={
+                "username": "email-user",
+                "password": "email-user-password",
+                "display_name": "이메일 가입자",
+                "contact_type": "email",
+                "contact_value": "new.user@example.com",
+                "privacy_agreed": True,
+            },
+        )
+        assert missing_verification.status_code == 422
+
+        wrong_value = (
+            "000000" if sender.messages[-1]["code"] != "000000" else "000001"
+        )
+        wrong_code = client.post(
+            "/api/signup/email/verify",
+            headers={"Origin": "http://tms.test"},
+            json={"email": "new.user@example.com", "code": wrong_value},
+        )
+        assert wrong_code.status_code == 400
+
+        verified = client.post(
+            "/api/signup/email/verify",
+            headers={"Origin": "http://tms.test"},
+            json={
+                "email": "new.user@example.com",
+                "code": sender.messages[-1]["code"],
+            },
+        )
+        assert verified.status_code == 200
+
+        signup = client.post(
+            "/api/signup/register",
+            headers={"Origin": "http://tms.test"},
+            json={
+                "username": "email-user",
+                "password": "email-user-password",
+                "display_name": "이메일 가입자",
+                "contact_type": "email",
+                "contact_value": "new.user@example.com",
+                "email_verification_token": verified.json()["verificationToken"],
+                "privacy_agreed": True,
+            },
+        )
+        assert signup.status_code == 201
+
+        admin_login = login(client, "admin", "initial-admin-password")
+        users = client.get("/api/admin/users").json()
+        email_user = next(user for user in users if user["username"] == "email-user")
+        assert email_user["contactValue"] == "new.user@example.com"
+        assert email_user["contactVerified"] is True
+        assert email_user["approvalStatus"] == "pending"
+        assert admin_login["user"]["isAdmin"] is True
+
+
+def test_signup_and_privacy_pages_are_public(tmp_path) -> None:
+    with build_client(tmp_path) as client:
+        assert client.get("/signup").status_code == 200
+        assert client.get("/privacy").status_code == 200
+
+
+def test_existing_database_receives_signup_columns(tmp_path) -> None:
+    database_path = tmp_path / "portal.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE portal_users (
+                id INTEGER PRIMARY KEY,
+                username VARCHAR(64) NOT NULL UNIQUE,
+                password_hash VARCHAR(255) NOT NULL,
+                display_name VARCHAR(128) NOT NULL,
+                is_admin BOOLEAN NOT NULL,
+                is_active BOOLEAN NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    with build_client(tmp_path) as client:
+        assert client.get("/api/health").json() == {"status": "ok"}
+        users = client.post(
+            "/api/auth/login",
+            headers={"Origin": "http://tms.test"},
+            json={"username": "admin", "password": "initial-admin-password"},
+        )
+        assert users.status_code == 200
+
+    with sqlite3.connect(database_path) as connection:
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(portal_users)")
+        }
+    assert {
+        "contact_type",
+        "contact_value",
+        "contact_verified_at",
+        "approval_status",
+        "signup_requested_at",
+        "privacy_agreed_at",
+        "privacy_version",
+        "approved_at",
+    }.issubset(columns)

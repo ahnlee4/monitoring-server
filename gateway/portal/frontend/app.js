@@ -1,3 +1,5 @@
+import { createRegistrationViews } from "./registration.js";
+
 const app = document.querySelector("#app");
 
 const state = {
@@ -40,6 +42,11 @@ function message(text, type = "error") {
   if (element.dataset.toast === "true") element.classList.add("admin-toast");
 }
 
+const { signupView, privacyView } = createRegistrationViews({
+  app,
+  api,
+});
+
 function loginView() {
   app.innerHTML = `
     <section class="login-layout">
@@ -59,6 +66,10 @@ function loginView() {
         <label>비밀번호<input name="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required /></label>
         <p id="form-message" class="message" role="alert"></p>
         <button class="primary" type="submit">모니터링 접속</button>
+        <div class="login-signup">
+          <span>계정이 없으신가요?</span>
+          <a href="/signup">회원가입 신청</a>
+        </div>
       </form>
     </section>`;
 
@@ -76,16 +87,6 @@ function loginView() {
       state.user = result.user;
       state.csrfToken = result.csrfToken;
       state.servers = await api("/api/servers");
-      const next = new URLSearchParams(location.search).get("next");
-      const allowedNext = state.servers.find((server) => server.url === next);
-      if (allowedNext) {
-        location.assign(allowedNext.url);
-        return;
-      }
-      if (state.servers.length === 1 && !state.user.isAdmin) {
-        location.assign(state.servers[0].url);
-        return;
-      }
       history.replaceState({}, "", "/");
       dashboardView();
     } catch (error) {
@@ -233,14 +234,21 @@ function accessRows() {
     .sort(
       (left, right) =>
         Number(right.isAdmin) - Number(left.isAdmin) ||
+        Number(right.approvalStatus === "pending") -
+          Number(left.approvalStatus === "pending") ||
         Number(right.isActive) - Number(left.isActive) ||
         left.displayName.localeCompare(right.displayName, "ko"),
     )
     .map((user) => {
+      const isPending = user.approvalStatus === "pending";
       const accessCount = user.isAdmin
         ? state.adminServers.filter((server) => server.isActive).length
         : user.serverIds.length;
-      const searchText = `${user.displayName} ${user.username}`.toLowerCase();
+      const contactText = user.contactValue
+        ? `${user.contactType === "email" ? "이메일" : "휴대전화"} ${user.contactValue}`
+        : "";
+      const searchText =
+        `${user.displayName} ${user.username} ${contactText}`.toLowerCase();
       return `
         <article class="access-card" data-user-card data-search="${escapeHtml(searchText)}">
           <div class="access-card-head">
@@ -250,9 +258,13 @@ function accessRows() {
                 <div class="identity-line">
                   <h3>${escapeHtml(user.displayName)}</h3>
                   ${user.isAdmin ? '<span class="status-badge admin">관리자</span>' : ""}
-                  <span class="status-badge ${user.isActive ? "active" : "inactive"}">${user.isActive ? "사용 중" : "로그인 차단"}</span>
+                  ${
+                    isPending
+                      ? '<span class="status-badge pending">승인 대기</span>'
+                      : `<span class="status-badge ${user.isActive ? "active" : "inactive"}">${user.isActive ? "사용 중" : "로그인 차단"}</span>`
+                  }
                 </div>
-                <p>@${escapeHtml(user.username)}</p>
+                <p>@${escapeHtml(user.username)}${contactText ? ` · ${escapeHtml(contactText)}` : ""}${user.contactType === "phone" ? " · 번호 미인증" : ""}</p>
               </div>
             </div>
             <button class="ghost compact-button edit-user" type="button" data-user="${user.id}">계정 정보 수정</button>
@@ -261,7 +273,13 @@ function accessRows() {
             <div class="permission-title">
               <div>
                 <strong>접속 서버</strong>
-                <span>${user.isAdmin ? "관리자는 활성 서버에 자동으로 접근합니다." : "이 사용자가 접속할 현장을 선택하세요."}</span>
+                <span>${
+                  user.isAdmin
+                    ? "관리자는 활성 서버에 자동으로 접근합니다."
+                    : isPending
+                      ? "서버 권한을 저장한 뒤 가입을 승인하세요."
+                      : "이 사용자가 접속할 현장을 선택하세요."
+                }</span>
               </div>
               <span class="permission-count"><strong>${accessCount}</strong>개 허용</span>
             </div>
@@ -278,7 +296,14 @@ function accessRows() {
                     <button class="text-button select-all-access" type="button" data-user="${user.id}">전체 선택</button>
                     <button class="text-button clear-access" type="button" data-user="${user.id}">선택 해제</button>
                   </div>
-                  <button class="secondary save-access" type="button" data-user="${user.id}">권한 저장</button>`
+                  <div class="access-primary-actions">
+                    <button class="secondary save-access" type="button" data-user="${user.id}">권한 저장</button>
+                    ${
+                      isPending
+                        ? `<button class="primary approve-user" type="button" data-user="${user.id}" ${accessCount ? "" : "disabled"}>가입 승인</button>`
+                        : ""
+                    }
+                  </div>`
             }
           </div>
         </article>`;
@@ -326,6 +351,9 @@ function registeredServerCards() {
 
 function adminView() {
   const activeUsers = state.adminUsers.filter((user) => user.isActive).length;
+  const pendingUsers = state.adminUsers.filter(
+    (user) => user.approvalStatus === "pending",
+  ).length;
   const activeServers = state.adminServers.filter((server) => server.isActive).length;
   const accessCount = state.adminUsers.reduce(
     (total, user) => total + (user.isAdmin ? activeServers : user.serverIds.length),
@@ -343,7 +371,7 @@ function adminView() {
           <p>서버를 먼저 등록하고, 사용자를 만들면서 접속 권한까지 바로 지정할 수 있습니다.</p>
         </div>
         <div class="admin-summary" aria-label="등록 현황">
-          <div><span>사용자</span><strong>${activeUsers}</strong><small>전체 ${state.adminUsers.length}명</small></div>
+          <div><span>사용자</span><strong>${activeUsers}</strong><small>승인 대기 ${pendingUsers}명 · 전체 ${state.adminUsers.length}명</small></div>
           <div><span>운영 서버</span><strong>${activeServers}</strong><small>전체 ${state.adminServers.length}대</small></div>
           <div><span>권한 연결</span><strong>${accessCount}</strong><small>현재 허용 건수</small></div>
         </div>
@@ -432,7 +460,7 @@ function adminView() {
           <div>
             <p class="eyebrow">ACCESS CONTROL</p>
             <h2>사용자 권한 관리</h2>
-            <p>계정별로 접속 서버를 변경하고 계정 상태를 관리합니다.</p>
+            <p>신규 가입자에게 서버 권한을 저장하고 승인하거나 기존 계정을 관리합니다.</p>
           </div>
           <label class="search-field">
             <span aria-hidden="true">⌕</span>
@@ -500,6 +528,7 @@ function adminView() {
   document.querySelector("#server-form").addEventListener("submit", submitServer);
   document.querySelector("#user-form").addEventListener("submit", submitUser);
   document.querySelectorAll(".save-access").forEach((button) => button.addEventListener("click", saveAccess));
+  document.querySelectorAll(".approve-user").forEach((button) => button.addEventListener("click", approveUser));
   document.querySelectorAll(".edit-user").forEach((button) => button.addEventListener("click", openUserEditor));
   document.querySelectorAll(".edit-server").forEach((button) => button.addEventListener("click", openServerEditor));
   document.querySelectorAll(".toggle-server").forEach((button) => button.addEventListener("click", toggleServer));
@@ -576,9 +605,18 @@ function updateAccessCardState(userId, dirty = true) {
   const selectedCount = card.querySelectorAll(`input[data-user="${userId}"]:checked`).length;
   const count = card.querySelector(".permission-count strong");
   const saveButton = card.querySelector(".save-access");
+  const approveButton = card.querySelector(".approve-user");
   if (count) count.textContent = String(selectedCount);
   card.classList.toggle("has-changes", dirty);
   if (saveButton) saveButton.textContent = dirty ? "변경사항 저장" : "권한 저장";
+  if (approveButton) {
+    approveButton.disabled = dirty || selectedCount === 0;
+    approveButton.title = dirty
+      ? "변경한 서버 권한을 먼저 저장하세요."
+      : selectedCount
+        ? ""
+        : "서버 권한을 한 개 이상 저장하세요.";
+  }
 }
 
 function markAccessDirty(event) {
@@ -656,13 +694,17 @@ function openUserEditor(event) {
   form.elements.username.value = user.username;
   form.elements.password.value = "";
   form.elements.isAdmin.checked = user.isAdmin;
-  form.elements.isAdmin.disabled = isSelf;
+  form.elements.isAdmin.disabled = isSelf || user.approvalStatus === "pending";
   form.elements.isActive.checked = user.isActive;
-  form.elements.isActive.disabled = isSelf;
+  form.elements.isActive.disabled =
+    isSelf || user.approvalStatus === "pending";
   form.querySelector(".delete-user").disabled = isSelf;
-  form.querySelector(".account-help").textContent = isSelf
-    ? "현재 로그인한 계정은 권한 변경이나 삭제를 할 수 없습니다."
-    : "비밀번호 또는 활성 상태를 변경하면 해당 계정의 기존 로그인이 해제됩니다.";
+  form.querySelector(".account-help").textContent =
+    user.approvalStatus === "pending"
+      ? "승인 대기 계정은 사용자 카드에서 서버 권한을 저장한 후 승인하세요."
+      : isSelf
+        ? "현재 로그인한 계정은 권한 변경이나 삭제를 할 수 없습니다."
+        : "비밀번호 또는 활성 상태를 변경하면 해당 계정의 기존 로그인이 해제됩니다.";
   form.querySelector(".dialog-message").textContent = "";
   document.querySelector("#user-dialog").showModal();
 }
@@ -732,6 +774,25 @@ async function saveAccess(event) {
   }
 }
 
+async function approveUser(event) {
+  const userId = Number(event.currentTarget.dataset.user);
+  const user = state.adminUsers.find((item) => item.id === userId);
+  if (!user) return;
+  if (!confirm(`${user.displayName} 계정을 승인하고 로그인을 허용하시겠습니까?`)) {
+    return;
+  }
+
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await api(`/api/admin/users/${userId}/approve`, { method: "POST" });
+    await redrawAdmin("가입을 승인했습니다. 사용자가 로그인할 수 있습니다.");
+  } catch (error) {
+    message(error.message);
+    button.disabled = false;
+  }
+}
+
 function openServerEditor(event) {
   const server = state.adminServers.find((item) => item.id === Number(event.currentTarget.dataset.id));
   if (!server) return;
@@ -787,6 +848,14 @@ async function toggleServer(event) {
 }
 
 async function boot() {
+  if (location.pathname === "/signup") {
+    await signupView();
+    return;
+  }
+  if (location.pathname === "/privacy") {
+    privacyView();
+    return;
+  }
   try {
     const result = await api("/api/auth/me");
     state.user = result.user;

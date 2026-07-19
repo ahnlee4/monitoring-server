@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -9,6 +11,25 @@ class LoginIn(BaseModel):
 class PasswordChangeIn(BaseModel):
     current_password: str = Field(min_length=8, max_length=128)
     new_password: str = Field(min_length=12, max_length=128)
+
+
+class EmailVerificationRequestIn(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+
+
+class EmailVerificationConfirmIn(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    code: str = Field(min_length=6, max_length=6)
+
+
+class SignupIn(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=12, max_length=128)
+    display_name: str = Field(min_length=1, max_length=128)
+    contact_type: Literal["email", "phone"]
+    contact_value: str = Field(min_length=3, max_length=254)
+    email_verification_token: str | None = Field(default=None, max_length=256)
+    privacy_agreed: bool
 
 
 class UserCreateIn(BaseModel):
