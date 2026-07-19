@@ -134,6 +134,18 @@ def serialize_server(server: MonitoringServer, base_domain: str) -> dict:
     }
 
 
+def validated_server_ids(db: Session, values: list[int]) -> list[int]:
+    server_ids = sorted(set(values))
+    if not server_ids:
+        return []
+    existing_ids = set(
+        db.scalars(select(MonitoringServer.id).where(MonitoringServer.id.in_(server_ids))).all()
+    )
+    if existing_ids != set(server_ids):
+        raise HTTPException(status_code=422, detail="존재하지 않는 서버가 포함되어 있습니다.")
+    return server_ids
+
+
 def create_app(settings_override: Settings | None = None) -> FastAPI:
     configuration = settings_override or get_settings()
     database = Database(configuration.portal_database_url)
@@ -288,6 +300,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
         username = payload.username.strip().lower()
         if not USERNAME_PATTERN.fullmatch(username):
             raise HTTPException(status_code=422, detail="아이디 형식이 올바르지 않습니다.")
+        server_ids = [] if payload.is_admin else validated_server_ids(db, payload.server_ids)
         user = User(
             username=username,
             password_hash=hash_password(payload.password),
@@ -300,9 +313,18 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
         except IntegrityError as exc:
             db.rollback()
             raise HTTPException(status_code=409, detail="이미 사용 중인 아이디입니다.") from exc
-        audit(db, request, "user_created", context.user.id, f"user_id={user.id}")
+        db.add_all(
+            UserServerAccess(user_id=user.id, server_id=server_id) for server_id in server_ids
+        )
+        audit(
+            db,
+            request,
+            "user_created",
+            context.user.id,
+            f"user_id={user.id};servers={server_ids}",
+        )
         db.commit()
-        return serialize_user(user, [])
+        return serialize_user(user, server_ids)
 
     @portal.patch("/api/admin/users/{user_id}")
     def update_user(
@@ -429,10 +451,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
         user = db.get(User, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
-        server_ids = sorted(set(payload.server_ids))
-        existing_ids = set(db.scalars(select(MonitoringServer.id).where(MonitoringServer.id.in_(server_ids))).all())
-        if existing_ids != set(server_ids):
-            raise HTTPException(status_code=422, detail="존재하지 않는 서버가 포함되어 있습니다.")
+        server_ids = validated_server_ids(db, payload.server_ids)
         db.execute(delete(UserServerAccess).where(UserServerAccess.user_id == user_id))
         db.add_all(UserServerAccess(user_id=user_id, server_id=server_id) for server_id in server_ids)
         audit(db, request, "user_access_updated", context.user.id, f"user_id={user_id};servers={server_ids}")

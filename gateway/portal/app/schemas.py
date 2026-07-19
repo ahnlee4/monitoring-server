@@ -16,6 +16,7 @@ class UserCreateIn(BaseModel):
     password: str = Field(min_length=12, max_length=128)
     display_name: str = Field(min_length=1, max_length=128)
     is_admin: bool = False
+    server_ids: list[int] = Field(default_factory=list)
 
 
 class UserUpdateIn(BaseModel):

@@ -55,17 +55,12 @@ def test_login_server_assignment_and_proxy_authorization(tmp_path) -> None:
                 "password": "operator-password-123",
                 "display_name": "운영자 A",
                 "is_admin": False,
+                "server_ids": [server_id],
             },
         )
         assert user_response.status_code == 201
         user_id = user_response.json()["id"]
-
-        access_response = client.put(
-            f"/api/admin/users/{user_id}/servers",
-            headers=headers,
-            json={"server_ids": [server_id]},
-        )
-        assert access_response.status_code == 200
+        assert user_response.json()["serverIds"] == [server_id]
 
         client.cookies.clear()
         login(client, "operator-a", "operator-password-123")
@@ -86,6 +81,31 @@ def test_login_server_assignment_and_proxy_authorization(tmp_path) -> None:
             headers={"X-Original-Host": "plant-b.tms.test"},
         )
         assert forbidden.status_code == 403
+
+
+def test_user_creation_rejects_unknown_server_without_creating_account(tmp_path) -> None:
+    with build_client(tmp_path) as client:
+        admin_login = login(client, "admin", "initial-admin-password")
+        headers = {
+            "Origin": "http://tms.test",
+            "X-CSRF-Token": admin_login["csrfToken"],
+        }
+
+        response = client.post(
+            "/api/admin/users",
+            headers=headers,
+            json={
+                "username": "invalid-access-user",
+                "password": "operator-password-123",
+                "display_name": "잘못된 권한 사용자",
+                "is_admin": False,
+                "server_ids": [99999],
+            },
+        )
+
+        assert response.status_code == 422
+        users = client.get("/api/admin/users").json()
+        assert [user["username"] for user in users] == ["admin"]
 
 
 def test_admin_mutation_requires_csrf_and_private_target(tmp_path) -> None:
