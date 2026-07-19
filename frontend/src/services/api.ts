@@ -106,6 +106,23 @@ export type EquipmentLogSnapshot = {
   recorded_at: string;
 };
 
+export type EdgeNode = {
+  code: string;
+  name: string;
+  status: string;
+  software_version: string;
+  last_sequence: number | null;
+  last_seen_at: string | null;
+};
+
+export type Site = {
+  code: string;
+  name: string;
+  location: string;
+  enabled: boolean;
+  edge_nodes: EdgeNode[];
+};
+
 export class ControlStatusUnsupportedError extends Error {
   constructor() {
     super("명령 상태 조회 API가 없습니다. backend 이미지를 최신으로 갱신해주세요.");
@@ -122,10 +139,39 @@ export function apiBase() {
   return import.meta.env.VITE_API_BASE || "/api";
 }
 
+export function monitoringScope() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    site: params.get("site"),
+    edge: params.get("edge"),
+  };
+}
+
+export function apiUrl(path: string, scoped = true) {
+  const url = new URL(`${apiBase()}${path}`, window.location.origin);
+  if (scoped) {
+    const scope = monitoringScope();
+    if (scope.site) url.searchParams.set("site", scope.site);
+    if (scope.edge) url.searchParams.set("edge", scope.edge);
+  }
+  return `${url.pathname}${url.search}`;
+}
+
+export function selectMonitoringScope(site: string, edge: string) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("site", site);
+  url.searchParams.set("edge", edge);
+  window.location.assign(url.toString());
+}
+
 export function wsUrl() {
   const configuredPath = import.meta.env.VITE_WS_PATH || "/ws/dashboard";
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}${configuredPath}`;
+  const url = new URL(`${protocol}//${window.location.host}${configuredPath}`);
+  const scope = monitoringScope();
+  if (scope.site) url.searchParams.set("site", scope.site);
+  if (scope.edge) url.searchParams.set("edge", scope.edge);
+  return url.toString();
 }
 
 export function isAbortError(error: unknown) {
@@ -147,6 +193,12 @@ export async function fetchWithTimeout(url: string, options: RequestInit = {}, t
   } finally {
     window.clearTimeout(timeoutId);
   }
+}
+
+export async function fetchSites() {
+  const response = await fetchWithTimeout(apiUrl("/sites", false), { cache: "no-store" });
+  if (!response.ok) throw new Error(`sites ${response.status}`);
+  return (await response.json()) as Site[];
 }
 
 export async function postJson<TResponse>(url: string, body: unknown, timeoutMs = 3000): Promise<TResponse> {
@@ -178,14 +230,14 @@ export async function putJson<TResponse>(url: string, body: unknown, timeoutMs =
 }
 
 export async function fetchYujinMapValues(limit: number, timeoutMs: number) {
-  const response = await fetchWithTimeout(`${apiBase()}/yujin/live-map?limit=${limit}`, { cache: "no-store" }, timeoutMs);
+  const response = await fetchWithTimeout(apiUrl(`/yujin/live-map?limit=${limit}`), { cache: "no-store" }, timeoutMs);
   if (!response.ok) throw new Error(`live-map ${response.status}`);
   return (await response.json()) as YujinMapValue[];
 }
 
 export async function fetchEquipmentLogs(equipmentNo: number, limit = 300) {
   const response = await fetchWithTimeout(
-    `${apiBase()}/yujin/equipment/${equipmentNo}/logs?limit=${limit}`,
+    apiUrl(`/yujin/equipment/${equipmentNo}/logs?limit=${limit}`),
     { cache: "no-store" },
   );
   if (!response.ok) throw new Error(`equipment logs ${response.status}`);
@@ -193,81 +245,81 @@ export async function fetchEquipmentLogs(equipmentNo: number, limit = 300) {
 }
 
 export async function fetchModeSettings() {
-  const response = await fetchWithTimeout(`${apiBase()}/app-settings/mode-settings`, { cache: "no-store" });
+  const response = await fetchWithTimeout(apiUrl("/app-settings/mode-settings"), { cache: "no-store" });
   if (!response.ok) throw new Error(`mode-settings ${response.status}`);
   return (await response.json()) as ModeSettings;
 }
 
 export async function updateModeSettings(settings: ModeSettings) {
-  return putJson<ModeSettings>(`${apiBase()}/app-settings/mode-settings`, settings);
+  return putJson<ModeSettings>(apiUrl("/app-settings/mode-settings"), settings);
 }
 
 export async function fetchCollectorSettings() {
-  const response = await fetchWithTimeout(`${apiBase()}/app-settings/collector-settings`, { cache: "no-store" });
+  const response = await fetchWithTimeout(apiUrl("/app-settings/collector-settings"), { cache: "no-store" });
   if (!response.ok) throw new Error(`collector-settings ${response.status}`);
   return (await response.json()) as CollectorSettings;
 }
 
 export async function updateCollectorSettings(settings: { serial_port: "/dev/ttyUSB0" | "/dev/ttyS7" }) {
-  return putJson<CollectorSettings>(`${apiBase()}/app-settings/collector-settings`, settings);
+  return putJson<CollectorSettings>(apiUrl("/app-settings/collector-settings"), settings);
 }
 
 export async function fetchPressureGapSettings() {
-  const response = await fetchWithTimeout(`${apiBase()}/app-settings/pressure-gap`, { cache: "no-store" });
+  const response = await fetchWithTimeout(apiUrl("/app-settings/pressure-gap"), { cache: "no-store" });
   if (!response.ok) throw new Error(`pressure-gap ${response.status}`);
   return (await response.json()) as PressureGapSettings;
 }
 
 export async function updatePressureGapSettings(pressureGap: number) {
-  return putJson<PressureGapSettings>(`${apiBase()}/app-settings/pressure-gap`, { pressure_gap: pressureGap });
+  return putJson<PressureGapSettings>(apiUrl("/app-settings/pressure-gap"), { pressure_gap: pressureGap });
 }
 
 export async function fetchControlProfile() {
-  const response = await fetchWithTimeout(`${apiBase()}/app-settings/control-profile`, { cache: "no-store" });
+  const response = await fetchWithTimeout(apiUrl("/app-settings/control-profile"), { cache: "no-store" });
   if (!response.ok) throw new Error(`control-profile ${response.status}`);
   return (await response.json()) as ControlProfile;
 }
 
 export async function updateControlProfile(settings: ControlProfile) {
-  return putJson<ControlProfile>(`${apiBase()}/app-settings/control-profile`, settings);
+  return putJson<ControlProfile>(apiUrl("/app-settings/control-profile"), settings);
 }
 
 export async function fetchScheduleSettings() {
-  const response = await fetchWithTimeout(`${apiBase()}/app-settings/schedule-settings`, { cache: "no-store" });
+  const response = await fetchWithTimeout(apiUrl("/app-settings/schedule-settings"), { cache: "no-store" });
   if (!response.ok) throw new Error(`schedule-settings ${response.status}`);
   return (await response.json()) as ScheduleSettings;
 }
 
 export async function updateScheduleSettings(settings: ScheduleSettings) {
-  return putJson<ScheduleSettings>(`${apiBase()}/app-settings/schedule-settings`, settings);
+  return putJson<ScheduleSettings>(apiUrl("/app-settings/schedule-settings"), settings);
 }
 
 export async function fetchProductSettings() {
-  const response = await fetchWithTimeout(`${apiBase()}/app-settings/product-settings`, { cache: "no-store" });
+  const response = await fetchWithTimeout(apiUrl("/app-settings/product-settings"), { cache: "no-store" });
   if (!response.ok) throw new Error(`product-settings ${response.status}`);
   return (await response.json()) as ProductSettings;
 }
 
 export async function updateProductSettings(settings: ProductSettings) {
-  return putJson<ProductSettings>(`${apiBase()}/app-settings/product-settings`, settings);
+  return putJson<ProductSettings>(apiUrl("/app-settings/product-settings"), settings);
 }
 
 export async function fetchGsTechSettings() {
-  const response = await fetchWithTimeout(`${apiBase()}/app-settings/gstech-settings`, { cache: "no-store" });
+  const response = await fetchWithTimeout(apiUrl("/app-settings/gstech-settings"), { cache: "no-store" });
   if (!response.ok) throw new Error(`gstech-settings ${response.status}`);
   return (await response.json()) as GsTechSettings;
 }
 
 export async function updateGsTechSettings(settings: GsTechSettings) {
-  return putJson<GsTechSettings>(`${apiBase()}/app-settings/gstech-settings`, settings);
+  return putJson<GsTechSettings>(apiUrl("/app-settings/gstech-settings"), settings);
 }
 
 export async function enqueueMapWriteBatch(source: string, writes: MapWrite[]) {
-  return postJson<{ id: number }>(`${apiBase()}/control/map-write-batch`, { source, writes });
+  return postJson<{ id: number }>(apiUrl("/control/map-write-batch"), { source, writes });
 }
 
 export async function enqueueRawUart4Command(source: string, payload: number[], waitResponse = false, appendCrc = true) {
-  return postJson<{ id: number }>(`${apiBase()}/control/raw-uart4`, {
+  return postJson<{ id: number }>(apiUrl("/control/raw-uart4"), {
     source,
     payload_hex: bytesToHex(payload),
     append_crc: appendCrc,
@@ -276,11 +328,11 @@ export async function enqueueRawUart4Command(source: string, payload: number[], 
 }
 
 export async function enqueueRawUart4BatchCommand(source: string, frames: RawUart4Frame[]) {
-  return postJson<{ id: number }>(`${apiBase()}/control/raw-uart4-batch`, { source, frames });
+  return postJson<{ id: number }>(apiUrl("/control/raw-uart4-batch"), { source, frames });
 }
 
 export async function enqueueGroupOperation(action: "run" | "stop", stopEquipment = true) {
-  return postJson<{ id: number }>(`${apiBase()}/control/group-operation`, { action, stop_equipment: stopEquipment });
+  return postJson<{ id: number }>(apiUrl("/control/group-operation"), { action, stop_equipment: stopEquipment });
 }
 
 export function bytesToHex(bytes: number[]) {
@@ -316,7 +368,7 @@ export async function fetchControlCommandStatus(commandId: number, timeoutMs = 1
       resolve(null);
     }, timeoutMs);
   });
-  const requestPromise = fetch(`${apiBase()}/control/commands/${commandId}`, { signal: controller.signal })
+  const requestPromise = fetch(apiUrl(`/control/commands/${commandId}`), { signal: controller.signal })
     .then(async (response) => {
       if (response.status === 404) throw new ControlStatusUnsupportedError();
       if (!response.ok) throw new Error(`status HTTP ${response.status}`);

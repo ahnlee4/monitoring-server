@@ -25,14 +25,17 @@ import { useRuntimeSettings } from "./hooks/useRuntimeSettings";
 import {
   ControlStatusDelayedError,
   ControlStatusUnsupportedError,
+  fetchSites,
   fetchControlProfile,
   enqueueGroupOperation,
   enqueueMapWriteBatch,
   fetchModeSettings,
+  monitoringScope,
+  selectMonitoringScope,
   updateModeSettings,
   waitForControlCommand,
 } from "./services/api";
-import type { ControlProfile, MapWrite, ModeSettings } from "./services/api";
+import type { ControlProfile, MapWrite, ModeSettings, Site } from "./services/api";
 import type { YujinMapValue } from "./types";
 
 type CompressorState = {
@@ -200,6 +203,7 @@ export default function App() {
   const [adminLogoClicks, setAdminLogoClicks] = useState({ count: 0, lastAt: 0 });
   const [modeSequenceBusy, setModeSequenceBusy] = useState(false);
   const [controlProfile, setControlProfile] = useState<ControlProfile | null>(null);
+  const [sites, setSites] = useState<Site[]>([]);
   const mapValues = useYujinMapValues();
   const isMobile = useIsMobileViewport();
 
@@ -212,6 +216,31 @@ export default function App() {
     fetchControlProfile()
       .then(setControlProfile)
       .catch((error) => console.error("failed to load control profile", error));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSites = async () => {
+      try {
+        const nextSites = await fetchSites();
+        if (cancelled) return;
+        setSites(nextSites);
+        const scope = monitoringScope();
+        const firstSite = nextSites.find((site) => site.edge_nodes.length > 0);
+        const firstEdge = firstSite?.edge_nodes[0];
+        if (!scope.site && !scope.edge && firstSite && firstEdge) {
+          selectMonitoringScope(firstSite.code, firstEdge.code);
+        }
+      } catch (error) {
+        console.error("failed to load sites", error);
+      }
+    };
+    void loadSites();
+    const timer = window.setInterval(loadSites, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, []);
 
   const dashboard = useMemo(
@@ -271,6 +300,7 @@ export default function App() {
   return (
     <main className="flex min-h-screen items-center justify-center overflow-hidden bg-black text-black">
       <section className={`relative overflow-hidden bg-white ${isMobile ? "h-[100dvh] w-full" : "h-[800px] w-[1280px]"}`}>
+        <MonitoringScopeSelector sites={sites} />
         {isMobile ? (
           <MobileLayout
             activeScreen={activeScreen}
@@ -376,6 +406,42 @@ export default function App() {
         ) : null}
       </section>
     </main>
+  );
+}
+
+function MonitoringScopeSelector({ sites }: { sites: Site[] }) {
+  const scope = monitoringScope();
+  const options = sites.flatMap((site) =>
+    site.edge_nodes.map((edge) => ({
+      value: `${site.code}|${edge.code}`,
+      label: `${site.name} · ${edge.name}`,
+      site: site.code,
+      edge: edge.code,
+      online: edge.status === "online",
+    })),
+  );
+  const selected = options.find((item) => item.site === scope.site && item.edge === scope.edge);
+  if (!options.length) return null;
+
+  return (
+    <label className="absolute right-[8px] top-[78px] z-[90] flex items-center gap-[6px] rounded-[8px] border border-[#bdd4e8] bg-white/95 px-[8px] py-[5px] shadow-[0_3px_12px_rgba(19,58,91,0.2)] md:right-[10px] md:top-[78px]">
+      <span className={`h-[8px] w-[8px] rounded-full ${selected?.online ? "bg-[#18a558]" : "bg-[#d04444]"}`} />
+      <select
+        aria-label="모니터링 지점과 보드 선택"
+        className="max-w-[220px] bg-transparent text-[12px] font-black text-[#173f69] outline-none"
+        onChange={(event) => {
+          const item = options.find((option) => option.value === event.target.value);
+          if (item) selectMonitoringScope(item.site, item.edge);
+        }}
+        value={selected?.value ?? options[0].value}
+      >
+        {options.map((item) => (
+          <option key={item.value} value={item.value}>
+            {item.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
