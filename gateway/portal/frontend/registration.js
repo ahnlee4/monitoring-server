@@ -54,24 +54,16 @@ export function createRegistrationViews({ app, api }) {
     if (emailInput) emailInput.readOnly = false;
   };
 
-  const signupCompleteView = (contactType) => {
+  const signupCompleteView = () => {
     clearCooldown();
     app.innerHTML = `
-      <section class="registration-page completion-page">
+      <section class="registration-page simple-registration completion-page">
         <a class="registration-brand" href="/login"><span class="brand-mark">T</span><span><strong>THE IN TECH</strong><small>TMS CONTROL CENTER</small></span></a>
         <div class="completion-card card">
           <span class="completion-icon" aria-hidden="true">✓</span>
-          <p class="eyebrow">REQUEST RECEIVED</p>
-          <h1>가입 신청이 접수되었습니다.</h1>
-          <p>관리자가 계정을 확인하고 접속 서버를 배정한 뒤 승인합니다. 승인 전에는 로그인할 수 없습니다.</p>
-          <div class="approval-flow">
-            <span class="done">1<strong>${contactType === "email" ? "이메일 확인" : "연락처 접수"}</strong></span>
-            <i></i>
-            <span class="current">2<strong>관리자 검토</strong></span>
-            <i></i>
-            <span>3<strong>서버 권한 승인</strong></span>
-          </div>
-          <a class="primary completion-button" href="/login">로그인 화면으로 이동</a>
+          <h1>가입 신청 완료</h1>
+          <p>관리자가 서버를 배정하고 승인하면 로그인할 수 있습니다.</p>
+          <a class="primary completion-button" href="/login">로그인</a>
         </div>
       </section>`;
   };
@@ -203,7 +195,7 @@ export function createRegistrationViews({ app, api }) {
             privacy_agreed: form.elements.privacyAgreed.checked,
           }),
         });
-        signupCompleteView(contactType);
+        signupCompleteView();
       } catch (error) {
         showMessage(error.message);
         button.disabled = false;
@@ -216,71 +208,57 @@ export function createRegistrationViews({ app, api }) {
     verificationToken = "";
     verifiedEmail = "";
     app.innerHTML = `
-      <section class="registration-page">
-        <a class="registration-brand" href="/login"><span class="brand-mark">T</span><span><strong>THE IN TECH</strong><small>TMS CONTROL CENTER</small></span></a>
-        <div class="registration-shell">
-          <aside class="registration-guide">
-            <p class="eyebrow">ACCOUNT REQUEST</p>
-            <h1>담당 현장에 안전하게 접속하세요.</h1>
-            <p>가입 신청 후 관리자가 계정을 확인하고 필요한 모니터링 서버만 배정합니다.</p>
-            <ol>
-              <li><span>1</span><div><strong>계정 정보 입력</strong><small>이름과 로그인 정보를 등록합니다.</small></div></li>
-              <li><span>2</span><div><strong>연락처 확인</strong><small>이메일 인증 또는 휴대전화 번호를 접수합니다.</small></div></li>
-              <li><span>3</span><div><strong>관리자 승인</strong><small>서버 권한을 받은 뒤 로그인할 수 있습니다.</small></div></li>
-            </ol>
-            <div class="privacy-contact"><span>개인정보 문의</span><strong>더인테크 · 010-7662-6428</strong></div>
-          </aside>
+      <section class="registration-page simple-registration">
+        <header class="registration-top">
+          <a class="registration-brand" href="/login"><span class="brand-mark">T</span><span><strong>THE IN TECH</strong><small>TMS CONTROL CENTER</small></span></a>
+          <a class="ghost" href="/login">로그인</a>
+        </header>
 
-          <form id="signup-form" class="card signup-card">
-            <div class="signup-card-head">
-              <div>
-                <p class="eyebrow">NEW ACCOUNT</p>
-                <h2>회원가입 신청</h2>
-                <p>모든 항목을 입력하면 관리자 승인 대기로 접수됩니다.</p>
-              </div>
-              <a href="/login">로그인</a>
-            </div>
+        <form id="signup-form" class="card signup-card simple-signup-card">
+          <div class="simple-signup-head">
+            <h1>회원가입</h1>
+            <p>가입 후 관리자 승인이 필요합니다.</p>
+          </div>
 
             <section class="signup-section">
-              <div class="signup-section-title"><span>01</span><div><strong>기본 정보</strong><small>관리자가 사용자를 확인할 수 있는 정보를 입력하세요.</small></div></div>
-              <label><span>사용자 이름 <small>실명 또는 담당자명</small></span><input name="displayName" maxlength="128" placeholder="예: 생산팀 홍길동" required autofocus /></label>
-              <label><span>로그인 아이디 <small>영문·숫자·._- 사용 가능</small></span><input name="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9_.-]+" autocapitalize="none" spellcheck="false" placeholder="예: operator01" required /></label>
+              <h2>계정 정보</h2>
               <div class="signup-two-fields">
-                <label><span>비밀번호 <small>12자 이상</small></span><input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required /></label>
+                <label><span>이름</span><input name="displayName" maxlength="128" placeholder="생산팀 홍길동" required autofocus /></label>
+                <label><span>아이디</span><input name="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9_.-]+" autocapitalize="none" spellcheck="false" placeholder="operator01" required /></label>
+              </div>
+              <div class="signup-two-fields">
+                <label><span>비밀번호</span><input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="12자 이상" required /></label>
                 <label><span>비밀번호 확인</span><input name="passwordConfirm" type="password" minlength="12" maxlength="128" autocomplete="new-password" required /></label>
               </div>
             </section>
 
             <section class="signup-section">
-              <div class="signup-section-title"><span>02</span><div><strong>연락처</strong><small>가입 확인과 계정 관리를 위해 한 가지를 선택하세요.</small></div></div>
+              <h2>연락처</h2>
               <div class="contact-type-options">
-                <label><input name="contactType" type="radio" value="phone" checked /><span><strong>휴대전화</strong><small>번호만 접수 · 인증 없음</small></span></label>
-                <label><input name="contactType" type="radio" value="email" /><span><strong>이메일</strong><small>인증번호 확인 필요</small></span></label>
+                <label><input name="contactType" type="radio" value="phone" checked /><span><strong>휴대전화</strong><small>인증 없음</small></span></label>
+                <label><input name="contactType" type="radio" value="email" /><span><strong>이메일</strong><small>인증 필요</small></span></label>
               </div>
               <div id="phone-contact-panel" class="contact-panel">
-                <label><span>휴대전화 번호 <small>인증 없이 관리자 확인 후 승인</small></span><input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="13" placeholder="010-1234-5678" /></label>
-                <p class="contact-notice"><span aria-hidden="true">i</span> 휴대전화 명의 인증은 진행하지 않습니다. 입력한 번호는 관리자 승인 확인용으로만 사용됩니다.</p>
+                <label><span>휴대전화 번호</span><input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="13" placeholder="010-1234-5678" /></label>
               </div>
               <div id="email-contact-panel" class="contact-panel is-hidden">
-                <label><span>이메일 주소 <small id="email-availability-note">인증번호를 받을 주소</small></span><div class="action-input"><input name="email" type="email" autocomplete="email" maxlength="254" placeholder="name@example.com" /><button id="send-email-code" class="secondary" type="button">인증번호 받기</button></div></label>
+                <label><span>이메일 <small id="email-availability-note"></small></span><div class="action-input"><input name="email" type="email" autocomplete="email" maxlength="254" placeholder="name@example.com" /><button id="send-email-code" class="secondary" type="button">인증번호 받기</button></div></label>
                 <div id="email-code-fields" class="action-input is-hidden"><input name="emailCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="6자리 인증번호" /><button id="verify-email-code" class="secondary" type="button">인증 확인</button></div>
                 <div id="email-verified-state" class="verified-state is-hidden"><span>✓</span><strong>이메일 인증 완료</strong></div>
               </div>
             </section>
 
             <section class="signup-section consent-section">
-              <div class="signup-section-title"><span>03</span><div><strong>개인정보 동의</strong><small>가입 신청 처리에 필요한 최소 정보만 수집합니다.</small></div></div>
               <label class="consent-check">
                 <input name="privacyAgreed" type="checkbox" required />
-                <span><strong>개인정보 수집·이용에 동의합니다. <em>필수</em></strong><small>목적: 회원가입·계정 관리 / 보유기간: 회원탈퇴 또는 계정 삭제 시까지</small></span>
+                <span><strong>개인정보 수집·이용 동의 <em>필수</em></strong></span>
               </label>
-              <a class="privacy-detail-link" href="/privacy" target="_blank" rel="noreferrer">개인정보 수집·이용 안내 전문 보기 →</a>
+              <a class="privacy-detail-link" href="/privacy" target="_blank" rel="noreferrer">내용 보기</a>
             </section>
 
             <p id="form-message" class="message signup-message" role="alert"></p>
             <button class="primary signup-submit" type="submit">가입 신청하기</button>
-          </form>
-        </div>
+        </form>
       </section>`;
 
     try {

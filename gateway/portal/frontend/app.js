@@ -191,8 +191,7 @@ function permissionOptions({ user = null, name = "", disabled = false } = {}) {
   if (!state.adminServers.length) {
     return `
       <div class="permission-empty">
-        <strong>선택할 서버가 없습니다.</strong>
-        <span>먼저 모니터링 서버를 등록하세요.</span>
+        <strong>등록된 서버가 없습니다.</strong>
       </div>`;
   }
 
@@ -226,16 +225,15 @@ function accessRows() {
     return `
       <div class="management-empty">
         <strong>등록된 사용자가 없습니다.</strong>
-        <p>위의 사용자 등록에서 첫 계정을 추가하세요.</p>
       </div>`;
   }
 
   return [...state.adminUsers]
     .sort(
       (left, right) =>
-        Number(right.isAdmin) - Number(left.isAdmin) ||
         Number(right.approvalStatus === "pending") -
           Number(left.approvalStatus === "pending") ||
+        Number(right.isAdmin) - Number(left.isAdmin) ||
         Number(right.isActive) - Number(left.isActive) ||
         left.displayName.localeCompare(right.displayName, "ko"),
     )
@@ -244,9 +242,7 @@ function accessRows() {
       const accessCount = user.isAdmin
         ? state.adminServers.filter((server) => server.isActive).length
         : user.serverIds.length;
-      const contactText = user.contactValue
-        ? `${user.contactType === "email" ? "이메일" : "휴대전화"} ${user.contactValue}`
-        : "";
+      const contactText = user.contactValue || "";
       const searchText =
         `${user.displayName} ${user.username} ${contactText}`.toLowerCase();
       return `
@@ -264,22 +260,15 @@ function accessRows() {
                       : `<span class="status-badge ${user.isActive ? "active" : "inactive"}">${user.isActive ? "사용 중" : "로그인 차단"}</span>`
                   }
                 </div>
-                <p>@${escapeHtml(user.username)}${contactText ? ` · ${escapeHtml(contactText)}` : ""}${user.contactType === "phone" ? " · 번호 미인증" : ""}</p>
+                <p>@${escapeHtml(user.username)}${contactText ? ` · ${escapeHtml(contactText)}` : ""}${user.contactType === "phone" ? " · 인증 없음" : ""}</p>
               </div>
             </div>
-            <button class="ghost compact-button edit-user" type="button" data-user="${user.id}">계정 정보 수정</button>
+            <button class="ghost compact-button edit-user" type="button" data-user="${user.id}">수정</button>
           </div>
           <div class="access-card-body">
             <div class="permission-title">
               <div>
-                <strong>접속 서버</strong>
-                <span>${
-                  user.isAdmin
-                    ? "관리자는 활성 서버에 자동으로 접근합니다."
-                    : isPending
-                      ? "서버 권한을 저장한 뒤 가입을 승인하세요."
-                      : "이 사용자가 접속할 현장을 선택하세요."
-                }</span>
+                <strong>${user.isAdmin ? "모든 활성 서버" : "접속 서버"}</strong>
               </div>
               <span class="permission-count"><strong>${accessCount}</strong>개 허용</span>
             </div>
@@ -287,14 +276,14 @@ function accessRows() {
               ${permissionOptions({ user, disabled: user.isAdmin })}
             </div>
           </div>
-          <div class="access-card-actions">
-            ${
-              user.isAdmin
-                ? '<p><span aria-hidden="true">●</span> 별도 권한 저장이 필요하지 않습니다.</p>'
-                : `
+          ${
+            user.isAdmin
+              ? ""
+              : `
+                <div class="access-card-actions">
                   <div class="quick-select">
                     <button class="text-button select-all-access" type="button" data-user="${user.id}">전체 선택</button>
-                    <button class="text-button clear-access" type="button" data-user="${user.id}">선택 해제</button>
+                    <button class="text-button clear-access" type="button" data-user="${user.id}">해제</button>
                   </div>
                   <div class="access-primary-actions">
                     <button class="secondary save-access" type="button" data-user="${user.id}">권한 저장</button>
@@ -303,9 +292,9 @@ function accessRows() {
                         ? `<button class="primary approve-user" type="button" data-user="${user.id}" ${accessCount ? "" : "disabled"}>가입 승인</button>`
                         : ""
                     }
-                  </div>`
-            }
-          </div>
+                  </div>
+                </div>`
+          }
         </article>`;
     })
     .join("");
@@ -316,7 +305,6 @@ function registeredServerCards() {
     return `
       <div class="management-empty">
         <strong>등록된 서버가 없습니다.</strong>
-        <p>위의 서버 등록 양식에서 첫 현장을 연결하세요.</p>
       </div>`;
   }
 
@@ -335,13 +323,12 @@ function registeredServerCards() {
             </div>
           </div>
           <div class="server-endpoint">
-            <span>내부 연결 주소</span>
             <code>${escapeHtml(server.targetHost)}:${server.targetPort}</code>
           </div>
           <div class="managed-server-actions">
-            <button class="ghost compact-button edit-server" type="button" data-id="${server.id}">연결 정보 수정</button>
+            <button class="ghost compact-button edit-server" type="button" data-id="${server.id}">수정</button>
             <button class="${server.isActive ? "pause-button" : "secondary"} toggle-server" type="button" data-id="${server.id}" data-active="${server.isActive}">
-              ${server.isActive ? "운영 중지" : "다시 활성화"}
+              ${server.isActive ? "중지" : "활성화"}
             </button>
           </div>
         </article>`,
@@ -350,121 +337,90 @@ function registeredServerCards() {
 }
 
 function adminView() {
-  const activeUsers = state.adminUsers.filter((user) => user.isActive).length;
   const pendingUsers = state.adminUsers.filter(
     (user) => user.approvalStatus === "pending",
   ).length;
   const activeServers = state.adminServers.filter((server) => server.isActive).length;
-  const accessCount = state.adminUsers.reduce(
-    (total, user) => total + (user.isAdmin ? activeServers : user.serverIds.length),
-    0,
-  );
 
   app.innerHTML = `
     ${header("포털 관리")}
     <section class="content admin-content">
-      <a class="back-link" href="/">← 서버 선택으로 돌아가기</a>
-      <section class="admin-hero">
-        <div>
-          <p class="eyebrow">ADMIN WORKSPACE</p>
-          <h2>서버와 사용자 연결을 한 화면에서 관리하세요.</h2>
-          <p>서버를 먼저 등록하고, 사용자를 만들면서 접속 권한까지 바로 지정할 수 있습니다.</p>
+      <div class="admin-compact-head">
+        <a class="back-link" href="/">← 서버 선택</a>
+        <div class="admin-quick-stats" aria-label="등록 현황">
+          <span>사용자 <strong>${state.adminUsers.length}</strong></span>
+          <span class="${pendingUsers ? "has-pending" : ""}">승인 대기 <strong>${pendingUsers}</strong></span>
+          <span>서버 <strong>${activeServers}/${state.adminServers.length}</strong></span>
         </div>
-        <div class="admin-summary" aria-label="등록 현황">
-          <div><span>사용자</span><strong>${activeUsers}</strong><small>승인 대기 ${pendingUsers}명 · 전체 ${state.adminUsers.length}명</small></div>
-          <div><span>운영 서버</span><strong>${activeServers}</strong><small>전체 ${state.adminServers.length}대</small></div>
-          <div><span>권한 연결</span><strong>${accessCount}</strong><small>현재 허용 건수</small></div>
-        </div>
-      </section>
+      </div>
 
-      <div class="setup-grid">
-        <form id="server-form" class="card setup-card">
-          <div class="setup-card-head">
-            <span class="step-number">1</span>
-            <div>
-              <p class="eyebrow">SERVER SETUP</p>
-              <h2>모니터링 서버 등록</h2>
-              <p>현장 PC의 내부 주소와 외부 접속 이름을 연결합니다.</p>
-            </div>
-          </div>
-          <div class="form-section">
+      <div class="setup-actions">
+        <details class="card setup-disclosure">
+          <summary><strong>서버 추가</strong><span aria-hidden="true">+</span></summary>
+          <form id="server-form" class="setup-form">
+            <label><span>현장 이름</span><input name="name" maxlength="128" placeholder="본사 압축기실" required /></label>
             <label>
-              <span>현장 이름 <small>목록에 표시되는 이름</small></span>
-              <input name="name" maxlength="128" placeholder="예: 본사 압축기실" required />
-            </label>
-            <label>
-              <span>접속 주소 이름 <small>영문 소문자·숫자·하이픈</small></span>
+              <span>접속 주소</span>
               <div class="slug-field">
                 <input name="slug" pattern="[a-z0-9][a-z0-9-]*[a-z0-9]|[a-z0-9]" maxlength="63" inputmode="url" autocapitalize="none" spellcheck="false" placeholder="head-office" required />
                 <span>.${escapeHtml(location.hostname)}</span>
               </div>
             </label>
             <div class="inline-fields">
-              <label><span>내부 IP <small>현장 PC 주소</small></span><input name="targetHost" inputmode="decimal" placeholder="192.168.0.101" required /></label>
+              <label><span>내부 IP</span><input name="targetHost" inputmode="decimal" placeholder="192.168.0.101" required /></label>
               <label><span>포트</span><input name="targetPort" type="number" value="80" min="1" max="65535" required /></label>
             </div>
-          </div>
-          <div class="endpoint-preview">
-            <span>생성될 접속 주소</span>
-            <strong id="server-url-preview">주소 이름을 입력하세요</strong>
-          </div>
-          <button class="primary full-button" type="submit">서버 등록하기</button>
-        </form>
+            <div class="endpoint-preview">
+              <strong id="server-url-preview">접속 주소를 입력하세요</strong>
+            </div>
+            <button class="primary full-button" type="submit">서버 추가</button>
+          </form>
+        </details>
 
-        <form id="user-form" class="card setup-card">
-          <div class="setup-card-head">
-            <span class="step-number">2</span>
-            <div>
-              <p class="eyebrow">USER & ACCESS</p>
-              <h2>사용자와 권한 등록</h2>
-              <p>계정을 만들고 접속 가능한 서버를 함께 지정합니다.</p>
+        <details class="card setup-disclosure">
+          <summary><strong>사용자 추가</strong><span aria-hidden="true">+</span></summary>
+          <form id="user-form" class="setup-form">
+            <div class="user-fields">
+              <label><span>이름</span><input name="displayName" maxlength="128" placeholder="생산팀 홍길동" required /></label>
+              <label><span>아이디</span><input name="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9_.-]+" autocapitalize="none" spellcheck="false" placeholder="operator01" required /></label>
             </div>
-          </div>
-          <div class="user-fields">
-            <label><span>사용자 이름 <small>화면에 표시되는 이름</small></span><input name="displayName" maxlength="128" placeholder="예: 생산팀 홍길동" required /></label>
-            <label><span>로그인 아이디 <small>영문·숫자·._- 사용 가능</small></span><input name="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9_.-]+" autocapitalize="none" spellcheck="false" placeholder="예: operator01" required /></label>
-          </div>
-          <label><span>임시 비밀번호 <small>12자 이상, 최초 로그인 후 변경 안내</small></span><input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="12자 이상 입력" required /></label>
-          <fieldset class="role-fieldset">
-            <legend>계정 역할</legend>
-            <div class="role-options">
-              <label class="role-option">
-                <input name="role" type="radio" value="user" checked />
-                <span><strong>일반 사용자</strong><small>선택한 서버만 접속</small></span>
-              </label>
-              <label class="role-option">
-                <input name="role" type="radio" value="admin" />
-                <span><strong>관리자</strong><small>모든 서버와 관리 기능 사용</small></span>
-              </label>
-            </div>
-          </fieldset>
-          <fieldset id="new-user-permissions" class="permission-fieldset">
-            <legend class="sr-only">접속 서버 선택</legend>
-            <div class="permission-title">
-              <strong>접속 서버 선택</strong>
-              <span id="selected-server-count">0개 선택</span>
-            </div>
-            <div class="permission-selector permission-selector-create">
-              ${permissionOptions({ name: "serverIds" })}
-            </div>
-            <p id="admin-permission-note" class="form-help">사용자가 로그인 후 볼 수 있는 서버를 선택하세요.</p>
-          </fieldset>
-          <button class="primary full-button" type="submit">사용자와 권한 등록하기</button>
-        </form>
+            <label><span>임시 비밀번호</span><input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="12자 이상" required /></label>
+            <fieldset class="role-fieldset">
+              <legend>역할</legend>
+              <div class="role-options">
+                <label class="role-option">
+                  <input name="role" type="radio" value="user" checked />
+                  <span><strong>일반 사용자</strong><small>선택 서버</small></span>
+                </label>
+                <label class="role-option">
+                  <input name="role" type="radio" value="admin" />
+                  <span><strong>관리자</strong><small>전체 서버</small></span>
+                </label>
+              </div>
+            </fieldset>
+            <fieldset id="new-user-permissions" class="permission-fieldset">
+              <legend class="sr-only">접속 서버 선택</legend>
+              <div class="permission-title">
+                <strong>접속 서버</strong>
+                <span id="selected-server-count">0개 선택</span>
+              </div>
+              <div class="permission-selector permission-selector-create">
+                ${permissionOptions({ name: "serverIds" })}
+              </div>
+            </fieldset>
+            <button class="primary full-button" type="submit">사용자 추가</button>
+          </form>
+        </details>
       </div>
 
       <p id="form-message" class="message admin-toast" data-toast="true" role="status" aria-live="polite"></p>
 
       <section class="management-section">
         <div class="management-heading">
-          <div>
-            <p class="eyebrow">ACCESS CONTROL</p>
-            <h2>사용자 권한 관리</h2>
-            <p>신규 가입자에게 서버 권한을 저장하고 승인하거나 기존 계정을 관리합니다.</p>
-          </div>
+          <h2>사용자</h2>
           <label class="search-field">
             <span aria-hidden="true">⌕</span>
-            <input id="user-search" type="search" placeholder="사용자 이름 또는 아이디 검색" />
+            <input id="user-search" type="search" placeholder="사용자 검색" />
           </label>
         </div>
         <div class="access-list">${accessRows()}</div>
@@ -472,14 +428,10 @@ function adminView() {
 
       <section class="management-section">
         <div class="management-heading">
-          <div>
-            <p class="eyebrow">REGISTERED SERVERS</p>
-            <h2>등록 서버 관리</h2>
-            <p>외부 접속 주소와 내부 연결 정보를 확인하고 운영 상태를 변경합니다.</p>
-          </div>
+          <h2>서버</h2>
           <label class="search-field">
             <span aria-hidden="true">⌕</span>
-            <input id="server-search" type="search" placeholder="서버 이름, 주소 또는 IP 검색" />
+            <input id="server-search" type="search" placeholder="서버 검색" />
           </label>
         </div>
         <div class="registered-list">${registeredServerCards()}</div>
@@ -487,7 +439,7 @@ function adminView() {
     </section>
     <dialog id="user-dialog" class="password-dialog">
       <form id="user-edit-form" class="form-card">
-        <div><p class="eyebrow">ACCOUNT</p><h2>계정 수정</h2></div>
+        <div><h2>계정 수정</h2></div>
         <label>표시 이름<input name="displayName" maxlength="128" required /></label>
         <label>아이디<input name="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9_.-]+" required /></label>
         <label>새 비밀번호<input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="변경하지 않으면 비워두세요" /></label>
@@ -507,19 +459,18 @@ function adminView() {
     </dialog>
     <dialog id="server-dialog" class="password-dialog server-dialog">
       <form id="server-edit-form" class="form-card">
-        <div><p class="eyebrow">SERVER CONNECTION</p><h2>서버 연결 정보 수정</h2></div>
-        <div class="dialog-server-address"><span>외부 접속 주소</span><strong class="server-dialog-url"></strong></div>
+        <div><h2>서버 수정</h2></div>
+        <div class="dialog-server-address"><strong class="server-dialog-url"></strong></div>
         <label>현장 이름<input name="name" maxlength="128" required /></label>
         <div class="inline-fields">
           <label>내부 IP<input name="targetHost" inputmode="decimal" required /></label>
           <label>포트<input name="targetPort" type="number" min="1" max="65535" required /></label>
         </div>
         <label class="check-line"><input name="isActive" type="checkbox" /> 서버 운영 활성화</label>
-        <p class="form-help">접속 주소 이름은 등록 후 변경할 수 없습니다.</p>
         <p class="message dialog-message" role="alert"></p>
         <div class="dialog-actions">
           <button class="ghost cancel-server-edit" type="button">취소</button>
-          <button class="primary" type="submit">연결 정보 저장</button>
+          <button class="primary" type="submit">저장</button>
         </div>
       </form>
     </dialog>`;
@@ -575,9 +526,9 @@ function wireAdminFormHelpers() {
     const isAdmin = document.querySelector('#user-form input[name="role"]:checked')?.value === "admin";
     permissionFieldset.disabled = isAdmin;
     permissionFieldset.classList.toggle("is-disabled", isAdmin);
-    permissionNote.textContent = isAdmin
-      ? "관리자는 현재 및 향후 등록되는 모든 활성 서버에 자동으로 접근합니다."
-      : "사용자가 로그인 후 볼 수 있는 서버를 선택하세요.";
+    if (permissionNote) {
+      permissionNote.textContent = isAdmin ? "전체 서버 자동 허용" : "";
+    }
     updatePermissionCount();
   };
   document.querySelectorAll('#user-form input[name="role"]').forEach((input) => input.addEventListener("change", updateRole));
