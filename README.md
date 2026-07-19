@@ -266,42 +266,12 @@ curl http://localhost/api/health
 
 ### 7-9. 우분투 PC 화면에 자동 로그인 + 키오스크 실행
 
-현장 모니터가 연결된 Ubuntu PC에서 부팅 후 자동으로 대시보드를 띄우려면 최소 GUI를 추가합니다.
+현장 모니터가 연결된 Ubuntu 보드는 부팅 후 로컬 서버 화면을 자동으로 띄웁니다. 아래 스크립트는 GUI와 Chromium을 준비하고, `linaro` 자동 로그인 및 Openbox 키오스크를 구성합니다.
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y xorg openbox lightdm snapd curl
-sudo snap install chromium
-sudo systemctl enable lightdm
-sudo systemctl set-default graphical.target
-```
-
-자동 로그인 대상 사용자는 현재 접속 계정인 `ubuntu`를 기준으로 설명합니다.
-
-LightDM 자동 로그인 설정 파일 생성:
-
-```bash
-sudo mkdir -p /etc/lightdm/lightdm.conf.d
-sudo tee /etc/lightdm/lightdm.conf.d/50-kiosk.conf >/dev/null <<'EOF'
-[Seat:*]
-autologin-user=ubuntu
-autologin-user-timeout=0
-user-session=openbox
-EOF
-```
-
-Openbox 자동 실행 스크립트 생성:
-
-```bash
-mkdir -p ~/.config/openbox
-cat > ~/.config/openbox/autostart <<'EOF'
-xset s off
-xset -dpms
-xset s noblank
-
-bash -lc 'until curl -fsS http://127.0.0.1/api/health >/dev/null; do sleep 2; done; chromium --kiosk --incognito --disable-infobars --noerrdialogs --disable-session-crashed-bubble http://127.0.0.1' &
-EOF
-chmod +x ~/.config/openbox/autostart
+cd /home/linaro/monitoring-server
+chmod +x scripts/setup-board-kiosk.sh scripts/launch-board-kiosk.sh
+sudo ./scripts/setup-board-kiosk.sh linaro http://127.0.0.1
 ```
 
 설정 후 재부팅:
@@ -313,12 +283,12 @@ sudo reboot
 재부팅 뒤 동작 흐름은 아래와 같습니다.
 
 1. Ubuntu가 그래픽 모드로 부팅됩니다.
-2. `ubuntu` 사용자가 자동 로그인됩니다.
+2. `linaro` 사용자가 자동 로그인됩니다.
 3. Openbox가 실행됩니다.
 4. 로컬 API `http://127.0.0.1/api/health`가 응답할 때까지 대기합니다.
 5. Chromium이 `http://127.0.0.1`을 전체화면 키오스크 모드로 엽니다.
 
-키오스크를 잠시 종료하려면 `Alt+F4`로 Chromium을 닫고, 텍스트 콘솔로 이동하려면 `Ctrl+Alt+F3`을 사용합니다.
+Chromium이 비정상 종료되면 3초 후 자동으로 다시 실행됩니다. 텍스트 콘솔로 이동하려면 `Ctrl+Alt+F3`을 사용하고, 키오스크 로그는 `~/.local/state/monitoring-kiosk/kiosk.log`에서 확인합니다.
 
 ### 7-10. 재배포
 
