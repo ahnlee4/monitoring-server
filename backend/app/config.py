@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     backend_port: int = 8000
     backend_cors_origins: str = "http://localhost,http://127.0.0.1"
     collector_token: str = "change-me"
+    central_admin_token: str = "change-admin-token"
+    default_site_code: str = "head-office"
+    default_site_name: str = "본사"
+    default_edge_code: str = "board-01"
+    default_edge_name: str = "보드 1"
+    default_edge_token: str = ""
+    edge_offline_seconds: float = 30.0
     seed_device_codes: str = "PRESS-01,FURNACE-01,PUMP-01"
     sms_enabled: bool = False
     sms_disconnect_enabled: bool = True
@@ -33,6 +40,10 @@ class Settings(BaseSettings):
     @property
     def seed_device_codes_list(self) -> list[str]:
         return [item.strip() for item in self.seed_device_codes.split(",") if item.strip()]
+
+    @property
+    def effective_default_edge_token(self) -> str:
+        return self.default_edge_token.strip() or self.collector_token
 
     @property
     def sms_watch_keys_list(self) -> list[str]:

@@ -123,6 +123,40 @@ class YujinMapIngestRequest(BaseModel):
     heartbeat_keys: list[str] = Field(default_factory=list)
 
 
+class EdgeMapIngestRequest(YujinMapIngestRequest):
+    sequence: int | None = Field(default=None, ge=0)
+    software_version: str = Field(default="", max_length=32)
+
+
+class EdgeNodeOut(BaseModel):
+    code: str
+    name: str
+    status: str
+    software_version: str
+    last_sequence: int | None
+    last_seen_at: datetime | None
+
+
+class SiteOut(BaseModel):
+    code: str
+    name: str
+    location: str
+    enabled: bool
+    edge_nodes: list[EdgeNodeOut]
+
+
+class SiteCreateIn(BaseModel):
+    code: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,62}$")
+    name: str = Field(min_length=1, max_length=128)
+    location: str = Field(default="", max_length=255)
+
+
+class EdgeNodeCreateIn(BaseModel):
+    code: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,62}$")
+    name: str = Field(min_length=1, max_length=128)
+    token: str = Field(min_length=16, max_length=255)
+
+
 class ModeRowIn(BaseModel):
     no: str
     values: list[str]

@@ -5,19 +5,24 @@ from fastapi import WebSocket
 
 class ConnectionManager:
     def __init__(self) -> None:
-        self._connections: list[WebSocket] = []
+        self._connections: list[tuple[WebSocket, str | None]] = []
 
-    async def connect(self, websocket: WebSocket) -> None:
+    async def connect(self, websocket: WebSocket, channel: str | None = None) -> None:
         await websocket.accept()
-        self._connections.append(websocket)
+        self._connections.append((websocket, channel))
 
     def disconnect(self, websocket: WebSocket) -> None:
-        if websocket in self._connections:
-            self._connections.remove(websocket)
+        self._connections = [
+            (connection, channel)
+            for connection, channel in self._connections
+            if connection is not websocket
+        ]
 
-    async def broadcast_json(self, payload: dict) -> None:
+    async def broadcast_json(self, payload: dict, channel: str | None = None) -> None:
         stale: list[WebSocket] = []
-        for connection in self._iter_connections():
+        for connection, connection_channel in self._iter_connections():
+            if channel is not None and connection_channel != channel:
+                continue
             try:
                 await connection.send_json(payload)
             except Exception:
@@ -25,7 +30,7 @@ class ConnectionManager:
         for connection in stale:
             self.disconnect(connection)
 
-    def _iter_connections(self) -> Iterable[WebSocket]:
+    def _iter_connections(self) -> Iterable[tuple[WebSocket, str | None]]:
         return tuple(self._connections)
 
 

@@ -18,24 +18,40 @@ HeartbeatMap = dict[str, tuple[datetime, str]]
 
 _capture_lock = RLock()
 _capture_interval_seconds = 2
-_last_capture_at: datetime | None = None
+_capture_interval_seconds_by_edge: dict[int, int] = {}
+_last_capture_at_by_edge: dict[int | None, datetime] = {}
 
 
-def set_equipment_log_capture_interval(seconds: int) -> None:
+def set_equipment_log_capture_interval(
+    seconds: int,
+    edge_node_id: int | None = None,
+) -> None:
     global _capture_interval_seconds
     with _capture_lock:
-        _capture_interval_seconds = max(1, min(30, int(seconds)))
+        normalized = max(1, min(30, int(seconds)))
+        if edge_node_id is None:
+            _capture_interval_seconds = normalized
+        else:
+            _capture_interval_seconds_by_edge[edge_node_id] = normalized
 
 
-def should_capture_equipment_logs(recorded_at: datetime) -> bool:
-    global _last_capture_at
+def should_capture_equipment_logs(
+    recorded_at: datetime,
+    edge_node_id: int | None = None,
+) -> bool:
     normalized = _aware_datetime(recorded_at)
     with _capture_lock:
-        if _last_capture_at is not None:
-            elapsed = (normalized - _last_capture_at).total_seconds()
-            if 0 <= elapsed < _capture_interval_seconds:
+        interval_seconds = (
+            _capture_interval_seconds_by_edge.get(edge_node_id, _capture_interval_seconds)
+            if edge_node_id is not None
+            else _capture_interval_seconds
+        )
+        last_capture_at = _last_capture_at_by_edge.get(edge_node_id)
+        if last_capture_at is not None:
+            elapsed = (normalized - last_capture_at).total_seconds()
+            if 0 <= elapsed < interval_seconds:
                 return False
-        _last_capture_at = normalized
+        _last_capture_at_by_edge[edge_node_id] = normalized
         return True
 
 
@@ -44,6 +60,7 @@ def build_equipment_log_snapshots(
     heartbeats: HeartbeatMap,
     recorded_at: datetime,
     max_equipment: int = 12,
+    edge_node_id: int | None = None,
 ) -> list[dict]:
     captured_at = _aware_datetime(recorded_at)
     oilfree_selector = _integer_value(live_map, "0006") or 0
@@ -73,6 +90,7 @@ def build_equipment_log_snapshots(
 
         snapshots.append(
             {
+                "edge_node_id": edge_node_id,
                 "equipment_no": equipment_no,
                 "pressure": _pressure_value(pressure_raw),
                 "temperature": _temperature_value(temperature_raw, is_oilfree),
@@ -97,7 +115,11 @@ def persist_equipment_log_snapshots(
 
     db.add_all(EquipmentLogSnapshot(**snapshot) for snapshot in snapshots)
     db.flush()
-    for equipment_no in {int(snapshot["equipment_no"]) for snapshot in snapshots}:
+    scopes = {
+        (snapshot.get("edge_node_id"), int(snapshot["equipment_no"]))
+        for snapshot in snapshots
+    }
+    for edge_node_id, equipment_no in scopes:
         stale_ids = (
             select(EquipmentLogSnapshot.id)
             .where(EquipmentLogSnapshot.equipment_no == equipment_no)
@@ -107,6 +129,10 @@ def persist_equipment_log_snapshots(
             )
             .offset(limit)
         )
+        if edge_node_id is None:
+            stale_ids = stale_ids.where(EquipmentLogSnapshot.edge_node_id.is_(None))
+        else:
+            stale_ids = stale_ids.where(EquipmentLogSnapshot.edge_node_id == edge_node_id)
         db.execute(
             delete(EquipmentLogSnapshot).where(EquipmentLogSnapshot.id.in_(stale_ids))
         )

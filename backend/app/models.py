@@ -6,6 +6,73 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+class Site(Base):
+    __tablename__ = "sites"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    location: Mapped[str] = mapped_column(String(255), default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    edge_nodes: Mapped[list["EdgeNode"]] = relationship(back_populates="site")
+
+
+class EdgeNode(Base):
+    __tablename__ = "edge_nodes"
+    __table_args__ = (UniqueConstraint("site_id", "code", name="uq_edge_node_site_code"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    token_hash: Mapped[str] = mapped_column(String(64))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(32), default="offline")
+    software_version: Mapped[str] = mapped_column(String(32), default="")
+    last_sequence: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    site: Mapped[Site] = relationship(back_populates="edge_nodes")
+    map_values: Mapped[list["EdgeMapValue"]] = relationship(back_populates="edge_node")
+
+
+class EdgeMapValue(Base):
+    __tablename__ = "edge_map_values"
+    __table_args__ = (UniqueConstraint("edge_node_id", "key", name="uq_edge_map_value_node_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    edge_node_id: Mapped[int] = mapped_column(ForeignKey("edge_nodes.id", ondelete="CASCADE"), index=True)
+    key: Mapped[str] = mapped_column(String(16), index=True)
+    value_text: Mapped[str] = mapped_column(String(255), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    source: Mapped[str] = mapped_column(String(64), default="edge")
+
+    edge_node: Mapped[EdgeNode] = relationship(back_populates="map_values")
+
+
+class EdgeMapValueHistory(Base):
+    __tablename__ = "edge_map_value_history"
+    __table_args__ = (
+        Index("ix_edge_map_history_node_key_recorded", "edge_node_id", "key", "recorded_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    edge_node_id: Mapped[int] = mapped_column(ForeignKey("edge_nodes.id", ondelete="CASCADE"), index=True)
+    key: Mapped[str] = mapped_column(String(16), index=True)
+    value_text: Mapped[str] = mapped_column(String(255), default="")
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    source: Mapped[str] = mapped_column(String(64), default="edge")
+
+
 class Device(Base):
     __tablename__ = "devices"
 
@@ -128,6 +195,9 @@ class EquipmentLogSnapshot(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    edge_node_id: Mapped[int | None] = mapped_column(
+        ForeignKey("edge_nodes.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     equipment_no: Mapped[int] = mapped_column(Integer, index=True)
     pressure: Mapped[float | None] = mapped_column(Float, nullable=True)
     temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -153,6 +223,9 @@ class ControlCommand(Base):
     __tablename__ = "control_commands"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    edge_node_id: Mapped[int | None] = mapped_column(
+        ForeignKey("edge_nodes.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     command_type: Mapped[str] = mapped_column(String(64), index=True)
     status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     payload_json: Mapped[str] = mapped_column(Text)

@@ -1,12 +1,14 @@
 import json
 import re
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
-from threading import RLock
+from urllib.parse import urlencode
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import desc, func, select, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
@@ -14,6 +16,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import get_settings
 from app.control_protocol import RUN_SEQUENCE_KEYS, build_group_operation_writes
 from app.database import Base, engine, get_db, SessionLocal
+from app.edge_registry import hash_edge_token, normalize_edge_code, verify_edge_token
+from app.edge_runtime import EdgeRuntimeStore
 from app.equipment_logs import (
     build_equipment_log_snapshots,
     persist_equipment_log_snapshots,
@@ -39,7 +43,11 @@ from app.models import (
     ControlCommand,
     CurrentValue,
     Device,
+    EdgeMapValue,
+    EdgeMapValueHistory,
+    EdgeNode,
     EquipmentLogSnapshot,
+    Site,
     TelemetryRecord,
     YujinMapDefinition,
     YujinMapValue,
@@ -54,6 +62,9 @@ from app.schemas import (
     ControlProfileIn,
     ControlProfileOut,
     DeviceOut,
+    EdgeMapIngestRequest,
+    EdgeNodeCreateIn,
+    EdgeNodeOut,
     EquipmentLogSnapshotOut,
     GroupOperationIn,
     GroupSettingsIn,
@@ -72,6 +83,8 @@ from app.schemas import (
     RawUart4CommandIn,
     ScheduleSettingsIn,
     ScheduleSettingsOut,
+    SiteCreateIn,
+    SiteOut,
     TelemetryIngestRequest,
     TelemetryRecordOut,
     YujinMapDefinitionOut,
@@ -90,11 +103,9 @@ CONTROL_COMMAND_STALE_SECONDS = 10
 DATABASE_STARTUP_TIMEOUT_SECONDS = 120
 DATABASE_STARTUP_RETRY_SECONDS = 2
 YUJIN_INGEST_SLOW_LOG_MS = 500
-YUJIN_MAP_HEARTBEATS: dict[str, tuple[datetime, str]] = {}
-YUJIN_LIVE_MAP: dict[str, tuple[str, datetime, str]] = {}
-YUJIN_LIVE_MAP_LOCK = RLock()
+edge_runtime = EdgeRuntimeStore()
 sms_monitor: DisconnectSmsMonitor | None = None
-schedule_runner: ScheduleRunner | None = None
+schedule_runners: list[ScheduleRunner] = []
 
 CONTROL_COMMAND_SOURCE_PRIORITY = {
     "group_operation": 0,
@@ -123,50 +134,62 @@ app.add_middleware(
 )
 
 
-def latest_yujin_seen_at(keys: list[str]) -> datetime | None:
-    normalized_keys = [key.upper() for key in keys]
-    timestamps: list[datetime] = []
-    with YUJIN_LIVE_MAP_LOCK:
-        if normalized_keys:
-            for key in normalized_keys:
-                live = YUJIN_LIVE_MAP.get(key)
-                heartbeat = YUJIN_MAP_HEARTBEATS.get(key)
-                if live:
-                    timestamps.append(live[1])
-                if heartbeat:
-                    timestamps.append(heartbeat[0])
-        else:
-            timestamps.extend(live[1] for live in YUJIN_LIVE_MAP.values())
-            timestamps.extend(heartbeat[0] for heartbeat in YUJIN_MAP_HEARTBEATS.values())
+@app.middleware("http")
+async def enforce_gateway_site_scope(request: Request, call_next):
+    gateway_site = request.headers.get("x-monitoring-server")
+    scoped_prefixes = ("/api/yujin/", "/api/control/", "/api/app-settings/")
+    if gateway_site and request.url.path.startswith(scoped_prefixes):
+        try:
+            normalized_site = normalize_edge_code(gateway_site)
+        except ValueError:
+            return JSONResponse(status_code=403, content={"detail": "Invalid gateway site scope"})
+        params = list(request.query_params.multi_items())
+        params = [(key, value) for key, value in params if key != "site"]
+        params.append(("site", normalized_site))
+        request.scope["query_string"] = urlencode(params, doseq=True).encode()
+    return await call_next(request)
 
-    return max(timestamps) if timestamps else None
+
+def latest_yujin_seen_at(keys: list[str]) -> datetime | None:
+    return edge_runtime.latest_seen_at(keys)
 
 
 @app.on_event("startup")
 def on_startup() -> None:
-    global sms_monitor, schedule_runner
+    global sms_monitor
+    schedule_runners.clear()
     wait_for_database()
     Base.metadata.create_all(bind=engine)
     migrate_legacy_schema()
+    seed_default_site_and_edge()
     seed_devices()
     seed_yujin_map()
+    load_edge_runtime_values()
     with SessionLocal() as db:
+        scope = resolve_edge_scope(db)
         product_settings, _ = load_json_setting(
             db,
-            PRODUCT_SETTINGS_KEY,
+            edge_setting_key(PRODUCT_SETTINGS_KEY, scope.edge.id),
             sanitize_product_settings,
         )
-        set_equipment_log_capture_interval(product_settings["save_cycle_seconds"])
+        set_equipment_log_capture_interval(product_settings["save_cycle_seconds"], scope.edge.id)
     sms_monitor = DisconnectSmsMonitor(settings, latest_yujin_seen_at, SolapiSmsClient(settings))
     sms_monitor.start()
-    schedule_runner = ScheduleRunner(load_schedule_for_runner, dispatch_schedule_event)
-    schedule_runner.start()
+    with SessionLocal() as db:
+        edge_ids = db.scalars(select(EdgeNode.id).where(EdgeNode.enabled.is_(True))).all()
+    for edge_node_id in edge_ids:
+        runner = ScheduleRunner(
+            lambda edge_node_id=edge_node_id: load_schedule_for_runner(edge_node_id),
+            lambda event, edge_node_id=edge_node_id: dispatch_schedule_event(edge_node_id, event),
+        )
+        runner.start()
+        schedule_runners.append(runner)
 
 
 @app.on_event("shutdown")
 def on_shutdown() -> None:
-    if schedule_runner:
-        schedule_runner.stop()
+    for runner in schedule_runners:
+        runner.stop()
     if sms_monitor:
         sms_monitor.stop()
 
@@ -195,6 +218,93 @@ def migrate_legacy_schema() -> None:
         connection.execute(text("ALTER TABLE current_values ADD COLUMN IF NOT EXISTS value_text VARCHAR(255)"))
         connection.execute(text("ALTER TABLE telemetry_records ADD COLUMN IF NOT EXISTS value_num DOUBLE PRECISION"))
         connection.execute(text("ALTER TABLE telemetry_records ADD COLUMN IF NOT EXISTS value_text VARCHAR(255)"))
+        connection.execute(
+            text(
+                "ALTER TABLE equipment_log_snapshots "
+                "ADD COLUMN IF NOT EXISTS edge_node_id INTEGER REFERENCES edge_nodes(id) ON DELETE CASCADE"
+            )
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE control_commands "
+                "ADD COLUMN IF NOT EXISTS edge_node_id INTEGER REFERENCES edge_nodes(id) ON DELETE CASCADE"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_equipment_log_snapshots_edge_node_id "
+                "ON equipment_log_snapshots (edge_node_id)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_control_commands_edge_node_id "
+                "ON control_commands (edge_node_id)"
+            )
+        )
+
+
+def seed_default_site_and_edge() -> None:
+    with SessionLocal() as db:
+        site_code = normalize_edge_code(settings.default_site_code)
+        edge_code = normalize_edge_code(settings.default_edge_code)
+        site = db.scalar(select(Site).where(Site.code == site_code))
+        if site is None:
+            site = Site(
+                code=site_code,
+                name=settings.default_site_name,
+                location="",
+            )
+            db.add(site)
+            db.flush()
+
+        edge = db.scalar(select(EdgeNode).where(EdgeNode.code == edge_code))
+        if edge is None:
+            edge = EdgeNode(
+                site_id=site.id,
+                code=edge_code,
+                name=settings.default_edge_name,
+                token_hash=hash_edge_token(settings.effective_default_edge_token),
+            )
+            db.add(edge)
+            db.flush()
+        legacy_setting_keys = (
+            MODE_SETTINGS_KEY,
+            COLLECTOR_SETTINGS_KEY,
+            PRESSURE_GAP_SETTINGS_KEY,
+            SCHEDULE_SETTINGS_KEY,
+            PRODUCT_SETTINGS_KEY,
+            GSTECH_SETTINGS_KEY,
+        )
+        for legacy_key in legacy_setting_keys:
+            scoped_key = edge_setting_key(legacy_key, edge.id)
+            if db.scalar(select(AppSetting.id).where(AppSetting.key == scoped_key)):
+                continue
+            legacy = db.scalar(select(AppSetting).where(AppSetting.key == legacy_key))
+            if legacy:
+                db.add(AppSetting(key=scoped_key, value_json=legacy.value_json))
+        db.execute(
+            text("UPDATE equipment_log_snapshots SET edge_node_id = :edge_id WHERE edge_node_id IS NULL"),
+            {"edge_id": edge.id},
+        )
+        db.execute(
+            text("UPDATE control_commands SET edge_node_id = :edge_id WHERE edge_node_id IS NULL"),
+            {"edge_id": edge.id},
+        )
+        db.commit()
+
+
+def load_edge_runtime_values() -> None:
+    with SessionLocal() as db:
+        rows = db.scalars(select(EdgeMapValue)).all()
+        for row in rows:
+            edge_runtime.load_value(
+                row.edge_node_id,
+                row.key,
+                row.value_text,
+                row.updated_at,
+                row.source,
+            )
 
 
 def seed_devices() -> None:
@@ -328,11 +438,15 @@ def sanitize_mode_settings_payload(payload: dict) -> dict:
     }
 
 
-def load_mode_settings(db: Session) -> tuple[dict, datetime | None]:
-    setting = db.scalar(select(AppSetting).where(AppSetting.key == MODE_SETTINGS_KEY))
+def edge_setting_key(base_key: str, edge_node_id: int) -> str:
+    return f"edge:{edge_node_id}:{base_key}"
+
+
+def load_mode_settings(db: Session, key: str = MODE_SETTINGS_KEY) -> tuple[dict, datetime | None]:
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == key))
     if not setting:
         payload = default_mode_settings_payload()
-        setting = AppSetting(key=MODE_SETTINGS_KEY, value_json=json.dumps(payload, ensure_ascii=False))
+        setting = AppSetting(key=key, value_json=json.dumps(payload, ensure_ascii=False))
         db.add(setting)
         db.commit()
         db.refresh(setting)
@@ -352,8 +466,8 @@ def sanitize_collector_settings_payload(payload: dict | None) -> dict:
     }
 
 
-def load_collector_settings(db: Session) -> tuple[dict, datetime | None]:
-    setting = db.scalar(select(AppSetting).where(AppSetting.key == COLLECTOR_SETTINGS_KEY))
+def load_collector_settings(db: Session, key: str = COLLECTOR_SETTINGS_KEY) -> tuple[dict, datetime | None]:
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == key))
     if not setting:
         return sanitize_collector_settings_payload(None), None
 
@@ -364,8 +478,11 @@ def load_collector_settings(db: Session) -> tuple[dict, datetime | None]:
     return sanitize_collector_settings_payload(payload), setting.updated_at
 
 
-def load_pressure_gap_settings(db: Session) -> tuple[float | None, datetime | None]:
-    setting = db.scalar(select(AppSetting).where(AppSetting.key == PRESSURE_GAP_SETTINGS_KEY))
+def load_pressure_gap_settings(
+    db: Session,
+    key: str = PRESSURE_GAP_SETTINGS_KEY,
+) -> tuple[float | None, datetime | None]:
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == key))
     if not setting:
         return None, None
     try:
@@ -376,9 +493,13 @@ def load_pressure_gap_settings(db: Session) -> tuple[float | None, datetime | No
     return pressure_gap, setting.updated_at
 
 
-def save_pressure_gap_settings(db: Session, pressure_gap: float) -> AppSetting:
+def save_pressure_gap_settings(
+    db: Session,
+    pressure_gap: float,
+    key: str = PRESSURE_GAP_SETTINGS_KEY,
+) -> AppSetting:
     normalized = round(max(0.0, float(pressure_gap)), 1)
-    setting = db.scalar(select(AppSetting).where(AppSetting.key == PRESSURE_GAP_SETTINGS_KEY))
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == key))
     current_payload = None
     if setting:
         try:
@@ -390,7 +511,7 @@ def save_pressure_gap_settings(db: Session, pressure_gap: float) -> AppSetting:
     profile["equipment_gaps"] = [min(normalized, value) for value in profile["equipment_gaps"]]
     value_json = json.dumps(profile, ensure_ascii=False)
     if not setting:
-        setting = AppSetting(key=PRESSURE_GAP_SETTINGS_KEY, value_json=value_json)
+        setting = AppSetting(key=key, value_json=value_json)
         db.add(setting)
     else:
         setting.value_json = value_json
@@ -443,6 +564,160 @@ def health() -> dict:
     return {"status": "ok", "service": "backend", "timestamp": datetime.now(timezone.utc)}
 
 
+@dataclass(frozen=True)
+class EdgeScope:
+    site: Site
+    edge: EdgeNode
+
+
+def resolve_edge_scope(
+    db: Session,
+    site_code: str | None = None,
+    edge_code: str | None = None,
+) -> EdgeScope:
+    try:
+        normalized_site = normalize_edge_code(site_code) if site_code else None
+        normalized_edge = normalize_edge_code(edge_code) if edge_code else None
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid site or edge code") from None
+
+    stmt = (
+        select(EdgeNode, Site)
+        .join(Site, Site.id == EdgeNode.site_id)
+        .where(EdgeNode.enabled.is_(True), Site.enabled.is_(True))
+    )
+    if normalized_edge:
+        stmt = stmt.where(EdgeNode.code == normalized_edge)
+    elif normalized_site:
+        stmt = stmt.where(Site.code == normalized_site)
+    else:
+        stmt = stmt.where(EdgeNode.code == normalize_edge_code(settings.default_edge_code))
+
+    row = db.execute(stmt.order_by(EdgeNode.id.asc())).first()
+    if row is None:
+        detail = f"Edge node not found: {normalized_edge}" if normalized_edge else "No enabled edge node found"
+        raise HTTPException(status_code=404, detail=detail)
+    edge, site = row
+    if normalized_site and site.code != normalized_site:
+        raise HTTPException(status_code=404, detail="Edge node does not belong to the requested site")
+    return EdgeScope(site=site, edge=edge)
+
+
+def authenticate_edge(db: Session, edge_code: str | None, token: str | None) -> EdgeScope:
+    if not edge_code or not token:
+        raise HTTPException(status_code=401, detail="Edge credentials are required")
+    scope = resolve_edge_scope(db, edge_code=edge_code)
+    if not verify_edge_token(token, scope.edge.token_hash):
+        raise HTTPException(status_code=401, detail="Invalid edge credentials")
+    return scope
+
+
+def require_admin_token(token: str | None) -> None:
+    if not token or token != settings.central_admin_token:
+        raise HTTPException(status_code=401, detail="Invalid admin token")
+
+
+def site_out(site: Site) -> SiteOut:
+    now = datetime.now(timezone.utc)
+
+    def edge_status(edge: EdgeNode) -> str:
+        if edge.last_seen_at is None:
+            return "offline"
+        last_seen = edge.last_seen_at
+        if last_seen.tzinfo is None:
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+        return "online" if (now - last_seen).total_seconds() <= settings.edge_offline_seconds else "offline"
+
+    return SiteOut(
+        code=site.code,
+        name=site.name,
+        location=site.location,
+        enabled=site.enabled,
+        edge_nodes=[
+            EdgeNodeOut(
+                code=edge.code,
+                name=edge.name,
+                status=edge_status(edge),
+                software_version=edge.software_version,
+                last_sequence=edge.last_sequence,
+                last_seen_at=edge.last_seen_at,
+            )
+            for edge in sorted(site.edge_nodes, key=lambda item: item.code)
+            if edge.enabled
+        ],
+    )
+
+
+@app.get("/api/sites", response_model=list[SiteOut])
+def list_sites(
+    db: Session = Depends(get_db),
+    x_monitoring_server: str | None = Header(default=None),
+) -> list[SiteOut]:
+    stmt = (
+        select(Site)
+        .where(Site.enabled.is_(True))
+        .options(selectinload(Site.edge_nodes))
+        .order_by(Site.id.asc())
+    )
+    if x_monitoring_server:
+        try:
+            stmt = stmt.where(Site.code == normalize_edge_code(x_monitoring_server))
+        except ValueError:
+            raise HTTPException(status_code=403, detail="Invalid gateway site scope") from None
+    sites = db.scalars(stmt).all()
+    return [site_out(site) for site in sites]
+
+
+@app.post("/api/admin/sites", response_model=SiteOut)
+def create_site(
+    payload: SiteCreateIn,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+) -> SiteOut:
+    require_admin_token(x_admin_token)
+    code = normalize_edge_code(payload.code)
+    if db.scalar(select(Site.id).where(Site.code == code)):
+        raise HTTPException(status_code=409, detail="Site code already exists")
+    site = Site(code=code, name=payload.name.strip(), location=payload.location.strip())
+    db.add(site)
+    db.commit()
+    db.refresh(site)
+    return site_out(site)
+
+
+@app.post("/api/admin/sites/{site_code}/edges", response_model=EdgeNodeOut)
+def create_edge_node(
+    site_code: str,
+    payload: EdgeNodeCreateIn,
+    db: Session = Depends(get_db),
+    x_admin_token: str | None = Header(default=None),
+) -> EdgeNodeOut:
+    require_admin_token(x_admin_token)
+    site = db.scalar(select(Site).where(Site.code == normalize_edge_code(site_code)))
+    if site is None:
+        raise HTTPException(status_code=404, detail="Site not found")
+    code = normalize_edge_code(payload.code)
+    if db.scalar(select(EdgeNode.id).where(EdgeNode.code == code)):
+        raise HTTPException(status_code=409, detail="Edge code already exists")
+    edge = EdgeNode(
+        site_id=site.id,
+        code=code,
+        name=payload.name.strip(),
+        token_hash=hash_edge_token(payload.token),
+    )
+    db.add(edge)
+    db.commit()
+    db.refresh(edge)
+    return EdgeNodeOut(
+        code=edge.code,
+        name=edge.name,
+        status=edge.status,
+        software_version=edge.software_version,
+        last_sequence=edge.last_sequence,
+        last_seen_at=edge.last_seen_at,
+    )
+
+
 def command_out(command: ControlCommand) -> ControlCommandOut:
     return ControlCommandOut(
         id=command.id,
@@ -478,10 +753,18 @@ def control_command_priority(command: ControlCommand) -> tuple[int, datetime, in
     return (source_priority, command.created_at, command.id)
 
 
-def fail_pending_commands_by_source(db: Session, source: str, error: str) -> None:
+def fail_pending_commands_by_source(
+    db: Session,
+    edge_node_id: int,
+    source: str,
+    error: str,
+) -> None:
     pending_commands = db.scalars(
         select(ControlCommand)
-        .where(ControlCommand.status == "pending")
+        .where(
+            ControlCommand.edge_node_id == edge_node_id,
+            ControlCommand.status == "pending",
+        )
         .order_by(ControlCommand.created_at.asc(), ControlCommand.id.asc())
     ).all()
     now = datetime.now(timezone.utc)
@@ -497,12 +780,19 @@ def enqueue_control_command(
     db: Session,
     command_type: str,
     payload: dict,
+    edge_node_id: int,
     requested_by: str = "frontend",
     supersede_source: str | None = None,
 ) -> ControlCommand:
     if supersede_source:
-        fail_pending_commands_by_source(db, supersede_source, "newer command superseded this pending command")
+        fail_pending_commands_by_source(
+            db,
+            edge_node_id,
+            supersede_source,
+            "newer command superseded this pending command",
+        )
     command = ControlCommand(
+        edge_node_id=edge_node_id,
         command_type=command_type,
         status="pending",
         payload_json=json.dumps(payload, ensure_ascii=False),
@@ -514,9 +804,13 @@ def enqueue_control_command(
     return command
 
 
-def current_map_int(db: Session, key: str, fallback: int = 0) -> int:
-    with YUJIN_LIVE_MAP_LOCK:
-        live = YUJIN_LIVE_MAP.get(key.upper())
+def current_map_int(
+    db: Session,
+    edge_node_id: int,
+    key: str,
+    fallback: int = 0,
+) -> int:
+    live = edge_runtime.value(edge_node_id, key)
     if live:
         try:
             return int(float(live[0]))
@@ -524,9 +818,10 @@ def current_map_int(db: Session, key: str, fallback: int = 0) -> int:
             return fallback
 
     row = db.execute(
-        select(YujinMapValue.value_text)
-        .join(YujinMapDefinition, YujinMapValue.definition_id == YujinMapDefinition.id)
-        .where(YujinMapDefinition.key == key.upper())
+        select(EdgeMapValue.value_text).where(
+            EdgeMapValue.edge_node_id == edge_node_id,
+            EdgeMapValue.key == key.upper(),
+        )
     ).first()
     if not row:
         return fallback
@@ -596,17 +891,29 @@ def yujin_map_schema() -> dict:
 
 
 @app.get("/api/app-settings/mode-settings", response_model=ModeSettingsOut)
-def get_mode_settings(db: Session = Depends(get_db)) -> ModeSettingsOut:
-    payload, updated_at = load_mode_settings(db)
+def get_mode_settings(
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> ModeSettingsOut:
+    scope = resolve_edge_scope(db, site, edge)
+    payload, updated_at = load_mode_settings(db, edge_setting_key(MODE_SETTINGS_KEY, scope.edge.id))
     return ModeSettingsOut(**payload, updated_at=updated_at)
 
 
 @app.put("/api/app-settings/mode-settings", response_model=ModeSettingsOut)
-def update_mode_settings(payload: ModeSettingsIn, db: Session = Depends(get_db)) -> ModeSettingsOut:
+def update_mode_settings(
+    payload: ModeSettingsIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> ModeSettingsOut:
+    scope = resolve_edge_scope(db, site, edge)
+    key = edge_setting_key(MODE_SETTINGS_KEY, scope.edge.id)
     normalized = sanitize_mode_settings_payload(payload.model_dump())
-    setting = db.scalar(select(AppSetting).where(AppSetting.key == MODE_SETTINGS_KEY))
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == key))
     if not setting:
-        setting = AppSetting(key=MODE_SETTINGS_KEY, value_json=json.dumps(normalized, ensure_ascii=False))
+        setting = AppSetting(key=key, value_json=json.dumps(normalized, ensure_ascii=False))
         db.add(setting)
     else:
         setting.value_json = json.dumps(normalized, ensure_ascii=False)
@@ -616,20 +923,49 @@ def update_mode_settings(payload: ModeSettingsIn, db: Session = Depends(get_db))
 
 
 @app.get("/api/app-settings/collector-settings", response_model=CollectorSettingsOut)
-def get_collector_settings(db: Session = Depends(get_db)) -> CollectorSettingsOut:
-    payload, updated_at = load_collector_settings(db)
+def get_collector_settings(
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> CollectorSettingsOut:
+    scope = resolve_edge_scope(db, site, edge)
+    payload, updated_at = load_collector_settings(
+        db,
+        edge_setting_key(COLLECTOR_SETTINGS_KEY, scope.edge.id),
+    )
+    return CollectorSettingsOut(**payload, updated_at=updated_at)
+
+
+@app.get("/api/edge/settings/collector", response_model=CollectorSettingsOut)
+def get_edge_collector_settings(
+    db: Session = Depends(get_db),
+    x_edge_id: str | None = Header(default=None),
+    x_edge_token: str | None = Header(default=None),
+) -> CollectorSettingsOut:
+    scope = authenticate_edge(db, x_edge_id, x_edge_token)
+    payload, updated_at = load_collector_settings(
+        db,
+        edge_setting_key(COLLECTOR_SETTINGS_KEY, scope.edge.id),
+    )
     return CollectorSettingsOut(**payload, updated_at=updated_at)
 
 
 @app.put("/api/app-settings/collector-settings", response_model=CollectorSettingsOut)
-def update_collector_settings(payload: CollectorSettingsIn, db: Session = Depends(get_db)) -> CollectorSettingsOut:
+def update_collector_settings(
+    payload: CollectorSettingsIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> CollectorSettingsOut:
+    scope = resolve_edge_scope(db, site, edge)
+    key = edge_setting_key(COLLECTOR_SETTINGS_KEY, scope.edge.id)
     normalized = sanitize_collector_settings_payload(payload.model_dump())
     if normalized["serial_port"] is None:
         raise HTTPException(status_code=422, detail="unsupported collector serial port")
 
-    setting = db.scalar(select(AppSetting).where(AppSetting.key == COLLECTOR_SETTINGS_KEY))
+    setting = db.scalar(select(AppSetting).where(AppSetting.key == key))
     if not setting:
-        setting = AppSetting(key=COLLECTOR_SETTINGS_KEY, value_json=json.dumps(normalized, ensure_ascii=False))
+        setting = AppSetting(key=key, value_json=json.dumps(normalized, ensure_ascii=False))
         db.add(setting)
     else:
         setting.value_json = json.dumps(normalized, ensure_ascii=False)
@@ -639,35 +975,59 @@ def update_collector_settings(payload: CollectorSettingsIn, db: Session = Depend
 
 
 @app.get("/api/app-settings/pressure-gap", response_model=PressureGapSettingsOut)
-def get_pressure_gap_settings(db: Session = Depends(get_db)) -> PressureGapSettingsOut:
-    pressure_gap, updated_at = load_pressure_gap_settings(db)
+def get_pressure_gap_settings(
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> PressureGapSettingsOut:
+    scope = resolve_edge_scope(db, site, edge)
+    pressure_gap, updated_at = load_pressure_gap_settings(
+        db,
+        edge_setting_key(PRESSURE_GAP_SETTINGS_KEY, scope.edge.id),
+    )
     return PressureGapSettingsOut(pressure_gap=pressure_gap, updated_at=updated_at)
 
 
 @app.put("/api/app-settings/pressure-gap", response_model=PressureGapSettingsOut)
 def update_pressure_gap_settings(
     payload: PressureGapSettingsIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> PressureGapSettingsOut:
-    setting = save_pressure_gap_settings(db, payload.pressure_gap)
-    pressure_gap, _ = load_pressure_gap_settings(db)
+    scope = resolve_edge_scope(db, site, edge)
+    key = edge_setting_key(PRESSURE_GAP_SETTINGS_KEY, scope.edge.id)
+    setting = save_pressure_gap_settings(db, payload.pressure_gap, key)
+    pressure_gap, _ = load_pressure_gap_settings(db, key)
     return PressureGapSettingsOut(pressure_gap=pressure_gap, updated_at=setting.updated_at)
 
 
 @app.get("/api/app-settings/control-profile", response_model=ControlProfileOut)
-def get_control_profile(db: Session = Depends(get_db)) -> ControlProfileOut:
-    payload, updated_at = load_json_setting(db, CONTROL_PROFILE_SETTINGS_KEY, sanitize_control_profile)
+def get_control_profile(
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> ControlProfileOut:
+    scope = resolve_edge_scope(db, site, edge)
+    payload, updated_at = load_json_setting(
+        db,
+        edge_setting_key(CONTROL_PROFILE_SETTINGS_KEY, scope.edge.id),
+        sanitize_control_profile,
+    )
     return ControlProfileOut(**payload, updated_at=updated_at)
 
 
 @app.put("/api/app-settings/control-profile", response_model=ControlProfileOut)
 def update_control_profile(
     payload: ControlProfileIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> ControlProfileOut:
+    scope = resolve_edge_scope(db, site, edge)
     normalized, updated_at = save_json_setting(
         db,
-        CONTROL_PROFILE_SETTINGS_KEY,
+        edge_setting_key(CONTROL_PROFILE_SETTINGS_KEY, scope.edge.id),
         payload.model_dump(),
         sanitize_control_profile,
     )
@@ -675,19 +1035,31 @@ def update_control_profile(
 
 
 @app.get("/api/app-settings/schedule-settings", response_model=ScheduleSettingsOut)
-def get_schedule_settings(db: Session = Depends(get_db)) -> ScheduleSettingsOut:
-    payload, updated_at = load_json_setting(db, SCHEDULE_SETTINGS_KEY, sanitize_schedule_settings)
+def get_schedule_settings(
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> ScheduleSettingsOut:
+    scope = resolve_edge_scope(db, site, edge)
+    payload, updated_at = load_json_setting(
+        db,
+        edge_setting_key(SCHEDULE_SETTINGS_KEY, scope.edge.id),
+        sanitize_schedule_settings,
+    )
     return ScheduleSettingsOut(**payload, updated_at=updated_at)
 
 
 @app.put("/api/app-settings/schedule-settings", response_model=ScheduleSettingsOut)
 def update_schedule_settings(
     payload: ScheduleSettingsIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> ScheduleSettingsOut:
+    scope = resolve_edge_scope(db, site, edge)
     normalized, updated_at = save_json_setting(
         db,
-        SCHEDULE_SETTINGS_KEY,
+        edge_setting_key(SCHEDULE_SETTINGS_KEY, scope.edge.id),
         payload.model_dump(),
         sanitize_schedule_settings,
     )
@@ -695,120 +1067,132 @@ def update_schedule_settings(
 
 
 @app.get("/api/app-settings/product-settings", response_model=ProductSettingsOut)
-def get_product_settings(db: Session = Depends(get_db)) -> ProductSettingsOut:
-    payload, updated_at = load_json_setting(db, PRODUCT_SETTINGS_KEY, sanitize_product_settings)
+def get_product_settings(
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> ProductSettingsOut:
+    scope = resolve_edge_scope(db, site, edge)
+    payload, updated_at = load_json_setting(
+        db,
+        edge_setting_key(PRODUCT_SETTINGS_KEY, scope.edge.id),
+        sanitize_product_settings,
+    )
     return ProductSettingsOut(**payload, updated_at=updated_at)
 
 
 @app.put("/api/app-settings/product-settings", response_model=ProductSettingsOut)
 def update_product_settings(
     payload: ProductSettingsIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> ProductSettingsOut:
+    scope = resolve_edge_scope(db, site, edge)
     normalized, updated_at = save_json_setting(
         db,
-        PRODUCT_SETTINGS_KEY,
+        edge_setting_key(PRODUCT_SETTINGS_KEY, scope.edge.id),
         payload.model_dump(),
         sanitize_product_settings,
     )
-    set_equipment_log_capture_interval(normalized["save_cycle_seconds"])
+    set_equipment_log_capture_interval(normalized["save_cycle_seconds"], scope.edge.id)
     return ProductSettingsOut(**normalized, updated_at=updated_at)
 
 
 @app.get("/api/app-settings/gstech-settings", response_model=GsTechSettingsOut)
-def get_gstech_settings(db: Session = Depends(get_db)) -> GsTechSettingsOut:
-    payload, updated_at = load_json_setting(db, GSTECH_SETTINGS_KEY, sanitize_gstech_settings)
+def get_gstech_settings(
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> GsTechSettingsOut:
+    scope = resolve_edge_scope(db, site, edge)
+    payload, updated_at = load_json_setting(
+        db,
+        edge_setting_key(GSTECH_SETTINGS_KEY, scope.edge.id),
+        sanitize_gstech_settings,
+    )
     return GsTechSettingsOut(**payload, updated_at=updated_at)
 
 
 @app.put("/api/app-settings/gstech-settings", response_model=GsTechSettingsOut)
 def update_gstech_settings(
     payload: GsTechSettingsIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> GsTechSettingsOut:
+    scope = resolve_edge_scope(db, site, edge)
     if payload.dio_bit0 == payload.dio_bit4:
         raise HTTPException(status_code=422, detail="DIO BIT0 and BIT4 cannot use the same device")
     normalized, updated_at = save_json_setting(
         db,
-        GSTECH_SETTINGS_KEY,
+        edge_setting_key(GSTECH_SETTINGS_KEY, scope.edge.id),
         payload.model_dump(),
         sanitize_gstech_settings,
     )
     return GsTechSettingsOut(**normalized, updated_at=updated_at)
 
 
-def remember_yujin_heartbeats(keys: list[str], recorded_at: datetime, source: str) -> None:
-    with YUJIN_LIVE_MAP_LOCK:
-        for key in keys:
-            current = YUJIN_MAP_HEARTBEATS.get(key)
-            if current and current[0] >= recorded_at:
-                continue
-            YUJIN_MAP_HEARTBEATS[key] = (recorded_at, source)
-
-
-def heartbeat_timestamp(key: str, stored_at: datetime | None) -> datetime | None:
-    heartbeat = YUJIN_MAP_HEARTBEATS.get(key.upper())
-    if not heartbeat:
-        return stored_at
-    heartbeat_at, _ = heartbeat
-    if stored_at is not None and stored_at >= heartbeat_at:
-        return stored_at
-    return heartbeat_at
-
-
-def heartbeat_source(key: str, stored_source: str | None) -> str | None:
-    heartbeat = YUJIN_MAP_HEARTBEATS.get(key.upper())
-    if not heartbeat:
-        return stored_source
-    return heartbeat[1] or stored_source
-
-
 def current_group_operation_writes(
     db: Session,
+    edge_node_id: int,
     action: str,
     run_units_override: int | None = None,
     stop_equipment: bool = True,
 ) -> list[dict]:
-    current_operation_value = current_map_int(db, "0050", 0)
-    connected_mask = current_map_int(db, "0002", 0)
+    current_operation_value = current_map_int(db, edge_node_id, "0050", 0)
+    connected_mask = current_map_int(db, edge_node_id, "0002", 0)
     available_units = [unit for unit in range(1, 13) if connected_mask & (1 << (unit - 1))]
     if not available_units:
         available_units = list(range(1, 9))
-    mode_settings, _ = load_mode_settings(db)
+    mode_settings, _ = load_mode_settings(db, edge_setting_key(MODE_SETTINGS_KEY, edge_node_id))
     exclude_mask = int(mode_settings.get("exclude_mask", 0))
     available_units = [unit for unit in available_units if not exclude_mask & (1 << (unit - 1))]
-    sequence = [current_map_int(db, key, 0) for key in RUN_SEQUENCE_KEYS]
-    oilfree_selector = current_map_int(db, "0006", 0)
+    sequence = [current_map_int(db, edge_node_id, key, 0) for key in RUN_SEQUENCE_KEYS]
+    oilfree_selector = current_map_int(db, edge_node_id, "0006", 0)
     running_units = []
     inverter_units: set[int] = set()
     for unit in available_units:
         prefix = "2" if oilfree_selector & (1 << (unit - 1)) else "1"
         unit_hex = f"{unit:X}"
         cp_status_offset = "30" if prefix == "2" else "16"
-        if current_map_int(db, f"{prefix}{unit_hex}{cp_status_offset}", 0):
+        if current_map_int(db, edge_node_id, f"{prefix}{unit_hex}{cp_status_offset}", 0):
             running_units.append(unit)
         model_offset = "7C" if prefix == "2" else "74"
-        model_value = current_map_int(db, f"{prefix}{unit_hex}{model_offset}", 0)
-        if (prefix == "2" and current_map_int(db, f"{prefix}{unit_hex}7E", 0) == 3) or (
+        model_value = current_map_int(db, edge_node_id, f"{prefix}{unit_hex}{model_offset}", 0)
+        if (
+            prefix == "2"
+            and current_map_int(db, edge_node_id, f"{prefix}{unit_hex}7E", 0) == 3
+        ) or (
             prefix == "1" and 17 <= model_value <= 26
         ):
             inverter_units.add(unit)
-    control_profile, _ = load_json_setting(db, CONTROL_PROFILE_SETTINGS_KEY, sanitize_control_profile)
+    control_profile, _ = load_json_setting(
+        db,
+        edge_setting_key(CONTROL_PROFILE_SETTINGS_KEY, edge_node_id),
+        sanitize_control_profile,
+    )
     return build_group_operation_writes(
         current_value=current_operation_value,
         action=action,
         sequence=sequence,
         available_units=available_units,
-        run_units=run_units_override if run_units_override is not None else current_map_int(db, "0026", 0),
+        run_units=(
+            run_units_override
+            if run_units_override is not None
+            else current_map_int(db, edge_node_id, "0026", 0)
+        ),
         oilfree_selector=oilfree_selector,
-        repair_mask=current_map_int(db, "0058", 0),
+        repair_mask=current_map_int(db, edge_node_id, "0058", 0),
         running_units=running_units,
-        run_delay_seconds=current_map_int(db, "003C", 0),
-        stop_delay_seconds=current_map_int(db, "0004", 0),
-        stop_additional_units=not bool(current_map_int(db, "004A", 0) & (1 << 14)),
+        run_delay_seconds=current_map_int(db, edge_node_id, "003C", 0),
+        stop_delay_seconds=current_map_int(db, edge_node_id, "0004", 0),
+        stop_additional_units=not bool(
+            current_map_int(db, edge_node_id, "004A", 0) & (1 << 14)
+        ),
         stop_equipment=stop_equipment,
-        no_load_pressure=current_map_int(db, "0016", 0),
-        load_pressure=current_map_int(db, "0018", 0),
+        no_load_pressure=current_map_int(db, edge_node_id, "0016", 0),
+        load_pressure=current_map_int(db, edge_node_id, "0018", 0),
         equipment_gaps=[round(float(value) * 10) for value in control_profile["equipment_gaps"]],
         inverter_units=inverter_units,
         main_inverter_unit=int(control_profile["main_inverter_unit"]),
@@ -816,18 +1200,26 @@ def current_group_operation_writes(
     )
 
 
-def load_schedule_for_runner() -> dict:
+def load_schedule_for_runner(edge_node_id: int) -> dict:
     with SessionLocal() as db:
-        payload, _ = load_json_setting(db, SCHEDULE_SETTINGS_KEY, sanitize_schedule_settings)
+        payload, _ = load_json_setting(
+            db,
+            edge_setting_key(SCHEDULE_SETTINGS_KEY, edge_node_id),
+            sanitize_schedule_settings,
+        )
         return payload
 
 
-def dispatch_schedule_event(event: dict) -> None:
+def dispatch_schedule_event(edge_node_id: int, event: dict) -> None:
     action = str(event["action"])
     run_units = max(1, min(12, int(event.get("run_units", 1))))
     with SessionLocal() as db:
+        edge = db.get(EdgeNode, edge_node_id)
+        if edge is None or not edge.enabled:
+            return
         writes = current_group_operation_writes(
             db,
+            edge.id,
             action,
             run_units_override=run_units if action == "run" else None,
         )
@@ -842,6 +1234,7 @@ def dispatch_schedule_event(event: dict) -> None:
                 "schedule_event_key": event["event_key"],
                 "writes": writes,
             },
+            edge_node_id=edge.id,
             requested_by="schedule",
             supersede_source="schedule_group_operation",
         )
@@ -851,9 +1244,17 @@ def dispatch_schedule_event(event: dict) -> None:
 @app.post("/api/control/group-operation", response_model=ControlCommandOut)
 async def create_group_operation_command(
     payload: GroupOperationIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
-    writes = current_group_operation_writes(db, payload.action, stop_equipment=payload.stop_equipment)
+    scope = resolve_edge_scope(db, site, edge)
+    writes = current_group_operation_writes(
+        db,
+        scope.edge.id,
+        payload.action,
+        stop_equipment=payload.stop_equipment,
+    )
     command = enqueue_control_command(
         db,
         "map_write_batch",
@@ -862,18 +1263,29 @@ async def create_group_operation_command(
             "action": payload.action,
             "writes": writes,
         },
+        edge_node_id=scope.edge.id,
         supersede_source="group_operation",
     )
-    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    await manager.broadcast_json(
+        {"type": "control_command_update", "id": command.id, "status": command.status},
+        channel=f"edge:{scope.edge.id}",
+    )
     return command_out(command)
 
 
 @app.post("/api/control/group-settings", response_model=ControlCommandOut)
 async def create_group_settings_command(
     payload: GroupSettingsIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
-    save_pressure_gap_settings(db, payload.pressure_gap)
+    scope = resolve_edge_scope(db, site, edge)
+    save_pressure_gap_settings(
+        db,
+        payload.pressure_gap,
+        edge_setting_key(PRESSURE_GAP_SETTINGS_KEY, scope.edge.id),
+    )
     writes = [
         {"key": "0016", "address": 0x16, "length": 2, "value": round(payload.no_load_pressure * 10)},
         {"key": "0018", "address": 0x18, "length": 2, "value": round(payload.load_pressure * 10)},
@@ -881,8 +1293,24 @@ async def create_group_settings_command(
         {"key": "0026", "address": 0x26, "length": 2, "value": int(payload.run_units)},
         {"key": "0042", "address": 0x42, "length": 2, "value": int(payload.change_hours)},
         {"key": "0022", "address": 0x22, "length": 2, "value": 1 if payload.control_mode == "group" else 0},
-        {"key": "0024", "address": 0x24, "length": 2, "value": set_word_low_byte(current_map_int(db, "0024", 0), 1 if payload.sort_mode == "time" else 0)},
-        {"key": "0050", "address": 0x50, "length": 2, "value": set_word_high_byte(current_map_int(db, "0050", 0), 0 if payload.operation_mode == "local" else 1)},
+        {
+            "key": "0024",
+            "address": 0x24,
+            "length": 2,
+            "value": set_word_low_byte(
+                current_map_int(db, scope.edge.id, "0024", 0),
+                1 if payload.sort_mode == "time" else 0,
+            ),
+        },
+        {
+            "key": "0050",
+            "address": 0x50,
+            "length": 2,
+            "value": set_word_high_byte(
+                current_map_int(db, scope.edge.id, "0050", 0),
+                0 if payload.operation_mode == "local" else 1,
+            ),
+        },
     ]
     command = enqueue_control_command(
         db,
@@ -891,16 +1319,23 @@ async def create_group_settings_command(
             "source": "group_settings",
             "writes": writes,
         },
+        edge_node_id=scope.edge.id,
     )
-    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    await manager.broadcast_json(
+        {"type": "control_command_update", "id": command.id, "status": command.status},
+        channel=f"edge:{scope.edge.id}",
+    )
     return command_out(command)
 
 
 @app.post("/api/control/map-write-batch", response_model=ControlCommandOut)
 async def create_map_write_batch_command(
     payload: MapWriteBatchIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
+    scope = resolve_edge_scope(db, site, edge)
     if not payload.writes:
         raise HTTPException(status_code=422, detail="writes cannot be empty")
 
@@ -911,17 +1346,24 @@ async def create_map_write_batch_command(
             "source": payload.source,
             "writes": [normalize_map_write(write) for write in payload.writes],
         },
+        edge_node_id=scope.edge.id,
         supersede_source=payload.source if payload.source in SUPERSEDE_PENDING_CONTROL_SOURCES else None,
     )
-    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    await manager.broadcast_json(
+        {"type": "control_command_update", "id": command.id, "status": command.status},
+        channel=f"edge:{scope.edge.id}",
+    )
     return command_out(command)
 
 
 @app.post("/api/control/raw-uart4", response_model=ControlCommandOut)
 async def create_raw_uart4_command(
     payload: RawUart4CommandIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
+    scope = resolve_edge_scope(db, site, edge)
     command = enqueue_control_command(
         db,
         "raw_uart4",
@@ -931,16 +1373,23 @@ async def create_raw_uart4_command(
             "append_crc": payload.append_crc,
             "wait_response": payload.wait_response,
         },
+        edge_node_id=scope.edge.id,
     )
-    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    await manager.broadcast_json(
+        {"type": "control_command_update", "id": command.id, "status": command.status},
+        channel=f"edge:{scope.edge.id}",
+    )
     return command_out(command)
 
 
 @app.post("/api/control/raw-uart4-batch", response_model=ControlCommandOut)
 async def create_raw_uart4_batch_command(
     payload: RawUart4BatchCommandIn,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
+    scope = resolve_edge_scope(db, site, edge)
     if not payload.frames:
         raise HTTPException(status_code=422, detail="frames cannot be empty")
     command = enqueue_control_command(
@@ -958,25 +1407,28 @@ async def create_raw_uart4_batch_command(
                 for frame in payload.frames
             ],
         },
+        edge_node_id=scope.edge.id,
     )
-    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    await manager.broadcast_json(
+        {"type": "control_command_update", "id": command.id, "status": command.status},
+        channel=f"edge:{scope.edge.id}",
+    )
     return command_out(command)
 
 
-@app.get("/api/control/commands/next", response_model=list[ControlCommandOut])
-def next_control_commands(
-    limit: int = Query(default=5, ge=1, le=20),
-    db: Session = Depends(get_db),
-    x_collector_token: str | None = Header(default=None),
+def claim_control_commands(
+    db: Session,
+    edge_node_id: int,
+    limit: int,
 ) -> list[ControlCommandOut]:
-    if x_collector_token != settings.collector_token:
-        raise HTTPException(status_code=401, detail="Invalid collector token")
-
     now = datetime.now(timezone.utc)
     stale_before = now - timedelta(seconds=CONTROL_COMMAND_STALE_SECONDS)
     stale_commands = db.scalars(
         select(ControlCommand)
-        .where(ControlCommand.status == "in_progress")
+        .where(
+            ControlCommand.edge_node_id == edge_node_id,
+            ControlCommand.status == "in_progress",
+        )
         .where(ControlCommand.updated_at < stale_before)
     ).all()
     for command in stale_commands:
@@ -986,7 +1438,10 @@ def next_control_commands(
 
     commands = db.scalars(
         select(ControlCommand)
-        .where(ControlCommand.status == "pending")
+        .where(
+            ControlCommand.edge_node_id == edge_node_id,
+            ControlCommand.status == "pending",
+        )
         .order_by(ControlCommand.created_at.asc(), ControlCommand.id.asc())
     ).all()
     commands = sorted(commands, key=control_command_priority)[:limit]
@@ -1000,13 +1455,39 @@ def next_control_commands(
     return [command_out(command) for command in commands]
 
 
+@app.get("/api/control/commands/next", response_model=list[ControlCommandOut])
+def next_control_commands(
+    limit: int = Query(default=5, ge=1, le=20),
+    db: Session = Depends(get_db),
+    x_collector_token: str | None = Header(default=None),
+) -> list[ControlCommandOut]:
+    if x_collector_token != settings.collector_token:
+        raise HTTPException(status_code=401, detail="Invalid collector token")
+    scope = resolve_edge_scope(db)
+    return claim_control_commands(db, scope.edge.id, limit)
+
+
+@app.get("/api/edge/commands/next", response_model=list[ControlCommandOut])
+def next_edge_control_commands(
+    limit: int = Query(default=5, ge=1, le=20),
+    db: Session = Depends(get_db),
+    x_edge_id: str | None = Header(default=None),
+    x_edge_token: str | None = Header(default=None),
+) -> list[ControlCommandOut]:
+    scope = authenticate_edge(db, x_edge_id, x_edge_token)
+    return claim_control_commands(db, scope.edge.id, limit)
+
+
 @app.get("/api/control/commands/{command_id}", response_model=ControlCommandOut)
 def get_control_command(
     command_id: int,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> ControlCommandOut:
+    scope = resolve_edge_scope(db, site, edge)
     command = db.get(ControlCommand, command_id)
-    if not command:
+    if not command or command.edge_node_id != scope.edge.id:
         raise HTTPException(status_code=404, detail="Command not found")
     return command_out(command)
 
@@ -1024,12 +1505,42 @@ async def ack_control_command(
     command = db.get(ControlCommand, command_id)
     if not command:
         raise HTTPException(status_code=404, detail="Command not found")
+    scope = resolve_edge_scope(db)
+    if command.edge_node_id != scope.edge.id:
+        raise HTTPException(status_code=404, detail="Command not found")
     command.status = payload.status
     command.error_text = payload.error
     command.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(command)
-    await manager.broadcast_json({"type": "control_command_update", "id": command.id, "status": command.status})
+    await manager.broadcast_json(
+        {"type": "control_command_update", "id": command.id, "status": command.status},
+        channel=f"edge:{scope.edge.id}",
+    )
+    return command_out(command)
+
+
+@app.post("/api/edge/commands/{command_id}/ack", response_model=ControlCommandOut)
+async def ack_edge_control_command(
+    command_id: int,
+    payload: ControlCommandAckIn,
+    db: Session = Depends(get_db),
+    x_edge_id: str | None = Header(default=None),
+    x_edge_token: str | None = Header(default=None),
+) -> ControlCommandOut:
+    scope = authenticate_edge(db, x_edge_id, x_edge_token)
+    command = db.get(ControlCommand, command_id)
+    if not command or command.edge_node_id != scope.edge.id:
+        raise HTTPException(status_code=404, detail="Command not found")
+    command.status = payload.status
+    command.error_text = payload.error
+    command.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(command)
+    await manager.broadcast_json(
+        {"type": "control_command_update", "id": command.id, "status": command.status},
+        channel=f"edge:{scope.edge.id}",
+    )
     return command_out(command)
 
 
@@ -1062,16 +1573,20 @@ def yujin_live_map_values(
     section: str | None = Query(default=None),
     key_prefix: str | None = Query(default=None),
     limit: int = Query(default=1000, le=2000),
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
+    db: Session = Depends(get_db),
 ) -> list[YujinMapValueOut]:
+    scope = resolve_edge_scope(db, site, edge)
     definitions = yujin_schema_index()
     rows: list[YujinMapValueOut] = []
-    with YUJIN_LIVE_MAP_LOCK:
-        live_items = [(key, YUJIN_LIVE_MAP[key], YUJIN_MAP_HEARTBEATS.get(key)) for key in sorted(YUJIN_LIVE_MAP.keys())]
-        heartbeat_items = [
-            (key, None, heartbeat)
-            for key, heartbeat in sorted(YUJIN_MAP_HEARTBEATS.items())
-            if key not in YUJIN_LIVE_MAP
-        ]
+    live_map, heartbeats = edge_runtime.snapshots(scope.edge.id)
+    live_items = [(key, live_map[key], heartbeats.get(key)) for key in sorted(live_map)]
+    heartbeat_items = [
+        (key, None, heartbeat)
+        for key, heartbeat in sorted(heartbeats.items())
+        if key not in live_map
+    ]
     for key, live, heartbeat in [*live_items, *heartbeat_items]:
         definition = definitions.get(key)
         if not definition:
@@ -1091,11 +1606,15 @@ def yujin_map_values(
     section: str | None = Query(default=None),
     key_prefix: str | None = Query(default=None),
     limit: int = Query(default=300, le=2000),
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> list[YujinMapValueOut]:
+    scope = resolve_edge_scope(db, site, edge)
     stmt = (
-        select(YujinMapDefinition, YujinMapValue)
-        .join(YujinMapValue, YujinMapValue.definition_id == YujinMapDefinition.id)
+        select(YujinMapDefinition, EdgeMapValue)
+        .join(EdgeMapValue, EdgeMapValue.key == YujinMapDefinition.key)
+        .where(EdgeMapValue.edge_node_id == scope.edge.id)
         .order_by(YujinMapDefinition.key.asc())
         .limit(limit)
     )
@@ -1115,19 +1634,28 @@ def yujin_map_values(
             name=definition.name,
             section=definition.section,
             value=current.value_text,
-            updated_at=heartbeat_timestamp(definition.key, current.updated_at),
-            source=heartbeat_source(definition.key, current.source),
+            updated_at=current.updated_at,
+            source=current.source,
         )
         for definition, current in rows
     ]
 
 
 @app.get("/api/yujin/map-values/{key}", response_model=YujinMapValueOut)
-def yujin_map_value(key: str, db: Session = Depends(get_db)) -> YujinMapValueOut:
+def yujin_map_value(
+    key: str,
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> YujinMapValueOut:
+    scope = resolve_edge_scope(db, site, edge)
     row = db.execute(
-        select(YujinMapDefinition, YujinMapValue)
-        .join(YujinMapValue, YujinMapValue.definition_id == YujinMapDefinition.id)
-        .where(YujinMapDefinition.key == key.upper())
+        select(YujinMapDefinition, EdgeMapValue)
+        .join(EdgeMapValue, EdgeMapValue.key == YujinMapDefinition.key)
+        .where(
+            EdgeMapValue.edge_node_id == scope.edge.id,
+            YujinMapDefinition.key == key.upper(),
+        )
     ).first()
     if not row:
         raise HTTPException(status_code=404, detail="Map key not found")
@@ -1142,8 +1670,8 @@ def yujin_map_value(key: str, db: Session = Depends(get_db)) -> YujinMapValueOut
         name=definition.name,
         section=definition.section,
         value=current.value_text,
-        updated_at=heartbeat_timestamp(definition.key, current.updated_at),
-        source=heartbeat_source(definition.key, current.source),
+        updated_at=current.updated_at,
+        source=current.source,
     )
 
 
@@ -1151,23 +1679,28 @@ def yujin_map_value(key: str, db: Session = Depends(get_db)) -> YujinMapValueOut
 def yujin_map_value_history(
     key: str,
     limit: int = Query(default=100, le=1000),
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> list[YujinMapValueHistoryOut]:
-    rows = db.execute(
-        select(YujinMapValueHistory, YujinMapDefinition)
-        .join(YujinMapDefinition, YujinMapDefinition.id == YujinMapValueHistory.definition_id)
-        .where(YujinMapDefinition.key == key.upper())
-        .order_by(desc(YujinMapValueHistory.recorded_at))
+    scope = resolve_edge_scope(db, site, edge)
+    rows = db.scalars(
+        select(EdgeMapValueHistory)
+        .where(
+            EdgeMapValueHistory.edge_node_id == scope.edge.id,
+            EdgeMapValueHistory.key == key.upper(),
+        )
+        .order_by(desc(EdgeMapValueHistory.recorded_at))
         .limit(limit)
     ).all()
     return [
         YujinMapValueHistoryOut(
-            key=definition.key,
+            key=history.key,
             value=history.value_text,
             recorded_at=history.recorded_at,
             source=history.source,
         )
-        for history, definition in rows
+        for history in rows
     ]
 
 
@@ -1178,13 +1711,19 @@ def yujin_map_value_history(
 def equipment_log_table(
     equipment_no: int,
     limit: int = Query(default=300, ge=1, le=300),
+    site: str | None = Query(default=None),
+    edge: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> list[EquipmentLogSnapshotOut]:
     if not 1 <= equipment_no <= 12:
         raise HTTPException(status_code=422, detail="Equipment number must be between 1 and 12")
+    scope = resolve_edge_scope(db, site, edge)
     rows = db.scalars(
         select(EquipmentLogSnapshot)
-        .where(EquipmentLogSnapshot.equipment_no == equipment_no)
+        .where(
+            EquipmentLogSnapshot.edge_node_id == scope.edge.id,
+            EquipmentLogSnapshot.equipment_no == equipment_no,
+        )
         .order_by(
             EquipmentLogSnapshot.recorded_at.desc(),
             EquipmentLogSnapshot.id.desc(),
@@ -1206,41 +1745,106 @@ def equipment_log_table(
     ]
 
 
-@app.post("/api/yujin/ingest-map")
-async def ingest_yujin_map_values(
-    payload: YujinMapIngestRequest,
-    db: Session = Depends(get_db),
-    x_collector_token: str | None = Header(default=None),
+async def process_edge_map_ingest(
+    scope: EdgeScope,
+    payload: EdgeMapIngestRequest,
+    db: Session,
 ) -> dict:
     ingest_started = time.monotonic()
-    if x_collector_token != settings.collector_token:
-        raise HTTPException(status_code=401, detail="Invalid collector token")
-
     recorded_at = payload.recorded_at or datetime.now(timezone.utc)
     normalized_values = [(item.key.upper(), str(item.value)) for item in payload.values]
     heartbeat_keys = [key.upper() for key in payload.heartbeat_keys]
     keys = list(dict.fromkeys([key for key, _ in normalized_values] + heartbeat_keys))
+
+    if (
+        payload.sequence is not None
+        and scope.edge.last_sequence is not None
+        and payload.sequence <= scope.edge.last_sequence
+    ):
+        return {
+            "status": "duplicate",
+            "received_count": len(normalized_values),
+            "updated_count": 0,
+            "keys": keys,
+            "sequence": payload.sequence,
+        }
+
+    scope.edge.status = "online"
+    scope.edge.last_seen_at = datetime.now(timezone.utc)
+    if payload.sequence is not None:
+        scope.edge.last_sequence = payload.sequence
+    if payload.software_version:
+        scope.edge.software_version = payload.software_version
+
     if not keys:
-        return {"status": "accepted", "received_count": 0, "updated_count": 0, "keys": []}
-    remember_yujin_heartbeats(keys, recorded_at, payload.source)
+        db.commit()
+        return {
+            "status": "accepted",
+            "received_count": 0,
+            "updated_count": 0,
+            "keys": [],
+            "sequence": payload.sequence,
+        }
 
-    with YUJIN_LIVE_MAP_LOCK:
-        for key, value_text in normalized_values:
-            YUJIN_LIVE_MAP[key] = (value_text, recorded_at, payload.source)
+    current_rows = db.scalars(
+        select(EdgeMapValue).where(
+            EdgeMapValue.edge_node_id == scope.edge.id,
+            EdgeMapValue.key.in_(keys),
+        )
+    ).all()
+    current_by_key = {row.key: row for row in current_rows}
+    changed_count = 0
 
-        for key in heartbeat_keys:
-            if key not in YUJIN_LIVE_MAP:
-                continue
-            value_text, _, _ = YUJIN_LIVE_MAP[key]
-            YUJIN_LIVE_MAP[key] = (value_text, recorded_at, payload.source)
-        live_snapshot = dict(YUJIN_LIVE_MAP)
-        heartbeat_snapshot = dict(YUJIN_MAP_HEARTBEATS)
+    for key, value_text in normalized_values:
+        current = current_by_key.get(key)
+        if current is None:
+            current = EdgeMapValue(
+                edge_node_id=scope.edge.id,
+                key=key,
+                value_text=value_text,
+                updated_at=recorded_at,
+                source=payload.source,
+            )
+            db.add(current)
+            current_by_key[key] = current
+            changed_count += 1
+        else:
+            if current.value_text != value_text:
+                changed_count += 1
+            current.value_text = value_text
+            current.updated_at = recorded_at
+            current.source = payload.source
+        db.add(
+            EdgeMapValueHistory(
+                edge_node_id=scope.edge.id,
+                key=key,
+                value_text=value_text,
+                recorded_at=recorded_at,
+                source=payload.source,
+            )
+        )
 
-    if should_capture_equipment_logs(recorded_at):
+    for key in heartbeat_keys:
+        current = current_by_key.get(key)
+        if current is not None:
+            current.updated_at = recorded_at
+            current.source = payload.source
+
+    db.commit()
+    live_snapshot, heartbeat_snapshot = edge_runtime.update(
+        scope.edge.id,
+        normalized_values,
+        heartbeat_keys,
+        recorded_at,
+        payload.source,
+    )
+
+    if should_capture_equipment_logs(recorded_at, scope.edge.id):
         snapshots = build_equipment_log_snapshots(
             live_snapshot,
             heartbeat_snapshot,
             recorded_at,
+            edge_node_id=scope.edge.id,
         )
         try:
             persist_equipment_log_snapshots(db, snapshots)
@@ -1260,24 +1864,53 @@ async def ingest_yujin_map_values(
     await manager.broadcast_json(
         {
             "type": "yujin_map_update",
+            "site": scope.site.code,
+            "edge": scope.edge.code,
             "keys": keys,
             "values": broadcast_values,
             "recorded_at": recorded_at.isoformat(),
             "source": payload.source,
-        }
+        },
+        channel=f"edge:{scope.edge.id}",
     )
     elapsed_ms = (time.monotonic() - ingest_started) * 1000
     if elapsed_ms >= YUJIN_INGEST_SLOW_LOG_MS:
         print(
             "yujin ingest-map slow: "
-            f"{elapsed_ms:.0f}ms received={len(normalized_values)} heartbeat={len(heartbeat_keys)}"
+            f"{elapsed_ms:.0f}ms edge={scope.edge.code} "
+            f"received={len(normalized_values)} heartbeat={len(heartbeat_keys)}"
         )
     return {
         "status": "accepted",
         "received_count": len(normalized_values),
-        "updated_count": len(normalized_values),
+        "updated_count": changed_count,
         "keys": keys,
+        "sequence": payload.sequence,
     }
+
+
+@app.post("/api/edge/ingest-map")
+async def ingest_edge_map_values(
+    payload: EdgeMapIngestRequest,
+    db: Session = Depends(get_db),
+    x_edge_id: str | None = Header(default=None),
+    x_edge_token: str | None = Header(default=None),
+) -> dict:
+    scope = authenticate_edge(db, x_edge_id, x_edge_token)
+    return await process_edge_map_ingest(scope, payload, db)
+
+
+@app.post("/api/yujin/ingest-map")
+async def ingest_yujin_map_values(
+    payload: YujinMapIngestRequest,
+    db: Session = Depends(get_db),
+    x_collector_token: str | None = Header(default=None),
+) -> dict:
+    if x_collector_token != settings.collector_token:
+        raise HTTPException(status_code=401, detail="Invalid collector token")
+    scope = resolve_edge_scope(db)
+    compatible_payload = EdgeMapIngestRequest(**payload.model_dump())
+    return await process_edge_map_ingest(scope, compatible_payload, db)
 
 
 @app.get("/api/devices", response_model=list[DeviceOut])
@@ -1471,9 +2104,23 @@ async def ingest_telemetry(
 
 @app.websocket("/ws/dashboard")
 async def dashboard_ws(websocket: WebSocket) -> None:
-    await manager.connect(websocket)
+    site_code = websocket.headers.get("x-monitoring-server") or websocket.query_params.get("site")
+    edge_code = websocket.query_params.get("edge")
+    with SessionLocal() as db:
+        try:
+            scope = resolve_edge_scope(db, site_code, edge_code)
+        except HTTPException:
+            await websocket.close(code=4404)
+            return
+        channel = f"edge:{scope.edge.id}"
+        connected_payload = {
+            "type": "connected",
+            "site": scope.site.code,
+            "edge": scope.edge.code,
+        }
+    await manager.connect(websocket, channel=channel)
     try:
-        await websocket.send_json({"type": "connected"})
+        await websocket.send_json(connected_payload)
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:

@@ -41,9 +41,11 @@ class EquipmentLogSnapshotTest(unittest.TestCase):
             values,
             {"1100": (NOW, "test")},
             NOW,
+            edge_node_id=7,
         )
 
         self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["edge_node_id"], 7)
         self.assertEqual(rows[0]["equipment_no"], 1)
         self.assertEqual(rows[0]["pressure"], 8.1)
         self.assertEqual(rows[0]["temperature"], 73.5)
