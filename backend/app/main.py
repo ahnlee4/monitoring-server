@@ -268,6 +268,10 @@ def seed_default_site_and_edge() -> None:
             )
             db.add(edge)
             db.flush()
+        else:
+            configured_token_hash = hash_edge_token(settings.effective_default_edge_token)
+            if edge.token_hash != configured_token_hash:
+                edge.token_hash = configured_token_hash
         legacy_setting_keys = (
             MODE_SETTINGS_KEY,
             COLLECTOR_SETTINGS_KEY,
