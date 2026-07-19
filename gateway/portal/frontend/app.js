@@ -351,7 +351,7 @@ function adminView() {
           </div>
 
           <details class="card setup-disclosure">
-            <summary><strong>서버 추가 +</strong></summary>
+            <summary><strong>서버 추가</strong><span class="add-button-icon" aria-hidden="true">+</span></summary>
             <form id="server-form" class="setup-form">
               <label><span>현장 이름</span><input name="name" maxlength="128" placeholder="본사 압축기실" required /></label>
               <label>
@@ -382,7 +382,7 @@ function adminView() {
           </div>
 
           <details class="card setup-disclosure">
-            <summary><strong>사용자 추가 +</strong></summary>
+            <summary><strong>사용자 추가</strong><span class="add-button-icon" aria-hidden="true">+</span></summary>
             <form id="user-form" class="setup-form">
               <div class="user-fields">
                 <label><span>이름</span><input name="displayName" maxlength="128" placeholder="생산팀 홍길동" required /></label>
