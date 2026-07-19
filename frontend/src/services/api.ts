@@ -95,6 +95,17 @@ export type GsTechSettings = {
   updated_at?: string | null;
 };
 
+export type EquipmentLogSnapshot = {
+  equipment_no: number;
+  pressure: number | null;
+  temperature: number | null;
+  operation_status: number | null;
+  rpm: number | null;
+  alarm_word: number | null;
+  error_word: number | null;
+  recorded_at: string;
+};
+
 export class ControlStatusUnsupportedError extends Error {
   constructor() {
     super("명령 상태 조회 API가 없습니다. backend 이미지를 최신으로 갱신해주세요.");
@@ -170,6 +181,15 @@ export async function fetchYujinMapValues(limit: number, timeoutMs: number) {
   const response = await fetchWithTimeout(`${apiBase()}/yujin/live-map?limit=${limit}`, { cache: "no-store" }, timeoutMs);
   if (!response.ok) throw new Error(`live-map ${response.status}`);
   return (await response.json()) as YujinMapValue[];
+}
+
+export async function fetchEquipmentLogs(equipmentNo: number, limit = 300) {
+  const response = await fetchWithTimeout(
+    `${apiBase()}/yujin/equipment/${equipmentNo}/logs?limit=${limit}`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) throw new Error(`equipment logs ${response.status}`);
+  return (await response.json()) as EquipmentLogSnapshot[];
 }
 
 export async function fetchModeSettings() {

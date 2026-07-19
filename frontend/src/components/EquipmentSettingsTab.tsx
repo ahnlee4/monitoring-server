@@ -90,7 +90,7 @@ function settingFields(compressor: Equipment): SettingField[] {
     return compressor.inverter
       ? [
           { key: "primary", label: "제어 압력 설정", offset: 0x46, scale: 10, unit: "bar" },
-          { key: "secondary", label: "상세 제어 압력", offset: 0x48, scale: 10, unit: "bar" },
+          { key: "secondary", label: "상세 제어 압력 설정", offset: 0x48, scale: 10, unit: "bar" },
           { key: "tertiary", label: "압력 제어 설정", offset: 0x4a, scale: 10, unit: "bar" },
           { key: "autoStop", label: "자동 정지 시간", offset: 0x52, scale: 1, unit: "min" },
         ]
@@ -104,7 +104,7 @@ function settingFields(compressor: Equipment): SettingField[] {
   return compressor.inverter
     ? [
         { key: "primary", label: "제어 압력 설정", offset: 0x20, scale: 10, unit: "bar" },
-        { key: "secondary", label: "상세 제어 압력", offset: 0x22, scale: 10, unit: "bar" },
+        { key: "secondary", label: "상세 제어 압력 설정", offset: 0x22, scale: 10, unit: "bar" },
         { key: "tertiary", label: "압력 제어 설정", offset: 0x24, scale: 10, unit: "bar" },
         { key: "autoStop", label: "자동 정지 시간", offset: 0x2a, scale: 1, unit: "min" },
       ]

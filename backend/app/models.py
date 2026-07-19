@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -115,6 +115,27 @@ class YujinMapValueHistory(Base):
     source: Mapped[str] = mapped_column(String(64), default="collector")
 
     definition: Mapped[YujinMapDefinition] = relationship(back_populates="history")
+
+
+class EquipmentLogSnapshot(Base):
+    __tablename__ = "equipment_log_snapshots"
+    __table_args__ = (
+        Index(
+            "ix_equipment_log_snapshots_equipment_recorded",
+            "equipment_no",
+            "recorded_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    equipment_no: Mapped[int] = mapped_column(Integer, index=True)
+    pressure: Mapped[float | None] = mapped_column(Float, nullable=True)
+    temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    operation_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rpm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    alarm_word: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_word: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class AppSetting(Base):

@@ -7,7 +7,9 @@ import {
 } from "../services/api";
 import type { MapWrite } from "../services/api";
 import type { YujinMapValue } from "../types";
+import { EquipmentLogTable } from "./EquipmentLogTable";
 import { EquipmentSettingsTab } from "./EquipmentSettingsTab";
+import { buildEquipmentStatusItems } from "./equipmentStatusData";
 
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const INVALID_DISPLAY_RAW_VALUE = 32767;
@@ -32,14 +34,14 @@ type EquipmentCompressor = {
   totalHours: number;
 };
 
-type DetailTab = "setting" | "status" | "error" | "power";
+type DetailTab = "setting" | "status" | "error" | "log";
 type DetailItem = { label: string; value: string; alarm?: boolean };
 
 const TABS: Array<{ key: DetailTab; label: string }> = [
   { key: "setting", label: "SETTING" },
   { key: "status", label: "STATUS" },
   { key: "error", label: "ERROR" },
-  { key: "power", label: "POWER" },
+  { key: "log", label: "LOG TABLE" },
 ];
 
 export function EquipmentDetailDialog({
@@ -58,7 +60,7 @@ export function EquipmentDetailDialog({
   const [commandStatus, setCommandStatus] = useState("");
   const repairMask = Math.trunc(liveMapNumber(mapValues, "0058", 0));
   const repairActive = Boolean(repairMask & (1 << (compressor.id - 1)));
-  const statusItems = buildStatusItems(compressor, mapValues);
+  const statusItems = buildEquipmentStatusItems(compressor, mapValues);
   const errorItems = buildErrorItems(compressor, mapValues);
   const visibleItems = activeTab === "status" ? statusItems : [];
 
@@ -156,7 +158,7 @@ export function EquipmentDetailDialog({
 
         <div className="min-h-0 overflow-hidden p-[12px] max-sm:p-[9px]">
           {activeTab === "error" ? <ErrorTab items={errorItems} compressorName={compressor.name} /> : null}
-          {activeTab === "power" ? <PowerTab compressor={compressor} mapValues={mapValues} /> : null}
+          {activeTab === "log" ? <EquipmentLogTable equipmentNo={compressor.id} /> : null}
           {activeTab === "setting" ? (
             <EquipmentSettingsTab
               commandBusy={commandBusy}
@@ -198,19 +200,6 @@ function ErrorTab({ compressorName, items }: { compressorName: string; items: De
     return <EmptyTab title={`${compressorName} 고장/알림 없음`} description="현재 수신된 알림 또는 고장 비트가 없습니다" />;
   }
 
-  return <MetricGrid items={items} />;
-}
-
-function PowerTab({ compressor, mapValues }: { compressor: EquipmentCompressor; mapValues: Record<string, YujinMapValue> }) {
-  const prefix = (0x30 + compressor.id).toString(16).toUpperCase();
-  const titles = ["상전류 R", "상전류 S", "상전류 T", "상전압 R", "상전압 S", "상전압 T", "선간전압 RS", "선간전압 ST", "선간전압 TR", "유효전력", "무효전력", "피상전력", "유효전력량", "무효전력량", "피상전력량", "부하율", "역률", "주파수"];
-  const units = ["A", "A", "A", "V", "V", "V", "V", "V", "V", "W", "Var", "VA", "Wh", "Varh", "VAh", "%", "%", "Hz"];
-  const items = titles.map((label, index) => {
-    const key = `${prefix}${(index * 2).toString(16).padStart(2, "0").toUpperCase()}`;
-    const item = mapValues[key];
-    const value = item && item.source !== "seed" ? Number(item.value) : Number.NaN;
-    return { label, value: Number.isFinite(value) ? `${index === 16 ? value.toFixed(3) : Math.round(value)} ${units[index]}` : `--- ${units[index]}` };
-  });
   return <MetricGrid items={items} />;
 }
 
@@ -314,60 +303,6 @@ function EmptyTab({ description, title }: { description: string; title: string }
   );
 }
 
-function buildStatusItems(compressor: EquipmentCompressor, values: Record<string, YujinMapValue>): DetailItem[] {
-  const prefix = getMapPrefix(compressor);
-  const readWord = (offset: number) => liveMapNumber(values, `${prefix}${offset.toString(16).padStart(2, "0")}`, Number.NaN);
-  if (compressor.isOilfree) {
-    const descriptors: Array<[string, number, number, string]> = [
-      ["서비스 압력", 0x00, 100, "bar"], ["에어필터 교환시간 설정값", 0x72, 1, "hr"],
-      ["에어필터 차압", 0x02, 1, "mbar"], ["오일필터 교환시간 설정값", 0x74, 1, "hr"],
-      ["2단 흡입 압력", 0x04, 100, "bar"], ["오일 교환시간 설정값", 0x76, 1, "hr"],
-      ["오일 압력", 0x06, 100, "bar"], ["그리스 교환시간 설정값", 0x78, 1, "hr"],
-      ["서비스 온도", 0x0c, 1, "℃"], ["에어필터 사용시간", 0x8a, 1, "hr"],
-      ["1단 토출 온도", 0x0e, 1, "℃"], ["오일필터 사용시간", 0x8c, 1, "hr"],
-      ["2단 흡입 온도", 0x10, 1, "℃"], ["오일 사용시간", 0x8e, 1, "hr"],
-      ["2단 토출 온도", 0x12, 1, "℃"], ["그리스 사용시간", 0x90, 1, "hr"],
-      ["오일 온도", 0x14, 1, "℃"], ["부하 시간", 0x94, 1, "hr"],
-      ["모터 권선 온도 R", 0x1e, 1, "℃"], ["무부하 시간", 0x92, 1, "hr"],
-      ["모터 권선 온도 S", 0x20, 1, "℃"], ["자동 정지 시간", 0x96, 1, "hr"],
-      ["모터 권선 온도 T", 0x22, 1, "℃"], ["정지 시간", 0x98, 1, "hr"],
-      ["모터 베어링 온도 DE", 0x24, 1, "℃"], ["총 운전시간", 0x9a, 1, "hr"],
-      ["모터 베어링 온도 NDE", 0x26, 1, "℃"],
-    ];
-    const items = descriptors.map(([label, offset, divisor, unit]) => ({
-      label,
-      value: formatStatusValue(readWord(offset), divisor, unit),
-    }));
-    items.push({ label: "운전횟수", value: formatIntegerValue(combineWords(readWord(0xa0), readWord(0x9e)), "ea") });
-    return items;
-  }
-
-  const pressure1 = compressor.inverter ? 0x20 : 0x26;
-  const pressure2 = compressor.inverter ? 0x22 : 0x28;
-  const descriptors: Array<[string, number, number, string]> = [
-    ["부하 운전 시간", 0x60, 1, "hr"],
-    [compressor.inverter ? "제어 압력" : "무부하 압력", pressure1, 10, "bar"],
-    ["무부하 운전 시간", 0x62, 1, "hr"],
-    [compressor.inverter ? "상세 제어 압력" : "부하 압력", pressure2, 10, "bar"],
-    ["자동 정지 시간", 0x64, 1, "hr"],
-    [compressor.inverter ? "압력 제어" : "자동정지 시간", compressor.inverter ? 0x24 : 0x2a, compressor.inverter ? 10 : 1, compressor.inverter ? "bar" : "min"],
-    ["정지 시간", 0x66, 1, "hr"], ["메뉴얼 무부하", 0x38, 1, ""],
-    ["에어필터 사용 시간", 0x50, 1, "hr"], ["팬 가동 온도", 0x3e, 1, "℃"],
-    ["오일필터 사용 시간", 0x52, 1, "hr"], ["팬 정지 온도", 0x40, 1, "℃"],
-    ["세퍼레이터 사용 시간", 0x54, 1, "hr"], ["부하 운전 온도", 0x3c, 1, "℃"],
-    ["오일 사용 시간", 0x56, 1, "hr"], ["오일 알람 온도", 0x42, 1, "℃"],
-    ["구리스 사용 시간", 0x78, 1, "hr"], ["오일 과온 정지 온도", 0x44, 1, "℃"],
-    ["Fan on/off 운전", 0x3a, 1, ""],
-  ];
-  return [
-    { label: "총 운전 시간", value: formatIntegerValue(combineWords(readWord(0x6a), readWord(0x68)), "hr") },
-    { label: "모델", value: compressor.model || "---" },
-    { label: "모터 기동 횟수", value: formatIntegerValue(combineWords(readWord(0x6e), readWord(0x6c)), "ea") },
-    { label: "장비 번호", value: formatIntegerValue(readWord(0x70), "ea") },
-    ...descriptors.map(([label, offset, divisor, unit]) => ({ label, value: formatStatusValue(readWord(offset), divisor, unit) })),
-  ];
-}
-
 function buildErrorItems(compressor: EquipmentCompressor, values: Record<string, YujinMapValue>): DetailItem[] {
   const prefix = getMapPrefix(compressor);
   const readWord = (offset: number) => liveMapNumber(values, `${prefix}${offset.toString(16).padStart(2, "0")}`, 0);
@@ -395,19 +330,6 @@ function appendActiveBits(items: DetailItem[], word: number, labels: string[], k
   labels.forEach((label, bit) => {
     if (label && (Math.trunc(word) & (1 << bit))) items.push({ label: kind, value: label, alarm: true });
   });
-}
-
-function combineWords(high: number, low: number) {
-  if (!Number.isFinite(high) || !Number.isFinite(low)) return Number.NaN;
-  return (Math.trunc(high) & 0xffff) * 65536 + (Math.trunc(low) & 0xffff);
-}
-
-function formatStatusValue(raw: number, divisor: number, unit: string) {
-  if (!Number.isFinite(raw) || raw === INVALID_DISPLAY_RAW_VALUE) return "---";
-  const signedRaw = ["bar", "mbar", "℃"].includes(unit) && raw > 32767 ? raw - 65536 : raw;
-  const value = signedRaw / divisor;
-  const formatted = divisor === 1 ? Math.trunc(value).toLocaleString("ko-KR") : value.toFixed(divisor === 100 ? 2 : 1);
-  return unit ? `${formatted} ${unit}` : formatted;
 }
 
 function getMapPrefix(compressor: EquipmentCompressor) {

@@ -8,12 +8,18 @@ from threading import RLock
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import desc, func, select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
 from app.control_protocol import RUN_SEQUENCE_KEYS, build_group_operation_writes
 from app.database import Base, engine, get_db, SessionLocal
+from app.equipment_logs import (
+    build_equipment_log_snapshots,
+    persist_equipment_log_snapshots,
+    set_equipment_log_capture_interval,
+    should_capture_equipment_logs,
+)
 from app.admin_settings import (
     CONTROL_PROFILE_SETTINGS_KEY,
     GSTECH_SETTINGS_KEY,
@@ -33,6 +39,7 @@ from app.models import (
     ControlCommand,
     CurrentValue,
     Device,
+    EquipmentLogSnapshot,
     TelemetryRecord,
     YujinMapDefinition,
     YujinMapValue,
@@ -47,6 +54,7 @@ from app.schemas import (
     ControlProfileIn,
     ControlProfileOut,
     DeviceOut,
+    EquipmentLogSnapshotOut,
     GroupOperationIn,
     GroupSettingsIn,
     GsTechSettingsIn,
@@ -142,6 +150,13 @@ def on_startup() -> None:
     migrate_legacy_schema()
     seed_devices()
     seed_yujin_map()
+    with SessionLocal() as db:
+        product_settings, _ = load_json_setting(
+            db,
+            PRODUCT_SETTINGS_KEY,
+            sanitize_product_settings,
+        )
+        set_equipment_log_capture_interval(product_settings["save_cycle_seconds"])
     sms_monitor = DisconnectSmsMonitor(settings, latest_yujin_seen_at, SolapiSmsClient(settings))
     sms_monitor.start()
     schedule_runner = ScheduleRunner(load_schedule_for_runner, dispatch_schedule_event)
@@ -696,6 +711,7 @@ def update_product_settings(
         payload.model_dump(),
         sanitize_product_settings,
     )
+    set_equipment_log_capture_interval(normalized["save_cycle_seconds"])
     return ProductSettingsOut(**normalized, updated_at=updated_at)
 
 
@@ -1153,9 +1169,45 @@ def yujin_map_value_history(
     ]
 
 
+@app.get(
+    "/api/yujin/equipment/{equipment_no}/logs",
+    response_model=list[EquipmentLogSnapshotOut],
+)
+def equipment_log_table(
+    equipment_no: int,
+    limit: int = Query(default=300, ge=1, le=300),
+    db: Session = Depends(get_db),
+) -> list[EquipmentLogSnapshotOut]:
+    if not 1 <= equipment_no <= 12:
+        raise HTTPException(status_code=422, detail="Equipment number must be between 1 and 12")
+    rows = db.scalars(
+        select(EquipmentLogSnapshot)
+        .where(EquipmentLogSnapshot.equipment_no == equipment_no)
+        .order_by(
+            EquipmentLogSnapshot.recorded_at.desc(),
+            EquipmentLogSnapshot.id.desc(),
+        )
+        .limit(limit)
+    ).all()
+    return [
+        EquipmentLogSnapshotOut(
+            equipment_no=row.equipment_no,
+            pressure=row.pressure,
+            temperature=row.temperature,
+            operation_status=row.operation_status,
+            rpm=row.rpm,
+            alarm_word=row.alarm_word,
+            error_word=row.error_word,
+            recorded_at=row.recorded_at,
+        )
+        for row in rows
+    ]
+
+
 @app.post("/api/yujin/ingest-map")
 async def ingest_yujin_map_values(
     payload: YujinMapIngestRequest,
+    db: Session = Depends(get_db),
     x_collector_token: str | None = Header(default=None),
 ) -> dict:
     ingest_started = time.monotonic()
@@ -1179,6 +1231,20 @@ async def ingest_yujin_map_values(
                 continue
             value_text, _, _ = YUJIN_LIVE_MAP[key]
             YUJIN_LIVE_MAP[key] = (value_text, recorded_at, payload.source)
+        live_snapshot = dict(YUJIN_LIVE_MAP)
+        heartbeat_snapshot = dict(YUJIN_MAP_HEARTBEATS)
+
+    if should_capture_equipment_logs(recorded_at):
+        snapshots = build_equipment_log_snapshots(
+            live_snapshot,
+            heartbeat_snapshot,
+            recorded_at,
+        )
+        try:
+            persist_equipment_log_snapshots(db, snapshots)
+        except SQLAlchemyError as exc:
+            db.rollback()
+            print(f"equipment log snapshot persistence failed: {exc}")
 
     broadcast_values = [
         {

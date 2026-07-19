@@ -100,6 +100,17 @@ class YujinMapValueHistoryOut(BaseModel):
     source: str
 
 
+class EquipmentLogSnapshotOut(BaseModel):
+    equipment_no: int
+    pressure: float | None
+    temperature: float | None
+    operation_status: int | None
+    rpm: int | None
+    alarm_word: int | None
+    error_word: int | None
+    recorded_at: datetime
+
+
 class YujinMapValueUpdateIn(BaseModel):
     key: str
     value: str | int | float
