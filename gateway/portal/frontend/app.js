@@ -243,10 +243,8 @@ function accessRows() {
         ? state.adminServers.filter((server) => server.isActive).length
         : user.serverIds.length;
       const contactText = user.contactValue || "";
-      const searchText =
-        `${user.displayName} ${user.username} ${contactText}`.toLowerCase();
       return `
-        <article class="access-card" data-user-card data-search="${escapeHtml(searchText)}">
+        <article class="access-card" data-user-card>
           <div class="access-card-head">
             <div class="user-identity">
               <span class="user-avatar">${escapeHtml(user.displayName.trim().charAt(0) || "U")}</span>
@@ -304,7 +302,7 @@ function registeredServerCards() {
   return state.adminServers
     .map(
       (server) => `
-        <article class="managed-server-card" data-server-card data-search="${escapeHtml(`${server.name} ${server.slug} ${server.targetHost}`.toLowerCase())}">
+        <article class="managed-server-card">
           <div class="server-card-edit" role="button" tabindex="0" data-id="${server.id}" aria-label="${escapeHtml(`${server.name} 서버 수정`)}">
             <div class="managed-server-main">
               <span class="server-status-icon ${server.isActive ? "active" : "inactive"}" aria-hidden="true"></span>
@@ -374,10 +372,6 @@ function adminView() {
             </form>
           </details>
 
-          <label class="search-field pane-search">
-            <span aria-hidden="true">⌕</span>
-            <input id="server-search" type="search" placeholder="서버 검색" />
-          </label>
           <div class="registered-list">${registeredServerCards()}</div>
         </section>
 
@@ -422,10 +416,6 @@ function adminView() {
             </form>
           </details>
 
-          <label class="search-field pane-search">
-            <span aria-hidden="true">⌕</span>
-            <input id="user-search" type="search" placeholder="사용자 검색" />
-          </label>
           <div class="access-list">${accessRows()}</div>
         </section>
       </div>
@@ -490,7 +480,6 @@ function adminView() {
   document.querySelector(".cancel-server-edit").addEventListener("click", () => document.querySelector("#server-dialog").close());
   document.querySelector("#server-edit-form").addEventListener("submit", submitServerUpdate);
   wireAdminFormHelpers();
-  wireAdminSearch();
 }
 
 async function redrawAdmin(successText) {
@@ -532,20 +521,6 @@ function wireAdminFormHelpers() {
   document.querySelectorAll('#user-form input[name="role"]').forEach((input) => input.addEventListener("change", updateRole));
   permissionInputs.forEach((input) => input.addEventListener("change", updatePermissionCount));
   updateRole();
-}
-
-function wireAdminSearch() {
-  const wireSearch = (inputSelector, itemSelector) => {
-    const input = document.querySelector(inputSelector);
-    input?.addEventListener("input", () => {
-      const query = input.value.trim().toLowerCase();
-      document.querySelectorAll(itemSelector).forEach((item) => {
-        item.hidden = Boolean(query) && !item.dataset.search.includes(query);
-      });
-    });
-  };
-  wireSearch("#user-search", "[data-user-card]");
-  wireSearch("#server-search", "[data-server-card]");
 }
 
 function updateAccessCardState(userId, dirty = true) {
