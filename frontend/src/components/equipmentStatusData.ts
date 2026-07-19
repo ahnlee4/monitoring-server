@@ -105,7 +105,7 @@ function buildInjectionStatusItems(
     },
     {
       label: "모델",
-      value: compressor.model === "-" ? "Micos" : compressor.model,
+      value: compressor.model === "-" ? "---" : compressor.model,
     },
     {
       label: "모터 기동 횟수",

@@ -7,6 +7,7 @@ from threading import RLock
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.admin_settings import model_name_is_inverter
 from app.models import EquipmentLogSnapshot
 
 
@@ -44,6 +45,7 @@ def build_equipment_log_snapshots(
     heartbeats: HeartbeatMap,
     recorded_at: datetime,
     max_equipment: int = 12,
+    equipment_models: list[str] | None = None,
 ) -> list[dict]:
     captured_at = _aware_datetime(recorded_at)
     oilfree_selector = _integer_value(live_map, "0006") or 0
@@ -55,7 +57,8 @@ def build_equipment_log_snapshots(
         if not _recent_heartbeat(heartbeats, f"{prefix}00", captured_at):
             continue
 
-        is_inverter = _is_inverter(live_map, prefix, is_oilfree)
+        configured_model = equipment_models[equipment_no - 1] if equipment_models and equipment_no <= len(equipment_models) else ""
+        is_inverter = model_name_is_inverter(configured_model) if configured_model else _is_inverter(live_map, prefix, is_oilfree)
         pressure_raw = _number_value(live_map, f"{prefix}00")
         temperature_raw = _number_value(live_map, f"{prefix}{'0C' if is_oilfree else '02'}")
         operation_status = _integer_value(live_map, f"{prefix}{'30' if is_oilfree else '16'}")

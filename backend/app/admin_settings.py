@@ -49,6 +49,7 @@ def default_product_settings() -> dict:
         "camera1_port": 0,
         "camera2_ip": "0.0.0.0",
         "camera2_port": 0,
+        "equipment_models": ["37", "37", "37V", "", "", "", "", "", "", "", "", ""],
     }
 
 
@@ -161,6 +162,15 @@ def sanitize_product_settings(payload: dict | None) -> dict:
     screen_saver_seconds = integer("screen_saver_seconds", 0, 300)
     if 0 < screen_saver_seconds < 10:
         screen_saver_seconds = 10
+    raw_equipment_models = source.get("equipment_models")
+    equipment_models = []
+    for index in range(12):
+        if isinstance(raw_equipment_models, list) and index < len(raw_equipment_models):
+            raw_model = raw_equipment_models[index]
+        else:
+            raw_model = defaults["equipment_models"][index]
+        model = str(raw_model or "").strip().upper().removeprefix("MICOS ")
+        equipment_models.append(model[:16] if re.fullmatch(r"[0-9A-Z-]{1,16}", model) else "")
     return {
         "factory_password": text("factory_password", defaults["factory_password"], 32),
         "admin_password": admin_password if len(admin_password) == 6 else defaults["admin_password"],
@@ -177,7 +187,12 @@ def sanitize_product_settings(payload: dict | None) -> dict:
         "camera1_port": integer("camera1_port", 0, 65535),
         "camera2_ip": text("camera2_ip", defaults["camera2_ip"], 45),
         "camera2_port": integer("camera2_port", 0, 65535),
+        "equipment_models": equipment_models,
     }
+
+
+def model_name_is_inverter(model: str) -> bool:
+    return str(model).strip().upper().removeprefix("MICOS ").endswith("V")
 
 
 def sanitize_gstech_settings(payload: dict | None) -> dict:

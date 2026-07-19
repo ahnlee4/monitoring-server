@@ -80,6 +80,31 @@ class EquipmentLogSnapshotTest(unittest.TestCase):
         self.assertEqual(rows[0]["alarm_word"], 5)
         self.assertEqual(rows[0]["error_word"], 0x00010002)
 
+    def test_configured_model_overrides_live_inverter_type(self) -> None:
+        values = live(
+            {
+                "0006": 0,
+                "1100": 812,
+                "1104": 3600,
+                "1116": 2,
+                "1174": 17,
+                "1200": 810,
+                "1204": 3500,
+                "1216": 2,
+                "1274": 5,
+            }
+        )
+
+        rows = build_equipment_log_snapshots(
+            values,
+            {"1100": (NOW, "test"), "1200": (NOW, "test")},
+            NOW,
+            equipment_models=["37", "37V"],
+        )
+
+        self.assertIsNone(rows[0]["rpm"])
+        self.assertEqual(rows[1]["rpm"], 3500)
+
     def test_stale_equipment_is_not_recorded(self) -> None:
         values = live({"0006": 0, "1100": 812})
         rows = build_equipment_log_snapshots(values, {}, NOW)

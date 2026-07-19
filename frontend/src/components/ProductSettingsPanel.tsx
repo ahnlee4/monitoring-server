@@ -8,6 +8,8 @@ import {
 } from "../services/api";
 import type { ProductSettings } from "../services/api";
 import type { YujinMapValue } from "../types";
+import { DEFAULT_EQUIPMENT_MODELS } from "../equipmentModels";
+import { EquipmentModelSettingsPanel } from "./EquipmentModelSettingsPanel";
 import { MapSettingsPanel, PRODUCT_SETTING_FIELDS } from "./AdminSettingsTabs";
 import type { SettingsAccessLevel } from "./AdminSettingsTabs";
 
@@ -48,6 +50,7 @@ const DEFAULT_SETTINGS: ProductSettings = {
   camera1_port: 0,
   camera2_ip: "0.0.0.0",
   camera2_port: 0,
+  equipment_models: DEFAULT_EQUIPMENT_MODELS,
 };
 
 type LocalField = {
@@ -118,6 +121,16 @@ export function ProductSettingsPanel({
     setSettings((current) => ({
       ...current,
       [key]: typeof current[key] === "number" ? Number(value) : value,
+    }));
+  };
+
+  const updateEquipmentModel = (index: number, model: string) => {
+    setSettings((current) => ({
+      ...current,
+      equipment_models: Array.from(
+        { length: 12 },
+        (_, modelIndex) => modelIndex === index ? model : current.equipment_models[modelIndex] ?? "",
+      ),
     }));
   };
 
@@ -196,6 +209,14 @@ export function ProductSettingsPanel({
   return (
     <div className="grid gap-[12px]">
       <MapSettingsPanel fields={PRODUCT_SETTING_FIELDS} level={level} mapValues={mapValues} title="제품 / 장비 설정" />
+      <EquipmentModelSettingsPanel
+        configuredCount={Number(mapValues["004E"]?.value ?? 0)}
+        disabled={integratedRun || level !== FACTORY}
+        models={settings.equipment_models}
+        onChange={updateEquipmentModel}
+        onSave={() => void saveLocal()}
+        saving={saving}
+      />
       <section className="rounded-[10px] border border-[#d9e6f0] bg-white p-[14px]">
         <div className="text-[20px] font-black text-[#173f69]">제품 로컬 설정</div>
         <div className="mt-[10px] grid grid-cols-3 gap-[8px] max-lg:grid-cols-2 max-sm:grid-cols-1">

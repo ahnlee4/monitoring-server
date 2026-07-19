@@ -27,6 +27,7 @@ from app.admin_settings import (
     SCHEDULE_SETTINGS_KEY,
     ScheduleRunner,
     load_json_setting,
+    model_name_is_inverter,
     sanitize_gstech_settings,
     sanitize_control_profile,
     sanitize_product_settings,
@@ -779,6 +780,8 @@ def current_group_operation_writes(
     available_units = [unit for unit in available_units if not exclude_mask & (1 << (unit - 1))]
     sequence = [current_map_int(db, key, 0) for key in RUN_SEQUENCE_KEYS]
     oilfree_selector = current_map_int(db, "0006", 0)
+    product_settings, _ = load_json_setting(db, PRODUCT_SETTINGS_KEY, sanitize_product_settings)
+    equipment_models = product_settings["equipment_models"]
     running_units = []
     inverter_units: set[int] = set()
     for unit in available_units:
@@ -789,7 +792,15 @@ def current_group_operation_writes(
             running_units.append(unit)
         model_offset = "7C" if prefix == "2" else "74"
         model_value = current_map_int(db, f"{prefix}{unit_hex}{model_offset}", 0)
-        if (prefix == "2" and current_map_int(db, f"{prefix}{unit_hex}7E", 0) == 3) or (prefix == "1" and model_value >= 17):
+        configured_model = equipment_models[unit - 1] if unit <= len(equipment_models) else ""
+        if configured_model:
+            is_inverter = model_name_is_inverter(configured_model)
+        else:
+            is_inverter = (
+                (prefix == "2" and current_map_int(db, f"{prefix}{unit_hex}7E", 0) == 3)
+                or (prefix == "1" and 17 <= model_value <= 26)
+            )
+        if is_inverter:
             inverter_units.add(unit)
     control_profile, _ = load_json_setting(db, CONTROL_PROFILE_SETTINGS_KEY, sanitize_control_profile)
     return build_group_operation_writes(
@@ -1235,10 +1246,12 @@ async def ingest_yujin_map_values(
         heartbeat_snapshot = dict(YUJIN_MAP_HEARTBEATS)
 
     if should_capture_equipment_logs(recorded_at):
+        product_settings, _ = load_json_setting(db, PRODUCT_SETTINGS_KEY, sanitize_product_settings)
         snapshots = build_equipment_log_snapshots(
             live_snapshot,
             heartbeat_snapshot,
             recorded_at,
+            equipment_models=product_settings["equipment_models"],
         )
         try:
             persist_equipment_log_snapshots(db, snapshots)

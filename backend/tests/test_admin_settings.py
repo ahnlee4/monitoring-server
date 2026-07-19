@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 from app.admin_settings import (
     due_schedule_events,
+    model_name_is_inverter,
     sanitize_control_profile,
     sanitize_gstech_settings,
     sanitize_product_settings,
@@ -64,6 +65,19 @@ class AdminSettingsTest(unittest.TestCase):
         self.assertEqual(settings["user_password"], "9999")
         self.assertEqual(settings["save_cycle_seconds"], 30)
         self.assertEqual(settings["backlight_percent"], 0)
+        self.assertEqual(settings["equipment_models"][:3], ["37", "37", "37V"])
+
+    def test_equipment_model_overrides_are_normalized(self) -> None:
+        settings = sanitize_product_settings(
+            {
+                "equipment_models": ["Micos 55v", "37", "invalid model!"],
+            }
+        )
+
+        self.assertEqual(len(settings["equipment_models"]), 12)
+        self.assertEqual(settings["equipment_models"][:3], ["55V", "37", ""])
+        self.assertTrue(model_name_is_inverter(settings["equipment_models"][0]))
+        self.assertFalse(model_name_is_inverter(settings["equipment_models"][1]))
 
     def test_dio_selections_cannot_be_equal(self) -> None:
         settings = sanitize_gstech_settings({"dio_bit0": 3, "dio_bit4": 3})
