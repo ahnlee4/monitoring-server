@@ -206,7 +206,6 @@ class ProductSettingsIn(BaseModel):
     camera1_port: int = Field(ge=0, le=65535)
     camera2_ip: str = Field(max_length=45)
     camera2_port: int = Field(ge=0, le=65535)
-    equipment_models: list[str] = Field(default_factory=list, max_length=12)
 
 
 class ProductSettingsOut(ProductSettingsIn):

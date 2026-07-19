@@ -23,22 +23,16 @@ import type { SettingsTabKey } from "./components/AdminSettingsTabs";
 import { useYujinMapValues } from "./hooks/useYujinMapValues";
 import { useRuntimeSettings } from "./hooks/useRuntimeSettings";
 import {
-  DEFAULT_EQUIPMENT_MODELS,
-  equipmentModelIsInverter,
-  normalizeEquipmentModel,
-} from "./equipmentModels";
-import {
   ControlStatusDelayedError,
   ControlStatusUnsupportedError,
   fetchControlProfile,
-  fetchProductSettings,
   enqueueGroupOperation,
   enqueueMapWriteBatch,
   fetchModeSettings,
   updateModeSettings,
   waitForControlCommand,
 } from "./services/api";
-import type { ControlProfile, MapWrite, ModeSettings, ProductSettings } from "./services/api";
+import type { ControlProfile, MapWrite, ModeSettings } from "./services/api";
 import type { YujinMapValue } from "./types";
 
 type CompressorState = {
@@ -100,7 +94,7 @@ type UserLevel = 0 | 1 | 2;
 const LIVE_VALUE_MAX_AGE_MS = 30_000;
 const SYSTEM_LINK_GRACE_MS = 8_000;
 const DEVICE_LINK_GRACE_MS = 12_000;
-const APP_VERSION = "0.1.144";
+const APP_VERSION = "0.1.143";
 const INVALID_DISPLAY_RAW_VALUE = 32767;
 const MAIN_RUN_SEQUENCE_KEYS = ["0028", "002A", "002C", "002E", "0030", "0032", "0034", "0036", "0038", "000E", "0010", "0012"];
 const MODE_ALIGN_ROWS = 7;
@@ -206,7 +200,6 @@ export default function App() {
   const [adminLogoClicks, setAdminLogoClicks] = useState({ count: 0, lastAt: 0 });
   const [modeSequenceBusy, setModeSequenceBusy] = useState(false);
   const [controlProfile, setControlProfile] = useState<ControlProfile | null>(null);
-  const [equipmentModels, setEquipmentModels] = useState<string[]>(DEFAULT_EQUIPMENT_MODELS);
   const mapValues = useYujinMapValues();
   const isMobile = useIsMobileViewport();
 
@@ -221,32 +214,9 @@ export default function App() {
       .catch((error) => console.error("failed to load control profile", error));
   }, []);
 
-  useEffect(() => {
-    let alive = true;
-    fetchProductSettings()
-      .then((settings) => {
-        if (alive && Array.isArray(settings.equipment_models)) setEquipmentModels(settings.equipment_models);
-      })
-      .catch((error) => console.error("failed to load equipment model settings", error));
-    const handleSettingsUpdate = (event: Event) => {
-      const settings = (event as CustomEvent<ProductSettings>).detail;
-      if (settings && Array.isArray(settings.equipment_models)) setEquipmentModels(settings.equipment_models);
-    };
-    window.addEventListener("product-settings-updated", handleSettingsUpdate);
-    return () => {
-      alive = false;
-      window.removeEventListener("product-settings-updated", handleSettingsUpdate);
-    };
-  }, []);
-
   const dashboard = useMemo(
-    () => buildDashboardFromMap(
-      mapValues,
-      controlProfile?.pressure_gap ?? null,
-      controlProfile?.main_inverter_unit ?? 0,
-      equipmentModels,
-    ),
-    [controlProfile, equipmentModels, mapValues],
+    () => buildDashboardFromMap(mapValues, controlProfile?.pressure_gap ?? null, controlProfile?.main_inverter_unit ?? 0),
+    [controlProfile, mapValues],
   );
   const runtime = useRuntimeSettings(
     dashboard.lowPressureAlarm !== "none" || dashboard.compressors.some((compressor) => compressor.connected && (compressor.alarm || compressor.fault)),
@@ -430,13 +400,9 @@ function buildDashboardFromMap(
   values: Record<string, YujinMapValue>,
   savedPressureGap: number | null = null,
   savedMainInverterUnit = 0,
-  equipmentModels: string[] = [],
 ): DashboardState {
   const oilfreeSelector = liveMapNumber(values, "0006", 0);
-  const compressors = Array.from(
-    { length: 12 },
-    (_, index) => buildCompressorFromMap(values, index, oilfreeSelector, equipmentModels[index]),
-  );
+  const compressors = Array.from({ length: 12 }, (_, index) => buildCompressorFromMap(values, index, oilfreeSelector));
   const connectedMask = liveMapNumber(values, "0002", maskFromCompressors(compressors));
   const systemOnline = hasRecentValue(values, "0000", SYSTEM_LINK_GRACE_MS) || hasRecentValue(values, "0002", SYSTEM_LINK_GRACE_MS);
   const displayOrder = readRunSequence(values);
@@ -512,7 +478,6 @@ function buildCompressorFromMap(
   values: Record<string, YujinMapValue>,
   index: number,
   oilfreeSelector: number,
-  configuredModel?: string,
 ): CompressorState {
   const compNo = index + 1;
   const oilPrefix = `2${compNo.toString(16).toUpperCase()}`;
@@ -550,14 +515,8 @@ function buildCompressorFromMap(
   const runHoursHigh = read("9C", "6A", 0);
   const currentAmps = liveMapNumber(values, `${(0x30 + compNo).toString(16).toUpperCase()}00`, Number.NaN);
   const connected = hasRecentValue(values, `${primaryPrefix}00`, DEVICE_LINK_GRACE_MS) || hasRecentValue(values, `${fallbackPrefix}00`, DEVICE_LINK_GRACE_MS);
-  const liveModelName = isOilfree ? getOilfreeModelName(model1, version1, version2) : getInjectionModelName(model1);
-  const configuredModelName = normalizeEquipmentModel(configuredModel);
-  const modelName = configuredModelName || (connected ? liveModelName : "-");
-  const isInverter = configuredModelName
-    ? equipmentModelIsInverter(configuredModelName)
-    : isOilfree
-      ? version1 === 3
-      : model1 >= 17 && model1 <= 26;
+  const modelName = connected ? (isOilfree ? getOilfreeModelName(model1, version1, version2) : getInjectionModelName(model1)) : "-";
+  const isInverter = isOilfree ? version1 === 3 : model1 >= 17 && model1 <= 26;
 
   return {
     ...emptyCompressor(index),

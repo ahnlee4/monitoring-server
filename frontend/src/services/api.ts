@@ -84,7 +84,6 @@ export type ProductSettings = {
   camera1_port: number;
   camera2_ip: string;
   camera2_port: number;
-  equipment_models: string[];
   updated_at?: string | null;
 };
 
