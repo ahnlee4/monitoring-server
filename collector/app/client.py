@@ -11,27 +11,36 @@ class BackendClient:
         yujin_api_url: str | None = None,
         control_api_url: str | None = None,
         request_timeout: float = 15.0,
+        edge_id: str = "",
     ) -> None:
         self.api_url = api_url
         self.yujin_api_url = yujin_api_url
         self.control_api_url = control_api_url
         self.token = token
+        self.edge_id = edge_id.strip()
         self.request_timeout = request_timeout
         self.session = requests.Session()
 
     def app_settings_api_url(self) -> str | None:
         if not self.control_api_url:
             return None
+        if self.edge_id and self.control_api_url.endswith("/api/edge"):
+            return f"{self.control_api_url}/settings"
         suffix = "/api/control"
         if self.control_api_url.endswith(suffix):
             return f"{self.control_api_url[: -len(suffix)]}/api/app-settings"
         return None
 
+    def auth_headers(self) -> dict[str, str]:
+        if self.edge_id:
+            return {"X-Edge-Id": self.edge_id, "X-Edge-Token": self.token}
+        return {"X-Collector-Token": self.token}
+
     def publish(self, frame: TelemetryFrame) -> None:
         response = self.session.post(
             self.api_url,
             json=frame.to_payload(),
-            headers={"X-Collector-Token": self.token},
+            headers=self.auth_headers(),
             timeout=self.request_timeout,
         )
         response.raise_for_status()
@@ -42,7 +51,7 @@ class BackendClient:
         response = self.session.get(
             f"{self.control_api_url}/commands/next",
             params={"limit": limit},
-            headers={"X-Collector-Token": self.token},
+            headers=self.auth_headers(),
             timeout=self.request_timeout,
         )
         response.raise_for_status()
@@ -61,7 +70,7 @@ class BackendClient:
         response = self.session.post(
             f"{self.control_api_url}/commands/{command_id}/ack",
             json={"status": status, "error": error},
-            headers={"X-Collector-Token": self.token},
+            headers=self.auth_headers(),
             timeout=self.request_timeout,
         )
         response.raise_for_status()
@@ -71,8 +80,8 @@ class BackendClient:
         if not app_settings_url:
             return {}
         response = self.session.get(
-            f"{app_settings_url}/collector-settings",
-            headers={"X-Collector-Token": self.token},
+            f"{app_settings_url}/{'collector' if self.edge_id else 'collector-settings'}",
+            headers=self.auth_headers(),
             timeout=self.request_timeout,
         )
         response.raise_for_status()
@@ -82,10 +91,15 @@ class BackendClient:
     def publish_map_batch(self, batch: CollectorBatch) -> None:
         if not self.yujin_api_url or (not batch.map_values and not batch.heartbeat_keys):
             return
+        self.publish_map_payload(batch.map_payload())
+
+    def publish_map_payload(self, payload: dict) -> None:
+        if not self.yujin_api_url:
+            return
         response = self.session.post(
             self.yujin_api_url,
-            json=batch.map_payload(),
-            headers={"X-Collector-Token": self.token},
+            json=payload,
+            headers=self.auth_headers(),
             timeout=self.request_timeout,
         )
         response.raise_for_status()

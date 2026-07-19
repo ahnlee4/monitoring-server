@@ -7,6 +7,7 @@ from app.client import BackendClient
 from app.config import get_env, get_int_env
 from app.drivers.rs485_driver import RS485Collector
 from app.models import CollectorBatch
+from app.outbox import EdgeOutbox
 
 
 SENTINEL_BATCH = CollectorBatch(source="collector-stop", recorded_at="")
@@ -69,6 +70,9 @@ def build_collector() -> tuple[BaseCollector, int]:
 
 
 def default_control_api_url(yujin_api_url: str) -> str:
+    edge_suffix = "/api/edge/ingest-map"
+    if yujin_api_url.endswith(edge_suffix):
+        return f"{yujin_api_url[: -len(edge_suffix)]}/api/edge"
     suffix = "/api/yujin/ingest-map"
     if yujin_api_url.endswith(suffix):
         return f"{yujin_api_url[: -len(suffix)]}/api/control"
@@ -138,8 +142,10 @@ def enqueue_latest_batch(queue: Queue[CollectorBatch], batch: CollectorBatch) ->
 def run_publish_loop(
     client: BackendClient,
     queue: Queue[CollectorBatch],
+    outbox: EdgeOutbox,
     publish_telemetry: bool,
     status_log_interval_seconds: float,
+    software_version: str,
 ) -> None:
     last_status_log_at = 0.0
     last_map_error: str | None = None
@@ -155,10 +161,19 @@ def run_publish_loop(
                     print(f"sent telemetry for {frame.device_code} via {frame.source}")
                 except Exception as exc:
                     print(f"collector publish error for {frame.device_code}: {exc}")
-        if batch.map_values or batch.heartbeat_keys:
+        if outbox.count():
             try:
                 start = time.monotonic()
-                client.publish_map_batch(batch)
+                sent_count = 0
+                for item in outbox.pending(limit=100):
+                    payload = {
+                        **item.payload,
+                        "sequence": item.sequence,
+                        "software_version": software_version,
+                    }
+                    client.publish_map_payload(payload)
+                    outbox.acknowledge(item.sequence)
+                    sent_count += 1
                 if last_map_error is not None:
                     print("collector yujin map connection recovered")
                     last_map_error = None
@@ -167,7 +182,7 @@ def run_publish_loop(
                 if status_log_interval_seconds > 0 and now - last_status_log_at >= status_log_interval_seconds:
                     print(
                         "sent yujin map batch "
-                        f"changed={len(batch.map_values)} heartbeat={len(batch.heartbeat_keys)} in {elapsed_ms:.0f}ms"
+                        f"batches={sent_count} pending={outbox.count()} in {elapsed_ms:.0f}ms"
                     )
                     last_status_log_at = now
             except Exception as exc:
@@ -179,8 +194,11 @@ def run_publish_loop(
 
 
 def main() -> None:
-    api_url = get_env("COLLECTOR_API_URL", "http://backend:8000/api/ingest/telemetry")
-    yujin_api_url = get_env("COLLECTOR_YUJIN_API_URL", "http://backend:8000/api/yujin/ingest-map")
+    edge_id = get_env("EDGE_NODE_ID", "").strip()
+    server_url = get_env("EDGE_SERVER_URL", "http://backend:8000").rstrip("/")
+    default_map_path = "/api/edge/ingest-map" if edge_id else "/api/yujin/ingest-map"
+    api_url = get_env("COLLECTOR_API_URL", f"{server_url}/api/ingest/telemetry")
+    yujin_api_url = get_env("COLLECTOR_YUJIN_API_URL", f"{server_url}{default_map_path}")
     control_api_url = get_env("COLLECTOR_CONTROL_API_URL", default_control_api_url(yujin_api_url))
     publish_telemetry = get_env("COLLECTOR_PUBLISH_TELEMETRY", "false").strip().lower() in ("1", "true", "yes", "on")
     request_timeout = float(get_env("COLLECTOR_REQUEST_TIMEOUT_SECONDS", "15"))
@@ -192,7 +210,12 @@ def main() -> None:
     slow_poll_log_ms = float(get_env("COLLECTOR_SLOW_POLL_LOG_MS", "0"))
     status_log_interval_seconds = float(get_env("COLLECTOR_STATUS_LOG_INTERVAL_SECONDS", "0"))
     idle_loop_delay_seconds = float(get_env("COLLECTOR_IDLE_LOOP_DELAY_SECONDS", "0.01"))
-    token = get_env("COLLECTOR_TOKEN", "change-me")
+    token = get_env("EDGE_NODE_TOKEN", get_env("COLLECTOR_TOKEN", "change-me"))
+    software_version = get_env("EDGE_SOFTWARE_VERSION", "0.1.143")
+    outbox = EdgeOutbox(
+        get_env("EDGE_OUTBOX_PATH", "/var/lib/monitoring-edge/outbox.db"),
+        get_int_env("EDGE_OUTBOX_MAX_ROWS", 10_000),
+    )
 
     collector, interval = build_collector()
     print(f"collector main loop interval={interval}s slow_poll_log_ms={slow_poll_log_ms:g}")
@@ -201,12 +224,14 @@ def main() -> None:
         token=token,
         yujin_api_url=yujin_api_url,
         request_timeout=request_timeout,
+        edge_id=edge_id,
     )
     control_client = BackendClient(
         api_url=api_url,
         token=token,
         control_api_url=control_api_url,
         request_timeout=control_request_timeout,
+        edge_id=edge_id,
     )
 
     threading.Thread(
@@ -217,7 +242,14 @@ def main() -> None:
     publish_queue: Queue[CollectorBatch] = Queue(maxsize=1)
     threading.Thread(
         target=run_publish_loop,
-        args=(data_client, publish_queue, publish_telemetry, status_log_interval_seconds),
+        args=(
+            data_client,
+            publish_queue,
+            outbox,
+            publish_telemetry,
+            status_log_interval_seconds,
+            software_version,
+        ),
         daemon=True,
     ).start()
 
@@ -250,6 +282,8 @@ def main() -> None:
                 f"changed={len(batch.map_values)} heartbeat={len(batch.heartbeat_keys)}"
             )
         if batch.map_values or batch.heartbeat_keys or (publish_telemetry and batch.frames):
+            if batch.map_values or batch.heartbeat_keys:
+                outbox.enqueue(batch.map_payload())
             enqueue_latest_batch(publish_queue, batch)
         loop_delay = collector_loop_delay(interval, idle_loop_delay_seconds, batch)
         if loop_delay > 0:
