@@ -227,11 +227,9 @@ code { color: #c1d5e7; font-size: 11px; }
 .admin-quick-stats .has-pending { border-color: rgba(255, 196, 87, .3); color: #e7c47f; }
 .setup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .setup-disclosure { overflow: hidden; border-radius: 14px; box-shadow: 0 12px 32px rgba(0, 0, 0, .16); }
-.setup-disclosure > summary { display: flex; align-items: center; justify-content: space-between; min-height: 58px; padding: 0 19px; cursor: pointer; list-style: none; }
+.setup-disclosure > summary { display: flex; align-items: center; justify-content: flex-start; min-height: 58px; padding: 0 19px; cursor: pointer; list-style: none; }
 .setup-disclosure > summary::-webkit-details-marker { display: none; }
 .setup-disclosure > summary strong { font-size: 14px; }
-.setup-disclosure > summary > span { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); font-size: 18px; transition: transform .2s; }
-.setup-disclosure[open] > summary > span { transform: rotate(45deg); }
 .setup-form { display: grid; gap: 15px; padding: 19px; border-top: 1px solid var(--line); }
 .setup-form .endpoint-preview { padding: 11px 13px; }
 .setup-form .permission-fieldset { padding: 12px; }
@@ -683,21 +681,18 @@ summary:focus-visible {
 
 .setup-actions { gap: 12px; }
 .setup-disclosure {
-  border-color: var(--line);
+  border-color: #9dbcf0;
   border-radius: 12px;
   box-shadow: none;
 }
 .setup-disclosure > summary {
   min-height: 56px;
   padding: 0 16px;
-  background: #f8fafc;
+  background: var(--accent);
+  color: #fff;
 }
-.setup-disclosure > summary:hover { background: #f1f5f9; }
-.setup-disclosure > summary > span {
-  border-color: #b9cbe4;
-  background: #fff;
-  color: var(--accent);
-}
+.setup-disclosure > summary:hover { background: var(--accent-strong); }
+.setup-disclosure[open] > summary { background: var(--accent-strong); }
 .setup-form {
   gap: 16px;
   padding: 20px;
