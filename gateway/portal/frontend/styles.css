@@ -202,6 +202,18 @@ code { color: #c1d5e7; font-size: 11px; }
 
 .admin-compact-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
 .admin-compact-head .back-link { margin: 0; }
+.admin-management-grid { display: grid; grid-template-columns: minmax(360px, .82fr) minmax(520px, 1.18fr); align-items: start; gap: 18px; }
+.admin-pane { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: rgba(9, 23, 40, .42); }
+.pane-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 15px; }
+.pane-heading h2 { margin: 0; font-size: 22px; }
+.pane-heading > span { padding: 6px 9px; border-radius: 999px; background: rgba(124, 153, 180, .1); color: var(--muted); font-size: 10px; white-space: nowrap; }
+.pane-heading > span strong { color: var(--accent); }
+.pane-heading > span.has-pending { background: rgba(255, 196, 87, .1); color: #e7c47f; }
+.pane-heading > span.has-pending strong { color: #f2c56f; }
+.pane-search { grid-template-columns: auto 1fr; width: 100%; min-width: 0; margin: 12px 0; }
+.server-pane .managed-server-card { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+.server-pane .server-endpoint { grid-column: 1; }
+.server-pane .managed-server-actions { grid-column: 2; grid-row: 1 / span 2; flex-direction: column; }
 .admin-quick-stats { display: flex; gap: 8px; }
 .admin-quick-stats > span { padding: 8px 11px; border: 1px solid var(--line); border-radius: 9px; background: rgba(14, 29, 47, .72); color: var(--muted); font-size: 10px; }
 .admin-quick-stats strong { margin-left: 5px; color: var(--text); font-size: 12px; }
@@ -317,6 +329,10 @@ code { color: #c1d5e7; font-size: 11px; }
 .privacy-footer-note strong { color: #e7c47f; font-size: 12px; }
 .privacy-footer-note p { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
 
+@media (max-width: 1000px) {
+  .admin-management-grid { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 900px) {
   .login-layout { grid-template-columns: 1fr; gap: 30px; padding: 60px 0; }.brand-panel h1 { font-size: 46px; }.status-line { margin-top: 24px; }
   .server-grid { grid-template-columns: 1fr 1fr; }
@@ -363,6 +379,9 @@ code { color: #c1d5e7; font-size: 11px; }
   .permission-selector-create { max-height: none; overflow: visible; padding-right: 0; }
   .managed-server-card { grid-template-columns: 1fr; gap: 16px; }
   .managed-server-actions { grid-column: 1; grid-row: auto; flex-direction: row; justify-content: stretch; }
+  .server-pane .managed-server-card { grid-template-columns: 1fr; }
+  .server-pane .server-endpoint { grid-column: 1; }
+  .server-pane .managed-server-actions { grid-column: 1; grid-row: auto; flex-direction: row; }
   .managed-server-actions button { flex: 1; }
   .split-actions { grid-template-columns: 1fr 1fr; }.split-actions span { display: none; }
   .registration-page { width: min(100% - 24px, 1240px); padding-top: 18px; }

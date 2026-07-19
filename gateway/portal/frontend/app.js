@@ -347,95 +347,94 @@ function adminView() {
     <section class="content admin-content">
       <div class="admin-compact-head">
         <a class="back-link" href="/">← 서버 선택</a>
-        <div class="admin-quick-stats" aria-label="등록 현황">
-          <span>사용자 <strong>${state.adminUsers.length}</strong></span>
-          <span class="${pendingUsers ? "has-pending" : ""}">승인 대기 <strong>${pendingUsers}</strong></span>
-          <span>서버 <strong>${activeServers}/${state.adminServers.length}</strong></span>
-        </div>
-      </div>
-
-      <div class="setup-actions">
-        <details class="card setup-disclosure">
-          <summary><strong>서버 추가</strong><span aria-hidden="true">+</span></summary>
-          <form id="server-form" class="setup-form">
-            <label><span>현장 이름</span><input name="name" maxlength="128" placeholder="본사 압축기실" required /></label>
-            <label>
-              <span>접속 주소</span>
-              <div class="slug-field">
-                <input name="slug" pattern="[a-z0-9][a-z0-9-]*[a-z0-9]|[a-z0-9]" maxlength="63" inputmode="url" autocapitalize="none" spellcheck="false" placeholder="head-office" required />
-                <span>.${escapeHtml(location.hostname)}</span>
-              </div>
-            </label>
-            <div class="inline-fields">
-              <label><span>내부 IP</span><input name="targetHost" inputmode="decimal" placeholder="192.168.0.101" required /></label>
-              <label><span>포트</span><input name="targetPort" type="number" value="80" min="1" max="65535" required /></label>
-            </div>
-            <div class="endpoint-preview">
-              <strong id="server-url-preview">접속 주소를 입력하세요</strong>
-            </div>
-            <button class="primary full-button" type="submit">서버 추가</button>
-          </form>
-        </details>
-
-        <details class="card setup-disclosure">
-          <summary><strong>사용자 추가</strong><span aria-hidden="true">+</span></summary>
-          <form id="user-form" class="setup-form">
-            <div class="user-fields">
-              <label><span>이름</span><input name="displayName" maxlength="128" placeholder="생산팀 홍길동" required /></label>
-              <label><span>아이디</span><input name="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9_.-]+" autocapitalize="none" spellcheck="false" placeholder="operator01" required /></label>
-            </div>
-            <label><span>임시 비밀번호</span><input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="12자 이상" required /></label>
-            <fieldset class="role-fieldset">
-              <legend>역할</legend>
-              <div class="role-options">
-                <label class="role-option">
-                  <input name="role" type="radio" value="user" checked />
-                  <span><strong>일반 사용자</strong><small>선택 서버</small></span>
-                </label>
-                <label class="role-option">
-                  <input name="role" type="radio" value="admin" />
-                  <span><strong>관리자</strong><small>전체 서버</small></span>
-                </label>
-              </div>
-            </fieldset>
-            <fieldset id="new-user-permissions" class="permission-fieldset">
-              <legend class="sr-only">접속 서버 선택</legend>
-              <div class="permission-title">
-                <strong>접속 서버</strong>
-                <span id="selected-server-count">0개 선택</span>
-              </div>
-              <div class="permission-selector permission-selector-create">
-                ${permissionOptions({ name: "serverIds" })}
-              </div>
-            </fieldset>
-            <button class="primary full-button" type="submit">사용자 추가</button>
-          </form>
-        </details>
       </div>
 
       <p id="form-message" class="message admin-toast" data-toast="true" role="status" aria-live="polite"></p>
 
-      <section class="management-section">
-        <div class="management-heading">
-          <h2>사용자</h2>
-          <label class="search-field">
-            <span aria-hidden="true">⌕</span>
-            <input id="user-search" type="search" placeholder="사용자 검색" />
-          </label>
-        </div>
-        <div class="access-list">${accessRows()}</div>
-      </section>
+      <div class="admin-management-grid">
+        <section class="admin-pane server-pane">
+          <div class="pane-heading">
+            <h2>서버 관리</h2>
+            <span><strong>${activeServers}</strong> / ${state.adminServers.length}</span>
+          </div>
 
-      <section class="management-section">
-        <div class="management-heading">
-          <h2>서버</h2>
-          <label class="search-field">
+          <details class="card setup-disclosure">
+            <summary><strong>서버 추가</strong><span aria-hidden="true">+</span></summary>
+            <form id="server-form" class="setup-form">
+              <label><span>현장 이름</span><input name="name" maxlength="128" placeholder="본사 압축기실" required /></label>
+              <label>
+                <span>접속 주소</span>
+                <div class="slug-field">
+                  <input name="slug" pattern="[a-z0-9][a-z0-9-]*[a-z0-9]|[a-z0-9]" maxlength="63" inputmode="url" autocapitalize="none" spellcheck="false" placeholder="head-office" required />
+                  <span>.${escapeHtml(location.hostname)}</span>
+                </div>
+              </label>
+              <div class="inline-fields">
+                <label><span>내부 IP</span><input name="targetHost" inputmode="decimal" placeholder="192.168.0.101" required /></label>
+                <label><span>포트</span><input name="targetPort" type="number" value="80" min="1" max="65535" required /></label>
+              </div>
+              <div class="endpoint-preview">
+                <strong id="server-url-preview">접속 주소를 입력하세요</strong>
+              </div>
+              <button class="primary full-button" type="submit">서버 추가</button>
+            </form>
+          </details>
+
+          <label class="search-field pane-search">
             <span aria-hidden="true">⌕</span>
             <input id="server-search" type="search" placeholder="서버 검색" />
           </label>
-        </div>
-        <div class="registered-list">${registeredServerCards()}</div>
-      </section>
+          <div class="registered-list">${registeredServerCards()}</div>
+        </section>
+
+        <section class="admin-pane user-pane">
+          <div class="pane-heading">
+            <h2>사용자 관리</h2>
+            <span class="${pendingUsers ? "has-pending" : ""}">승인 대기 <strong>${pendingUsers}</strong></span>
+          </div>
+
+          <details class="card setup-disclosure">
+            <summary><strong>사용자 추가</strong><span aria-hidden="true">+</span></summary>
+            <form id="user-form" class="setup-form">
+              <div class="user-fields">
+                <label><span>이름</span><input name="displayName" maxlength="128" placeholder="생산팀 홍길동" required /></label>
+                <label><span>아이디</span><input name="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9_.-]+" autocapitalize="none" spellcheck="false" placeholder="operator01" required /></label>
+              </div>
+              <label><span>임시 비밀번호</span><input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="12자 이상" required /></label>
+              <fieldset class="role-fieldset">
+                <legend>역할</legend>
+                <div class="role-options">
+                  <label class="role-option">
+                    <input name="role" type="radio" value="user" checked />
+                    <span><strong>일반 사용자</strong><small>선택 서버</small></span>
+                  </label>
+                  <label class="role-option">
+                    <input name="role" type="radio" value="admin" />
+                    <span><strong>관리자</strong><small>전체 서버</small></span>
+                  </label>
+                </div>
+              </fieldset>
+              <fieldset id="new-user-permissions" class="permission-fieldset">
+                <legend class="sr-only">접속 서버 선택</legend>
+                <div class="permission-title">
+                  <strong>접속 서버</strong>
+                  <span id="selected-server-count">0개 선택</span>
+                </div>
+                <div class="permission-selector permission-selector-create">
+                  ${permissionOptions({ name: "serverIds" })}
+                </div>
+              </fieldset>
+              <button class="primary full-button" type="submit">사용자 추가</button>
+            </form>
+          </details>
+
+          <label class="search-field pane-search">
+            <span aria-hidden="true">⌕</span>
+            <input id="user-search" type="search" placeholder="사용자 검색" />
+          </label>
+          <div class="access-list">${accessRows()}</div>
+        </section>
+      </div>
     </section>
     <dialog id="user-dialog" class="password-dialog">
       <form id="user-edit-form" class="form-card">
