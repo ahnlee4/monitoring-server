@@ -2,6 +2,10 @@
 
 Ubuntu/WSL2 기준으로 동작하는 산업용 현장 모니터링 서버 MVP입니다. 현재 단계에서는 mock collector 중심으로 전체 흐름을 먼저 완성하고, 이후 RS485 프로토콜과 상세 화면 디자인을 교체할 수 있게 구조를 분리했습니다.
 
+> 현재 운영 구조는 개발 PC 중앙 서버 + 보드 edge-agent 방식입니다. 새 배포는
+> [중앙 서버 / 보드 엣지 구성 문서](docs/central-edge-deployment.md)와
+> `docker-compose.server.yml`, `docker-compose.edge.yml`을 기준으로 합니다.
+
 ## 1. 디렉터리 트리
 
 ```text
@@ -27,12 +31,12 @@ Ubuntu/WSL2 기준으로 동작하는 산업용 현장 모니터링 서버 MVP�
 
 ### 중앙 로그인 게이트웨이
 
-여러 현장 보드를 하나의 외부 도메인에서 사용자별로 분리하려면 별도 중앙 게이트웨이 구성을 사용합니다.
+여러 지점을 하나의 외부 도메인에서 사용자별로 분리하려면 중앙 게이트웨이 구성을 사용합니다. 각 gateway slug는 중앙 backend의 사이트 코드와 같아야 하며, 대상은 모두 개발 PC 중앙 서버(`192.168.7.140:18080`)로 지정할 수 있습니다.
 
 - 실행 구성: `docker-compose.gateway.yml`
-- 보드 내부망 전환 오버레이: `docker-compose.board.gateway.yml`
 - 실행 스크립트: `scripts/start-gateway.sh`
-- DNS, 인증서, 공유기, 방화벽 및 운영 절차: [중앙 로그인 게이트웨이 구축 문서](docs/gateway-deployment.md)
+- 중앙/보드 배포: [중앙 서버 / 보드 엣지 구성 문서](docs/central-edge-deployment.md)
+- DNS, 인증서 및 로그인 운영: [중앙 로그인 게이트웨이 구축 문서](docs/gateway-deployment.md)
 
 ## 3. MVP 범위
 
@@ -217,14 +221,16 @@ COLLECTOR_CONTROL_POLL_SECONDS=0.1
 docker compose up -d --build
 ```
 
-보드 배포에서는 보드에서 이미지를 빌드하지 않고 GitHub Container Registry 이미지를 내려받아 실행합니다.
+보드 배포에서는 DB와 웹 서버를 실행하지 않고 GitHub Container Registry의 edge-agent 이미지만 내려받습니다.
 
 ```bash
 git pull
+cp .env.edge.example .env.edge
+# .env.edge의 EDGE_NODE_ID, EDGE_NODE_TOKEN, EDGE_SERVER_URL 설정
 ./scripts/start-board.sh
 ```
 
-`docker-compose.board.yml`은 `ghcr.io/ahnlee4/monitoring-*` 이미지를 사용합니다. private package로 생성된 경우 보드에서 한 번 GHCR 로그인이 필요합니다.
+`docker-compose.board.yml`은 `ghcr.io/ahnlee4/monitoring-collector` 이미지만 사용합니다. private package로 생성된 경우 보드에서 한 번 GHCR 로그인이 필요합니다.
 
 ```bash
 echo '<github-token>' | docker login ghcr.io -u ahnlee4 --password-stdin
@@ -266,12 +272,12 @@ curl http://localhost/api/health
 
 ### 7-9. 우분투 PC 화면에 자동 로그인 + 키오스크 실행
 
-현장 모니터가 연결된 Ubuntu 보드는 부팅 후 로컬 서버 화면을 자동으로 띄웁니다. 아래 스크립트는 GUI와 Chromium을 준비하고, `linaro` 자동 로그인 및 Openbox 키오스크를 구성합니다.
+현장 모니터가 연결된 Ubuntu 보드는 부팅 후 중앙 서버의 자기 지점 화면을 자동으로 띄웁니다. 아래 스크립트는 GUI와 Chromium을 준비하고, `linaro` 자동 로그인 및 Openbox 키오스크를 구성합니다.
 
 ```bash
 cd /home/linaro/monitoring-server
 chmod +x scripts/setup-board-kiosk.sh scripts/launch-board-kiosk.sh
-sudo ./scripts/setup-board-kiosk.sh linaro http://127.0.0.1
+sudo ./scripts/setup-board-kiosk.sh linaro 'http://192.168.7.140:18080/?site=head-office&edge=board-01'
 ```
 
 설정 후 재부팅:
@@ -285,8 +291,8 @@ sudo reboot
 1. Ubuntu가 그래픽 모드로 부팅됩니다.
 2. `linaro` 사용자가 자동 로그인됩니다.
 3. Openbox가 실행됩니다.
-4. 로컬 API `http://127.0.0.1/api/health`가 응답할 때까지 대기합니다.
-5. Chromium이 `http://127.0.0.1`을 전체화면 키오스크 모드로 엽니다.
+4. 중앙 API가 응답할 때까지 대기합니다.
+5. Chromium이 지정한 지점 URL을 전체화면 키오스크 모드로 엽니다.
 
 Chromium이 비정상 종료되면 3초 후 자동으로 다시 실행됩니다. 텍스트 콘솔로 이동하려면 `Ctrl+Alt+F3`을 사용하고, 키오스크 로그는 `~/.local/state/monitoring-kiosk/kiosk.log`에서 확인합니다.
 

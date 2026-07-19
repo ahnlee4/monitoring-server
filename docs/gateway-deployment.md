@@ -1,5 +1,9 @@
 # 중앙 로그인 게이트웨이 구축 및 운영 절차
 
+> 보드는 이제 웹 서버가 아니라 edge-agent만 실행합니다. 게이트웨이 대상은 보드 IP가 아니라
+> 개발 PC 중앙 서버 `192.168.7.140:18080`으로 설정하고, slug는 중앙 사이트 코드와 맞춥니다.
+> 보드/중앙 서버 실행 명령은 [중앙 서버 / 보드 엣지 구성](central-edge-deployment.md)을 우선합니다.
+
 ## 1. 적용 구조
 
 중앙 게이트웨이만 인터넷에 공개하고 모니터링 보드는 회사 내부망에 둔다.
@@ -144,38 +148,16 @@ curl -fsS https://tms.theintech.co.kr/api/health
 
 ## 7. 모니터링 보드 전환
 
-중앙 게이트웨이 뒤에서 사용할 보드는 HTTPS 인증서가 없는 내부망 Nginx 구성을 덧붙여 실행한다.
+보드는 더 이상 Nginx, backend, frontend, DB를 실행하지 않는다. `docker-compose.board.yml`로 edge-agent만 실행하고 중앙 서버 `192.168.7.140:18080`에 연결한다.
 
 ```bash
-docker compose \
-  --env-file .env \
-  -f docker-compose.board.yml \
-  -f docker-compose.board.gateway.yml \
-  up -d
+cp .env.edge.example .env.edge
+# EDGE_NODE_ID, EDGE_NODE_TOKEN, EDGE_SERVER_URL 설정
+./scripts/start-board.sh
+docker compose --env-file .env.edge -f docker-compose.board.yml ps
 ```
 
-보드에서 확인:
-
-```bash
-docker compose \
-  --env-file .env \
-  -f docker-compose.board.yml \
-  -f docker-compose.board.gateway.yml \
-  ps
-curl -fsS http://127.0.0.1/api/health
-```
-
-각 보드의 80 포트는 중앙 게이트웨이 내부 IP에서만 접근할 수 있도록 공유기 ACL 또는 보드 방화벽을 적용한다. 아래에서 주소는 실제 값으로 바꾼다.
-
-```bash
-sudo ufw allow from <관리자-PC-또는-관리망> to any port 22 proto tcp
-sudo ufw allow from <중앙-게이트웨이-내부-IP> to any port 80 proto tcp
-sudo ufw default deny incoming
-sudo ufw enable
-sudo ufw status numbered
-```
-
-방화벽을 켜기 전에 현재 SSH 접속 경로가 허용됐는지 반드시 확인한다. 로컬 키오스크는 `127.0.0.1`로 계속 접속한다.
+보드 키오스크 역시 로컬 주소가 아니라 중앙 서버의 지점/보드 URL을 연다. 상세 절차는 [중앙 서버 / 보드 엣지 구성](central-edge-deployment.md)을 따른다.
 
 ## 8. 사용자와 서버 등록
 

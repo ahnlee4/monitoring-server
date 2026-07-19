@@ -11,7 +11,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $rules = @(
     @{ ListenPort = 8080; ConnectPort = 80; Name = 'Monitoring Gateway HTTP' },
-    @{ ListenPort = 8443; ConnectPort = 443; Name = 'Monitoring Gateway HTTPS' }
+    @{ ListenPort = 8443; ConnectPort = 443; Name = 'Monitoring Gateway HTTPS' },
+    @{ ListenPort = 18080; ConnectPort = 8080; Name = 'Monitoring Central Server' }
 )
 
 foreach ($rule in $rules) {
@@ -54,4 +55,5 @@ Register-ScheduledTask `
 Write-Host "Windows gateway forwarding configured for WSL $WslAddress"
 Write-Host 'Router: external 80 -> 192.168.7.140:8080'
 Write-Host 'Router: external 443 -> 192.168.7.140:8443'
+Write-Host 'LAN central server: 192.168.7.140:18080 -> WSL:8080'
 Write-Host "Scheduled task registered: $taskName"

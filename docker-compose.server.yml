@@ -1,0 +1,84 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: monitoring-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: monitoring-backend:central
+    build:
+      context: ./backend
+    container_name: monitoring-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      BACKEND_HOST: 0.0.0.0
+      BACKEND_PORT: 8000
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
+      CENTRAL_ADMIN_TOKEN: ${CENTRAL_ADMIN_TOKEN:-${COLLECTOR_TOKEN}}
+      DEFAULT_SITE_CODE: ${DEFAULT_SITE_CODE:-head-office}
+      DEFAULT_SITE_NAME: ${DEFAULT_SITE_NAME:-본사}
+      DEFAULT_EDGE_CODE: ${DEFAULT_EDGE_CODE:-board-01}
+      DEFAULT_EDGE_NAME: ${DEFAULT_EDGE_NAME:-보드 1}
+      DEFAULT_EDGE_TOKEN: ${DEFAULT_EDGE_TOKEN:-${COLLECTOR_TOKEN}}
+      EDGE_OFFLINE_SECONDS: ${EDGE_OFFLINE_SECONDS:-30}
+      COLLECTOR_TOKEN: ${DEFAULT_EDGE_TOKEN:-${COLLECTOR_TOKEN}}
+      SMS_ENABLED: ${CENTRAL_SMS_ENABLED:-false}
+      SMS_DISCONNECT_ENABLED: ${SMS_DISCONNECT_ENABLED:-true}
+      SMS_RECOVERY_ENABLED: ${SMS_RECOVERY_ENABLED:-false}
+      SMS_CHECK_INTERVAL_SECONDS: ${SMS_CHECK_INTERVAL_SECONDS:-5}
+      SMS_LINK_GRACE_SECONDS: ${SMS_LINK_GRACE_SECONDS:-30}
+      SMS_COOLDOWN_SECONDS: ${SMS_COOLDOWN_SECONDS:-600}
+      SMS_WATCH_KEYS: ${SMS_WATCH_KEYS:-0000,0002}
+      SMS_FACTORY_NAME: ${SMS_FACTORY_NAME:-Monitoring Server}
+      SOLAPI_API_KEY: ${SOLAPI_API_KEY:-}
+      SOLAPI_API_SECRET: ${SOLAPI_API_SECRET:-}
+      SOLAPI_FROM: ${SOLAPI_FROM:-}
+      SOLAPI_TO: ${SOLAPI_TO:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  frontend:
+    image: monitoring-frontend:central
+    build:
+      context: ./frontend
+    container_name: monitoring-frontend
+    restart: unless-stopped
+    expose:
+      - "4173"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: monitoring-nginx
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
+volumes:
+  postgres_data:

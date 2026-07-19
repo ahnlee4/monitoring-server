@@ -1,4 +1,6 @@
 .env
+.env.edge
+.env.server
 .env.gateway
 node_modules
 dist

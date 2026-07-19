@@ -9,6 +9,7 @@ fi
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET_USER="${1:-${SUDO_USER:-linaro}}"
 DASHBOARD_URL="${2:-http://127.0.0.1}"
+HEALTH_BASE_URL="${DASHBOARD_URL%%\?*}"
 USER_ENTRY="$(getent passwd "${TARGET_USER}" || true)"
 
 if [[ -z "${USER_ENTRY}" ]]; then
@@ -56,7 +57,7 @@ install -m 0755 "${ROOT_DIR}/scripts/launch-board-kiosk.sh" /usr/local/bin/monit
 
 cat > /etc/default/monitoring-kiosk <<EOF
 KIOSK_URL="${DASHBOARD_URL}"
-KIOSK_HEALTH_URL="${DASHBOARD_URL%/}/api/health"
+KIOSK_HEALTH_URL="${HEALTH_BASE_URL%/}/api/health"
 KIOSK_HEALTH_POLL_SECONDS="2"
 KIOSK_RESTART_SECONDS="3"
 EOF

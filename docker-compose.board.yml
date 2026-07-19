@@ -1,82 +1,29 @@
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: monitoring-db
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  backend:
-    image: ghcr.io/ahnlee4/monitoring-backend:latest
-    container_name: monitoring-backend
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      DATABASE_URL: ${HOST_DATABASE_URL:-postgresql+psycopg2://monitor:monitor123@127.0.0.1:5432/monitoring}
-      BACKEND_HOST: ${BACKEND_HOST}
-      BACKEND_PORT: ${BACKEND_PORT}
-      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
-      COLLECTOR_TOKEN: ${COLLECTOR_TOKEN}
-      SMS_ENABLED: ${SMS_ENABLED:-false}
-      SMS_DISCONNECT_ENABLED: ${SMS_DISCONNECT_ENABLED:-true}
-      SMS_RECOVERY_ENABLED: ${SMS_RECOVERY_ENABLED:-false}
-      SMS_CHECK_INTERVAL_SECONDS: ${SMS_CHECK_INTERVAL_SECONDS:-5}
-      SMS_LINK_GRACE_SECONDS: ${SMS_LINK_GRACE_SECONDS:-30}
-      SMS_COOLDOWN_SECONDS: ${SMS_COOLDOWN_SECONDS:-600}
-      SMS_WATCH_KEYS: ${SMS_WATCH_KEYS:-0000,0002}
-      SMS_FACTORY_NAME: ${SMS_FACTORY_NAME:-Monitoring Server}
-      SOLAPI_API_KEY: ${SOLAPI_API_KEY:-}
-      SOLAPI_API_SECRET: ${SOLAPI_API_SECRET:-}
-      SOLAPI_FROM: ${SOLAPI_FROM:-}
-      SOLAPI_TO: ${SOLAPI_TO:-}
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  frontend:
-    image: ghcr.io/ahnlee4/monitoring-frontend:latest
-    container_name: monitoring-frontend
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      VITE_API_BASE: ${VITE_API_BASE}
-      VITE_WS_PATH: ${VITE_WS_PATH}
-      __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: ${VITE_ALLOWED_HOSTS:-tms.theintech.co.kr}
-
-  collector:
+  edge-agent:
     image: ghcr.io/ahnlee4/monitoring-collector:latest
-    container_name: monitoring-collector
+    container_name: monitoring-edge-agent
     restart: unless-stopped
     network_mode: host
     privileged: true
     environment:
-      COLLECTOR_DRIVER: ${BOARD_COLLECTOR_DRIVER:-rs485}
+      EDGE_NODE_ID: ${EDGE_NODE_ID}
+      EDGE_NODE_TOKEN: ${EDGE_NODE_TOKEN}
+      EDGE_SERVER_URL: ${EDGE_SERVER_URL}
+      EDGE_SOFTWARE_VERSION: ${EDGE_SOFTWARE_VERSION:-0.1.143}
+      EDGE_OUTBOX_PATH: /var/lib/monitoring-edge/outbox.db
+      EDGE_OUTBOX_MAX_ROWS: ${EDGE_OUTBOX_MAX_ROWS:-10000}
+      COLLECTOR_DRIVER: rs485
       COLLECTOR_INTERVAL_SECONDS: ${COLLECTOR_INTERVAL_SECONDS:-0}
-      COLLECTOR_DEVICE_CODES: ${COLLECTOR_DEVICE_CODES}
-      COLLECTOR_API_URL: ${HOST_COLLECTOR_API_URL:-http://127.0.0.1:8000/api/ingest/telemetry}
-      COLLECTOR_YUJIN_API_URL: ${HOST_COLLECTOR_YUJIN_API_URL:-http://127.0.0.1:8000/api/yujin/ingest-map}
-      COLLECTOR_CONTROL_API_URL: ${HOST_COLLECTOR_CONTROL_API_URL:-http://127.0.0.1:8000/api/control}
-      COLLECTOR_PUBLISH_TELEMETRY: ${COLLECTOR_PUBLISH_TELEMETRY:-false}
-      COLLECTOR_REQUEST_TIMEOUT_SECONDS: ${COLLECTOR_REQUEST_TIMEOUT_SECONDS:-3}
-      COLLECTOR_CONTROL_REQUEST_TIMEOUT_SECONDS: ${COLLECTOR_CONTROL_REQUEST_TIMEOUT_SECONDS:-2}
-      COLLECTOR_TOKEN: ${COLLECTOR_TOKEN}
+      COLLECTOR_PUBLISH_TELEMETRY: "false"
+      COLLECTOR_REQUEST_TIMEOUT_SECONDS: ${COLLECTOR_REQUEST_TIMEOUT_SECONDS:-5}
+      COLLECTOR_CONTROL_REQUEST_TIMEOUT_SECONDS: ${COLLECTOR_CONTROL_REQUEST_TIMEOUT_SECONDS:-5}
+      COLLECTOR_CONTROL_COMMAND_LIMIT: ${COLLECTOR_CONTROL_COMMAND_LIMIT:-1}
+      COLLECTOR_CONTROL_COMMAND_DELAY_SECONDS: ${COLLECTOR_CONTROL_COMMAND_DELAY_SECONDS:-0.05}
+      COLLECTOR_CONTROL_POLL_SECONDS: ${COLLECTOR_CONTROL_POLL_SECONDS:-0.2}
+      COLLECTOR_SETTINGS_POLL_SECONDS: ${COLLECTOR_SETTINGS_POLL_SECONDS:-2}
+      COLLECTOR_SLOW_POLL_LOG_MS: ${COLLECTOR_SLOW_POLL_LOG_MS:-0}
+      COLLECTOR_STATUS_LOG_INTERVAL_SECONDS: ${COLLECTOR_STATUS_LOG_INTERVAL_SECONDS:-10}
+      COLLECTOR_IDLE_LOOP_DELAY_SECONDS: ${COLLECTOR_IDLE_LOOP_DELAY_SECONDS:-0.01}
       RS485_SERIAL_PORT: ${RS485_SERIAL_PORT:-/dev/ttyUSB0}
       RS485_BAUDRATE: ${RS485_BAUDRATE:-38400}
       RS485_COMP_QTY: ${RS485_COMP_QTY:-8}
@@ -89,34 +36,11 @@ services:
       RS485_WRITE_RESPONSE_TIMEOUT_SECONDS: ${RS485_WRITE_RESPONSE_TIMEOUT_SECONDS:-0.35}
       RS485_WRITE_VERIFY_ATTEMPTS: ${RS485_WRITE_VERIFY_ATTEMPTS:-3}
       RS485_DEBUG_HEX: ${RS485_DEBUG_HEX:-false}
-      RS485_SLOW_ADDRESS_LOG_MS: ${RS485_SLOW_ADDRESS_LOG_MS:-200}
       RS485_SETTINGS_POLL_INTERVAL_CYCLES: ${RS485_SETTINGS_POLL_INTERVAL_CYCLES:-5}
       RS485_FULL_SNAPSHOT_INTERVAL_CYCLES: ${RS485_FULL_SNAPSHOT_INTERVAL_CYCLES:-5}
-      COLLECTOR_SLOW_POLL_LOG_MS: ${COLLECTOR_SLOW_POLL_LOG_MS:-0}
-      COLLECTOR_STATUS_LOG_INTERVAL_SECONDS: ${COLLECTOR_STATUS_LOG_INTERVAL_SECONDS:-0}
-      COLLECTOR_IDLE_LOOP_DELAY_SECONDS: ${COLLECTOR_IDLE_LOOP_DELAY_SECONDS:-0.01}
-      COLLECTOR_CONTROL_COMMAND_LIMIT: ${COLLECTOR_CONTROL_COMMAND_LIMIT:-1}
-      COLLECTOR_CONTROL_COMMAND_DELAY_SECONDS: ${COLLECTOR_CONTROL_COMMAND_DELAY_SECONDS:-0.05}
-      COLLECTOR_CONTROL_POLL_SECONDS: ${COLLECTOR_CONTROL_POLL_SECONDS:-0.1}
-      COLLECTOR_SETTINGS_POLL_SECONDS: ${COLLECTOR_SETTINGS_POLL_SECONDS:-2}
-    depends_on:
-      backend:
-        condition: service_healthy
     volumes:
       - /dev:/dev
-
-  nginx:
-    image: nginx:1.27-alpine
-    container_name: monitoring-nginx
-    restart: unless-stopped
-    network_mode: host
-    depends_on:
-      - backend
-      - frontend
-    volumes:
-      - ./nginx/nginx.host.conf:/etc/nginx/nginx.conf:ro
-      - ./certbot/www:/var/www/certbot:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - edge_outbox:/var/lib/monitoring-edge
 
 volumes:
-  postgres_data:
+  edge_outbox:
