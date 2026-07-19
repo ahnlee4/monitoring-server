@@ -18,6 +18,14 @@ class UserCreateIn(BaseModel):
     is_admin: bool = False
 
 
+class UserUpdateIn(BaseModel):
+    username: str | None = Field(default=None, min_length=3, max_length=64)
+    password: str | None = Field(default=None, min_length=12, max_length=128)
+    display_name: str | None = Field(default=None, min_length=1, max_length=128)
+    is_admin: bool | None = None
+    is_active: bool | None = None
+
+
 class UserAccessIn(BaseModel):
     server_ids: list[int] = Field(default_factory=list)
 

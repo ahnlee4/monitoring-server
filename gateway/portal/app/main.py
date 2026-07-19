@@ -13,7 +13,15 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import Settings, get_settings
 from app.database import Base, Database, get_db
 from app.models import AuditLog, MonitoringServer, PortalSession, User, UserServerAccess
-from app.schemas import LoginIn, PasswordChangeIn, ServerCreateIn, ServerUpdateIn, UserAccessIn, UserCreateIn
+from app.schemas import (
+    LoginIn,
+    PasswordChangeIn,
+    ServerCreateIn,
+    ServerUpdateIn,
+    UserAccessIn,
+    UserCreateIn,
+    UserUpdateIn,
+)
 from app.security import (
     SLUG_PATTERN,
     USERNAME_PATTERN,
@@ -295,6 +303,120 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
         audit(db, request, "user_created", context.user.id, f"user_id={user.id}")
         db.commit()
         return serialize_user(user, [])
+
+    @portal.patch("/api/admin/users/{user_id}")
+    def update_user(
+        user_id: int,
+        payload: UserUpdateIn,
+        request: Request,
+        context: AuthContext = Depends(require_admin_csrf),
+        db: Session = Depends(get_db),
+    ) -> dict:
+        user = db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        if not payload.model_fields_set:
+            raise HTTPException(status_code=422, detail="변경할 사용자 정보를 입력하세요.")
+
+        username = user.username
+        if payload.username is not None:
+            username = payload.username.strip().lower()
+            if not USERNAME_PATTERN.fullmatch(username):
+                raise HTTPException(status_code=422, detail="아이디 형식이 올바르지 않습니다.")
+
+        display_name = user.display_name
+        if payload.display_name is not None:
+            display_name = payload.display_name.strip()
+            if not display_name:
+                raise HTTPException(status_code=422, detail="표시 이름을 입력하세요.")
+
+        next_is_admin = payload.is_admin if payload.is_admin is not None else user.is_admin
+        next_is_active = payload.is_active if payload.is_active is not None else user.is_active
+        if user.id == context.user.id:
+            if next_is_admin != user.is_admin:
+                raise HTTPException(status_code=409, detail="현재 로그인한 계정의 관리자 권한은 변경할 수 없습니다.")
+            if next_is_active != user.is_active:
+                raise HTTPException(status_code=409, detail="현재 로그인한 계정의 활성 상태는 변경할 수 없습니다.")
+
+        removes_active_admin = user.is_admin and user.is_active and not (next_is_admin and next_is_active)
+        if removes_active_admin:
+            other_active_admin = db.scalar(
+                select(User.id)
+                .where(
+                    User.id != user.id,
+                    User.is_admin.is_(True),
+                    User.is_active.is_(True),
+                )
+                .limit(1)
+            )
+            if not other_active_admin:
+                raise HTTPException(status_code=409, detail="활성 관리자 계정은 최소 1개 이상 유지해야 합니다.")
+
+        user.username = username
+        user.display_name = display_name
+        user.is_admin = next_is_admin
+        user.is_active = next_is_active
+        password_changed = payload.password is not None
+        if password_changed:
+            user.password_hash = hash_password(payload.password)
+
+        try:
+            db.flush()
+        except IntegrityError as exc:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="이미 사용 중인 아이디입니다.") from exc
+
+        if password_changed or not next_is_active:
+            session_query = delete(PortalSession).where(PortalSession.user_id == user.id)
+            if user.id == context.user.id:
+                session_query = session_query.where(PortalSession.id != context.session.id)
+            db.execute(session_query)
+
+        changed_fields = sorted(payload.model_fields_set)
+        audit(
+            db,
+            request,
+            "user_updated",
+            context.user.id,
+            f"user_id={user.id};fields={changed_fields}",
+        )
+        server_ids = sorted(
+            db.scalars(
+                select(UserServerAccess.server_id).where(UserServerAccess.user_id == user.id)
+            ).all()
+        )
+        db.commit()
+        return serialize_user(user, server_ids)
+
+    @portal.delete("/api/admin/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def delete_user(
+        user_id: int,
+        request: Request,
+        context: AuthContext = Depends(require_admin_csrf),
+        db: Session = Depends(get_db),
+    ) -> Response:
+        user = db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        if user.id == context.user.id:
+            raise HTTPException(status_code=409, detail="현재 로그인한 계정은 삭제할 수 없습니다.")
+        if user.is_admin and user.is_active:
+            other_active_admin = db.scalar(
+                select(User.id)
+                .where(
+                    User.id != user.id,
+                    User.is_admin.is_(True),
+                    User.is_active.is_(True),
+                )
+                .limit(1)
+            )
+            if not other_active_admin:
+                raise HTTPException(status_code=409, detail="활성 관리자 계정은 최소 1개 이상 유지해야 합니다.")
+
+        audit(db, request, "user_deleted", context.user.id, f"user_id={user.id};username={user.username}")
+        db.delete(user)
+        db.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @portal.put("/api/admin/users/{user_id}/servers")
     def update_user_servers(

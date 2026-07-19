@@ -190,7 +190,10 @@ function accessRows() {
     .map(
       (user) => `
       <div class="access-row">
-        <div><strong>${escapeHtml(user.displayName)}</strong><small>${escapeHtml(user.username)}${user.isAdmin ? " · 관리자" : ""}</small></div>
+        <div>
+          <strong>${escapeHtml(user.displayName)}</strong>
+          <small>${escapeHtml(user.username)}${user.isAdmin ? " · 관리자" : ""}${user.isActive ? "" : " · 비활성"}</small>
+        </div>
         <div class="checks">
           ${state.adminServers
             .map(
@@ -198,7 +201,10 @@ function accessRows() {
             )
             .join("") || '<span class="muted">등록된 서버 없음</span>'}
         </div>
-        <button class="secondary save-access" data-user="${user.id}" ${user.isAdmin ? "disabled" : ""}>권한 저장</button>
+        <div class="access-actions">
+          <button class="ghost edit-user" type="button" data-user="${user.id}">계정 수정</button>
+          <button class="secondary save-access" type="button" data-user="${user.id}" ${user.isAdmin ? "disabled" : ""}>권한 저장</button>
+        </div>
       </div>`,
     )
     .join("");
@@ -240,13 +246,37 @@ function adminView() {
           )
           .join("") || '<p class="muted">등록된 서버가 없습니다.</p>'}</div>
       </section>
-    </section>`;
+    </section>
+    <dialog id="user-dialog" class="password-dialog">
+      <form id="user-edit-form" class="form-card">
+        <div><p class="eyebrow">ACCOUNT</p><h2>계정 수정</h2></div>
+        <label>표시 이름<input name="displayName" maxlength="128" required /></label>
+        <label>아이디<input name="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9_.-]+" required /></label>
+        <label>새 비밀번호<input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" placeholder="변경하지 않으면 비워두세요" /></label>
+        <div class="account-options">
+          <label class="check-line"><input name="isAdmin" type="checkbox" /> 관리자 권한</label>
+          <label class="check-line"><input name="isActive" type="checkbox" /> 계정 활성화</label>
+        </div>
+        <p class="form-help account-help"></p>
+        <p class="message dialog-message" role="alert"></p>
+        <div class="dialog-actions split-actions">
+          <button class="danger delete-user" type="button">계정 삭제</button>
+          <span></span>
+          <button class="ghost cancel-user-edit" type="button">취소</button>
+          <button class="primary" type="submit">저장</button>
+        </div>
+      </form>
+    </dialog>`;
 
   wireAccountActions();
   document.querySelector("#server-form").addEventListener("submit", submitServer);
   document.querySelector("#user-form").addEventListener("submit", submitUser);
   document.querySelectorAll(".save-access").forEach((button) => button.addEventListener("click", saveAccess));
+  document.querySelectorAll(".edit-user").forEach((button) => button.addEventListener("click", openUserEditor));
   document.querySelectorAll(".toggle-server").forEach((button) => button.addEventListener("click", toggleServer));
+  document.querySelector(".cancel-user-edit").addEventListener("click", () => document.querySelector("#user-dialog").close());
+  document.querySelector("#user-edit-form").addEventListener("submit", submitUserUpdate);
+  document.querySelector(".delete-user").addEventListener("click", deleteUser);
 }
 
 async function redrawAdmin(successText) {
@@ -290,6 +320,72 @@ async function submitUser(event) {
     await redrawAdmin("사용자를 등록했습니다.");
   } catch (error) {
     message(error.message);
+  }
+}
+
+function openUserEditor(event) {
+  const user = state.adminUsers.find((item) => item.id === Number(event.currentTarget.dataset.user));
+  if (!user) return;
+
+  const form = document.querySelector("#user-edit-form");
+  const isSelf = user.id === state.user.id;
+  form.dataset.user = String(user.id);
+  form.elements.displayName.value = user.displayName;
+  form.elements.username.value = user.username;
+  form.elements.password.value = "";
+  form.elements.isAdmin.checked = user.isAdmin;
+  form.elements.isAdmin.disabled = isSelf;
+  form.elements.isActive.checked = user.isActive;
+  form.elements.isActive.disabled = isSelf;
+  form.querySelector(".delete-user").disabled = isSelf;
+  form.querySelector(".account-help").textContent = isSelf
+    ? "현재 로그인한 계정은 권한 변경이나 삭제를 할 수 없습니다."
+    : "비밀번호 또는 활성 상태를 변경하면 해당 계정의 기존 로그인이 해제됩니다.";
+  form.querySelector(".dialog-message").textContent = "";
+  document.querySelector("#user-dialog").showModal();
+}
+
+async function submitUserUpdate(event) {
+  event.preventDefault();
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
+  const userId = Number(formElement.dataset.user);
+  const password = String(form.get("password") || "");
+  const payload = {
+    display_name: form.get("displayName"),
+    username: form.get("username"),
+    is_admin: formElement.elements.isAdmin.checked,
+    is_active: formElement.elements.isActive.checked,
+  };
+  if (password) payload.password = password;
+
+  try {
+    const updatedUser = await api(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    if (state.user.id === updatedUser.id) {
+      state.user = { ...state.user, ...updatedUser };
+    }
+    document.querySelector("#user-dialog").close();
+    await redrawAdmin("계정 정보를 수정했습니다.");
+  } catch (error) {
+    formElement.querySelector(".dialog-message").textContent = error.message;
+  }
+}
+
+async function deleteUser(event) {
+  const formElement = event.currentTarget.closest("form");
+  const userId = Number(formElement.dataset.user);
+  const user = state.adminUsers.find((item) => item.id === userId);
+  if (!user || !confirm(`${user.displayName} (${user.username}) 계정을 삭제하시겠습니까?`)) return;
+
+  try {
+    await api(`/api/admin/users/${userId}`, { method: "DELETE" });
+    document.querySelector("#user-dialog").close();
+    await redrawAdmin("계정을 삭제했습니다.");
+  } catch (error) {
+    formElement.querySelector(".dialog-message").textContent = error.message;
   }
 }
 
