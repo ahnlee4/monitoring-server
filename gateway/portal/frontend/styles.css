@@ -186,7 +186,7 @@ fieldset > legend { margin-bottom: 9px; color: #c4d5e5; font-size: 13px; font-we
 .server-status-icon { flex: 0 0 auto; width: 34px; height: 34px; border: 1px solid rgba(38, 198, 165, .24); border-radius: 10px; background: radial-gradient(circle, var(--accent) 0 3px, rgba(38, 198, 165, .11) 4px); }
 .server-status-icon.inactive { border-color: var(--line); background: radial-gradient(circle, #71879a 0 3px, rgba(113, 135, 154, .1) 4px); }
 .server-public-url { display: block; max-width: 500px; margin-top: 5px; overflow: hidden; color: #78bde8; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.server-public-url:hover { color: var(--accent); text-decoration: underline; }
+.server-public-url:hover { color: var(--accent); text-decoration: none; }
 .server-endpoint { display: grid; gap: 5px; }
 .server-endpoint span { color: var(--muted); font-size: 9px; font-weight: 700; }
 code { color: #c1d5e7; font-size: 11px; }
@@ -220,7 +220,7 @@ code { color: #c1d5e7; font-size: 11px; }
 .pane-search { grid-template-columns: auto 1fr; width: 100%; min-width: 0; margin: 12px 0; }
 .server-pane .managed-server-card { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
 .server-pane .server-endpoint { grid-column: 1; }
-.server-pane .managed-server-actions { grid-column: 2; grid-row: 1 / span 2; flex-direction: column; }
+.server-pane .managed-server-actions { grid-column: 2; grid-row: 1; align-self: stretch; flex-direction: column; }
 .admin-quick-stats { display: flex; gap: 8px; }
 .admin-quick-stats > span { padding: 8px 11px; border: 1px solid var(--line); border-radius: 9px; background: rgba(14, 29, 47, .72); color: var(--muted); font-size: 10px; }
 .admin-quick-stats strong { margin-left: 5px; color: var(--text); font-size: 12px; }
@@ -851,6 +851,21 @@ summary:focus-visible {
   gap: 16px;
   padding: 16px;
 }
+.server-card-edit {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background .18s, box-shadow .18s;
+}
+.server-card-edit:hover { background: #f4f8ff; }
+.server-card-edit:focus-visible {
+  outline: 0;
+  background: #f4f8ff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .16);
+}
 .server-status-icon {
   border-color: #bce5d5;
   background: radial-gradient(circle, var(--success) 0 4px, #e6f7f0 5px);
@@ -868,6 +883,10 @@ summary:focus-visible {
 code { color: #34445a; font-size: 12px; }
 .managed-server-actions { gap: 8px; }
 .managed-server-actions button { font-size: 12px; }
+.server-pane .managed-server-actions .toggle-server {
+  flex: 1;
+  min-height: 78px;
+}
 .pause-button {
   border: 1px solid #f1c47d;
   background: #fff7e8;
@@ -1021,6 +1040,8 @@ code { color: #34445a; font-size: 12px; }
   .access-card-body,
   .access-card-actions,
   .managed-server-card { padding: 14px; }
+  .server-card-edit { padding: 6px; }
+  .server-pane .managed-server-actions .toggle-server { min-height: 44px; }
   .section-heading {
     align-items: flex-start;
     margin-bottom: 16px;

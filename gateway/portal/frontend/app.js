@@ -312,21 +312,22 @@ function registeredServerCards() {
     .map(
       (server) => `
         <article class="managed-server-card" data-server-card data-search="${escapeHtml(`${server.name} ${server.slug} ${server.targetHost}`.toLowerCase())}">
-          <div class="managed-server-main">
-            <span class="server-status-icon ${server.isActive ? "active" : "inactive"}" aria-hidden="true"></span>
-            <div>
-              <div class="identity-line">
-                <h3>${escapeHtml(server.name)}</h3>
-                <span class="status-badge ${server.isActive ? "active" : "inactive"}">${server.isActive ? "운영 중" : "운영 중지"}</span>
+          <div class="server-card-edit" role="button" tabindex="0" data-id="${server.id}" aria-label="${escapeHtml(`${server.name} 서버 수정`)}">
+            <div class="managed-server-main">
+              <span class="server-status-icon ${server.isActive ? "active" : "inactive"}" aria-hidden="true"></span>
+              <div>
+                <div class="identity-line">
+                  <h3>${escapeHtml(server.name)}</h3>
+                  <span class="status-badge ${server.isActive ? "active" : "inactive"}">${server.isActive ? "운영 중" : "운영 중지"}</span>
+                </div>
+                <span class="server-public-url">${escapeHtml(server.url)}</span>
               </div>
-              <a class="server-public-url" href="${escapeHtml(server.url)}" target="_blank" rel="noreferrer">${escapeHtml(server.url)}</a>
+            </div>
+            <div class="server-endpoint">
+              <code>${escapeHtml(server.targetHost)}:${server.targetPort}</code>
             </div>
           </div>
-          <div class="server-endpoint">
-            <code>${escapeHtml(server.targetHost)}:${server.targetPort}</code>
-          </div>
           <div class="managed-server-actions">
-            <button class="ghost compact-button edit-server" type="button" data-id="${server.id}">수정</button>
             <button class="${server.isActive ? "pause-button" : "secondary"} toggle-server" type="button" data-id="${server.id}" data-active="${server.isActive}">
               ${server.isActive ? "중지" : "활성화"}
             </button>
@@ -480,7 +481,14 @@ function adminView() {
   document.querySelectorAll(".save-access").forEach((button) => button.addEventListener("click", saveAccess));
   document.querySelectorAll(".approve-user").forEach((button) => button.addEventListener("click", approveUser));
   document.querySelectorAll(".edit-user").forEach((button) => button.addEventListener("click", openUserEditor));
-  document.querySelectorAll(".edit-server").forEach((button) => button.addEventListener("click", openServerEditor));
+  document.querySelectorAll(".server-card-edit").forEach((card) => {
+    card.addEventListener("click", openServerEditor);
+    card.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openServerEditor(event);
+    });
+  });
   document.querySelectorAll(".toggle-server").forEach((button) => button.addEventListener("click", toggleServer));
   document.querySelectorAll(".select-all-access").forEach((button) => button.addEventListener("click", selectAllAccess));
   document.querySelectorAll(".clear-access").forEach((button) => button.addEventListener("click", clearAccess));
